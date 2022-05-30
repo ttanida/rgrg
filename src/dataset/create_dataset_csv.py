@@ -6,19 +6,23 @@ import os
 from tqdm import tqdm
 
 path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized"
-path_to_chest_imagenome_scene_graphs = "/u/home/tanida/datasets/chest-imagenome-dataset/silver_dataset/scene_graph"
+path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s")
+log = logging.getLogger(__name__)
 
 
 def determine_if_abnormal(attributes_list):
     for attributes in attributes_list:
         for attribute in attributes:
-            if "nlp|yes|abnormal" in attribute or \
-               "anatomicalfinding|yes" in attribute or \
-               "disease|yes" in attribute:
+            # if "nlp|yes|abnormal" in attribute or \
+            #    "anatomicalfinding|yes" in attribute or \
+            #    "disease|yes" in attribute:
+            #     return True
+
+            if "technicalassessment" in attribute:
+                print(attributes_list)
                 return True
     
     # no abnormality could be detected
@@ -34,7 +38,10 @@ def get_attributes_dict(image_scene_graph):
         phrases = " ".join(attribute["phrases"]).lower().replace("\n", "")
 
         is_abnormal = determine_if_abnormal(attribute["attributes"])
-        
+        if is_abnormal:
+            print(phrases)
+            print()
+
         attributes_dict[bbox_name] = [phrases, is_abnormal]
 
     return attributes_dict
@@ -54,16 +61,17 @@ def get_rows(path_csv_file):
             subject_id = row[1]
             study_id = row[2]
             image_id = row[3]
-            # file_path is of the form 'files/p10/p10000980/s50985099/6ad03ed1-97ee17ee-9cf8b320-f7011003-cd93b42d.dcm'
+            # image_file_path is of the form 'files/p10/p10000980/s50985099/6ad03ed1-97ee17ee-9cf8b320-f7011003-cd93b42d.dcm'
             # i.e. 'files/p../subject_id/study_id/image_id.dcm'
             # since we have the MIMIC-CXR-JPG dataset, we need to replace .dcm by .jpg
             image_file_path = row[4].replace(".dcm", ".jpg")
             mimic_image_file_path = os.path.join(path_to_mimic_cxr, image_file_path)
 
-            chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome_scene_graphs, image_id) + "_SceneGraph.json"
-            image_scene_graph = json.load(chest_imagenome_scene_graph_file_path)
+            chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
+            with open(chest_imagenome_scene_graph_file_path) as fp:
+                image_scene_graph = json.load(fp)
 
-            # get a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 elements are:
+            # get a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
             # 1. phrases, which is a single string that contains the phrases used to describe the region inside the bbox
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
@@ -86,7 +94,7 @@ def get_rows(path_csv_file):
 
 
 def create_new_csv_file(dataset, path_csv_file):
-    logger.info(f"Creating {dataset}.csv file.")
+    log.info(f"Creating {dataset}.csv file.")
 
     # get rows to create new csv_file
     # new_rows is a list of lists, where an inner list specifies all attributes of a single bbox of a single image
@@ -95,8 +103,8 @@ def create_new_csv_file(dataset, path_csv_file):
 
 def create_new_csv_files(csv_files_dict):
     if os.path.exists(path_to_chest_imagenome_customized):
-        logger.error(f"Customized chest imagenome dataset already exists at {path_to_chest_imagenome_customized}.")
-        logger.error("Delete dataset folder before running script to create new folder!")
+        log.error(f"Customized chest imagenome dataset already exists at {path_to_chest_imagenome_customized}.")
+        log.error("Delete dataset folder before running script to create new folder!")
         return None
 
     os.mkdir(path_to_chest_imagenome_customized)
@@ -105,7 +113,7 @@ def create_new_csv_files(csv_files_dict):
 
 
 def get_train_val_test_csv_files():
-    path_to_splits_folder = os.path.join(path_to_chest_imagenome_scene_graphs, "silver_dataset", "splits")
+    path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
     return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
 
