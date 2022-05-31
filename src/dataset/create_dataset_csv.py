@@ -29,13 +29,33 @@ def determine_if_abnormal(attributes_list):
     return False
 
 
+def normalize_text(phrases: list[str]) -> str:
+    """
+    Apply:
+
+    - unicode normalization
+    - stripping accents
+    - lowercasing
+    - removing control characters (e.g. '\n')
+    - normalizing whitespace characters (i.e. replacing all whitespaces like tabs by the default whitespace)
+    and removing redundant whitespaces
+    - removing or normalizing special characters
+
+    Args:
+        phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
+
+    Returns:
+        str: a single normalized string, with the list of strings concatenated
+    """
+    return " ".join(phrases).lower().replace("\n", "")
+
+
 def get_attributes_dict(image_scene_graph):
     attributes_dict = {}
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
 
-        # in the attribute dictionary, phrases is originally a list of strings, which is why it has to be processed into a single string
-        phrases = " ".join(attribute["phrases"]).lower().replace("\n", "")
+        phrases = normalize_text(attribute["phrases"])
 
         is_abnormal = determine_if_abnormal(attribute["attributes"])
         if is_abnormal:
