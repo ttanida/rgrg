@@ -5,6 +5,8 @@ import os
 
 from tqdm import tqdm
 
+ANATOMICAL_REGIONS = {"right lung", "right upper lung zone", "right mid lung zone", "right lower lung zone", "right hilar structures", "right apical zone", "right costophrenic angle", "right cardiophrenic angle", "right hemidiaphragm", "left lung", "left upper lung zone", "left mid lung zone", "left lower lung zone", "left hilar structures", "left apical zone", "left costophrenic angle", "left hemidiaphragm", "trachea", "spine", "right clavicle", "left clavicle", "aortic arch", "mediastinum", "upper mediastinum", "svc", "cardiac silhouette", "left cardiac silhouette", "right cardiac silhouette", "cavoatrial junction", "right atrium", "descending aorta", "carina", "left upper abdomen", "right upper abdomen", "abdomen", "left cardiophrenic angle"}
+
 path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
@@ -13,18 +15,21 @@ logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(
 log = logging.getLogger(__name__)
 
 
-def determine_if_abnormal(attributes_list):
+def determine_if_abnormal(attributes_list: list[list]) -> bool:
+    """
+    attributes_list is a list of lists that contains attributes corresponding to the phrases describing a specific bbox.
+
+    E.g. the phrases: ['Right lung is clear without pneumothorax.', 'No pneumothorax identified.'] have the attributes_list
+    [['anatomicalfinding|no|lung opacity', 'anatomicalfinding|no|pneumothorax', 'nlp|yes|normal'], ['anatomicalfinding|no|pneumothorax']],
+    where the 1st inner list contains the attributes pertaining to the 1st phrase, and the 2nd inner list contains attributes for the 2nd phrase respectively.
+
+    Phrases describing abnormalities have the attribute 'nlp|yes|abnormal'.
+    """
     for attributes in attributes_list:
         for attribute in attributes:
-            # if "nlp|yes|abnormal" in attribute or \
-            #    "anatomicalfinding|yes" in attribute or \
-            #    "disease|yes" in attribute:
-            #     return True
-
-            if "technicalassessment" in attribute:
-                print(attributes_list)
+            if attribute == "nlp|yes|abnormal":
                 return True
-    
+
     # no abnormality could be detected
     return False
 
@@ -41,6 +46,8 @@ def normalize_text(phrases: list[str]) -> str:
     and removing redundant whitespaces
     - removing or normalizing special characters
 
+    -> see AIMED_NLP_Practical_Solution
+
     Args:
         phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
 
@@ -55,19 +62,19 @@ def get_attributes_dict(image_scene_graph):
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
 
-        phrases = normalize_text(attribute["phrases"])
+        # ignore bbox_names such as "left chest wall" or "right breast" that don't appear in the 36 anatomical regions that have bbox coordiantes
+        if bbox_name not in ANATOMICAL_REGIONS:
+            continue
 
+        phrases = normalize_text(attribute["phrases"])
         is_abnormal = determine_if_abnormal(attribute["attributes"])
-        if is_abnormal:
-            print(phrases)
-            print()
 
         attributes_dict[bbox_name] = [phrases, is_abnormal]
 
     return attributes_dict
 
 
-def get_rows(path_csv_file):
+def get_rows(path_csv_file: str) -> list[list]:
     new_rows = []
 
     with open(path_csv_file) as csv_file:
@@ -76,7 +83,7 @@ def get_rows(path_csv_file):
         # skip the first line (i.e. the header line)
         next(csv_reader)
 
-        # iterate over all rows of the given csv file
+        # iterate over all rows of the given csv file (i.e. over all images)
         for index, row in enumerate(tqdm(csv_reader)):
             subject_id = row[1]
             study_id = row[2]
@@ -91,8 +98,12 @@ def get_rows(path_csv_file):
             with open(chest_imagenome_scene_graph_file_path) as fp:
                 image_scene_graph = json.load(fp)
 
-            # get a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
-            # 1. phrases, which is a single string that contains the phrases used to describe the region inside the bbox
+            # get the attributes specified for the specific image in its image_scene_graph
+            # the attributes contain (among other things) phrases used in the reference report used to describe different bbox regions and
+            # information whether a described bbox region is normal or abnormal
+            #
+            # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
+            # 1. (normalized )phrases, which is a single string that contains the phrases used to describe the region inside the bbox
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
@@ -113,7 +124,7 @@ def get_rows(path_csv_file):
     return new_rows
 
 
-def create_new_csv_file(dataset, path_csv_file):
+def create_new_csv_file(dataset: str, path_csv_file: str):
     log.info(f"Creating {dataset}.csv file.")
 
     # get rows to create new csv_file
@@ -122,12 +133,12 @@ def create_new_csv_file(dataset, path_csv_file):
 
 
 def create_new_csv_files(csv_files_dict):
-    if os.path.exists(path_to_chest_imagenome_customized):
-        log.error(f"Customized chest imagenome dataset already exists at {path_to_chest_imagenome_customized}.")
-        log.error("Delete dataset folder before running script to create new folder!")
-        return None
+    # if os.path.exists(path_to_chest_imagenome_customized):
+    #     log.error(f"Customized chest imagenome dataset already exists at {path_to_chest_imagenome_customized}.")
+    #     log.error("Delete dataset folder before running script to create new folder!")
+    #     return None
 
-    os.mkdir(path_to_chest_imagenome_customized)
+    # os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file)
 
