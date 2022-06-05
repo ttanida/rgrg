@@ -3,6 +3,8 @@ import json
 import logging
 import os
 
+from tokenizers import normalizers
+from tokenizers.normalizers import NFKC, Lowercase
 from tqdm import tqdm
 
 ANATOMICAL_REGIONS = {"right lung", "right upper lung zone", "right mid lung zone", "right lower lung zone", "right hilar structures", "right apical zone", "right costophrenic angle", "right cardiophrenic angle", "right hemidiaphragm", "left lung", "left upper lung zone", "left mid lung zone", "left lower lung zone", "left hilar structures", "left apical zone", "left costophrenic angle", "left hemidiaphragm", "trachea", "spine", "right clavicle", "left clavicle", "aortic arch", "mediastinum", "upper mediastinum", "svc", "cardiac silhouette", "left cardiac silhouette", "right cardiac silhouette", "cavoatrial junction", "right atrium", "descending aorta", "carina", "left upper abdomen", "right upper abdomen", "abdomen", "left cardiophrenic angle"}
@@ -36,17 +38,15 @@ def determine_if_abnormal(attributes_list: list[list]) -> bool:
 
 def normalize_text(phrases: list[str]) -> str:
     """
-    Apply:
+    Takes a list of phrases describing the region of a single bbox and returns a single normalized string.
+    (Probably pre-trained tokenizer already applies normalization, so only joining list of strings to a single string is strictly necessary.)
 
-    - unicode normalization
-    - stripping accents
+    Normalization operations:
+
+    - concatenation of list of strings to a single string
+    - unicode normalization (NFKC)
     - lowercasing
-    - removing control characters (e.g. '\n')
-    - normalizing whitespace characters (i.e. replacing all whitespaces like tabs by the default whitespace)
-    and removing redundant whitespaces
-    - removing or normalizing special characters
-
-    -> see AIMED_NLP_Practical_Solution
+    - removing whitespace characters (e.g. \n or \t) and redundant whitespaces
 
     Args:
         phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
@@ -54,7 +54,17 @@ def normalize_text(phrases: list[str]) -> str:
     Returns:
         str: a single normalized string, with the list of strings concatenated
     """
-    return " ".join(phrases).lower().replace("\n", "")
+    # convert list of phrases into a single phrase
+    phrases = " ".join(phrases)
+
+    # apply a sequence of normalization operations
+    normalizer = normalizers.Sequence([NFKC(), Lowercase()])
+    phrases = normalizer.normalize_str(phrases)
+
+    # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.)
+    phrases = " ".join(phrases.split())
+
+    return phrases
 
 
 def get_attributes_dict(image_scene_graph):
