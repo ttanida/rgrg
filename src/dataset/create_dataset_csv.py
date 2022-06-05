@@ -18,6 +18,9 @@ log = logging.getLogger(__name__)
 
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
+    print()
+    log.info(f"Writing rows into new {dataset}.csv file...\n")
+
     header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
 
     new_csv_file_path = os.path.join(path_to_chest_imagenome_customized, dataset) + ".csv"
@@ -166,7 +169,8 @@ def get_rows(path_csv_file: str) -> list[list]:
 
 
 def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
-    log.info(f"\nCreating new {dataset}.csv file...\n")
+    print()
+    log.info(f"Creating new {dataset}.csv file...\n")
 
     # get rows to create new csv_file
     # new_rows is a list of lists, where an inner list specifies all attributes of a single bbox of a single image
@@ -174,7 +178,8 @@ def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
 
     write_rows_in_new_csv_file(dataset, new_rows)
 
-    log.info(f"\nCreating new {dataset}.csv file... DONE!\n")
+    print()
+    log.info(f"Creating new {dataset}.csv file... DONE!\n")
 
 
 def create_new_csv_files(csv_files_dict):
