@@ -13,8 +13,19 @@ path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-da
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
-logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s]: %(message)s")
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
+
+
+def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
+    header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
+
+    new_csv_file_path = os.path.join(path_to_chest_imagenome_customized, dataset) + ".csv"
+    with open(new_csv_file_path, "w") as fp:
+        csv_writer = csv.writer(fp)
+
+        csv_writer.writerow(header)
+        csv_writer.writerows(new_rows)
 
 
 def determine_if_abnormal(attributes_list: list[list]) -> bool:
@@ -86,6 +97,7 @@ def get_attributes_dict(image_scene_graph):
 
 def get_rows(path_csv_file: str) -> list[list]:
     new_rows = []
+    index = 0
 
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
@@ -97,24 +109,21 @@ def get_rows(path_csv_file: str) -> list[list]:
         current_folder_name = None
 
         # iterate over all rows of the given csv file (i.e. over all images)
-        for index, row in enumerate(tqdm(csv_reader)):
-            if (index + 1) % 50000 == 0:
-                print(f"Index: {index + 1}")
-                print_memory()
+        for row in tqdm(csv_reader):
 
             subject_id = row[1]
             study_id = row[2]
             image_id = row[3]
 
+            # all images in set IMAGE_IDS_TO_IGNORE seem to be failed x-rays and thus have to be discarded
+            # (they also don't have corresponding scene graph json files anyway)
+            if image_id in IMAGE_IDS_TO_IGNORE:
+                continue
+
             # log folder name if it changes
             if subject_id[:2] != current_folder_name:
                 current_folder_name = subject_id[:2]
                 log.info(f"Current folder: p{current_folder_name}")
-
-            # all images in set IMAGE_IDS_TO_IGNORE seem to be failed x-rays and thus have to be discarded
-            # (they also don't have correspoding scene graph json files anyway)
-            if image_id in IMAGE_IDS_TO_IGNORE:
-                continue
 
             # image_file_path is of the form "files/p10/p10000980/s50985099/6ad03ed1-97ee17ee-9cf8b320-f7011003-cd93b42d.dcm"
             # i.e. f"files/p../p{subject_id}/s{study_id}/{image_id}.dcm"
@@ -124,17 +133,8 @@ def get_rows(path_csv_file: str) -> list[list]:
 
             chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
-            try:
-                with open(chest_imagenome_scene_graph_file_path) as fp:
-                    image_scene_graph = json.load(fp)
-            except:
-                print()
-                print("Image to ignore:")
-                print("\tsubject_id", subject_id)
-                print("\tstudy_id", study_id)
-                print("\timage_id", image_id)
-                print()
-                continue
+            with open(chest_imagenome_scene_graph_file_path) as fp:
+                image_scene_graph = json.load(fp)
 
             # get the attributes specified for the specific image in its image_scene_graph
             # the attributes contain (among other things) phrases used in the reference report used to describe different bbox regions and
@@ -160,24 +160,30 @@ def get_rows(path_csv_file: str) -> list[list]:
                 new_row.extend(anatomical_region_attributes.get(bbox_name, [None, None]))
                 new_rows.append(new_row)
 
+                index += 1
+
     return new_rows
 
 
-def create_new_csv_file(dataset: str, path_csv_file: str):
-    log.info(f"Creating new {dataset}.csv file")
+def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
+    log.info(f"\nCreating new {dataset}.csv file...\n")
 
     # get rows to create new csv_file
     # new_rows is a list of lists, where an inner list specifies all attributes of a single bbox of a single image
     new_rows = get_rows(path_csv_file)
 
+    write_rows_in_new_csv_file(dataset, new_rows)
+
+    log.info(f"\nCreating new {dataset}.csv file... DONE!\n")
+
 
 def create_new_csv_files(csv_files_dict):
-    # if os.path.exists(path_to_chest_imagenome_customized):
-    #     log.error(f"Customized chest imagenome dataset already exists at {path_to_chest_imagenome_customized}.")
-    #     log.error("Delete dataset folder before running script to create new folder!")
-    #     return None
+    if os.path.exists(path_to_chest_imagenome_customized):
+        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
+        log.error("Delete dataset folder before running script to create new folder!")
+        return None
 
-    # os.mkdir(path_to_chest_imagenome_customized)
+    os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file)
 
@@ -187,19 +193,7 @@ def get_train_val_test_csv_files():
     return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
 
-def print_memory():
-    import psutil
-
-    mem = psutil.virtual_memory()
-    print(f"Total: {mem.total / (1024 * 1024 * 1024):.2f} GB")
-    print(f"Available: {mem.available / (1024 * 1024 * 1024):.2f} GB")
-    print(f"Percentage: {mem.percent}%")
-    print(f"Used: {mem.used / (1024 * 1024 * 1024):.2f} GB")
-    print(f"Free: {mem.free / (1024 * 1024 * 1024):.2f} GB")
-
-
 def main():
-    print_memory()
     csv_files_dict = get_train_val_test_csv_files()
     create_new_csv_files(csv_files_dict)
 
