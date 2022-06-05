@@ -9,17 +9,20 @@ from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full-dataset"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
+# constant specifies how many rows to create in the customized csv files
+# if constant is None, then all possible rows are created (resulting in csv files of huge file sizes)
+NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 1500
+
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
-    print()
-    log.info(f"Writing rows into new {dataset}.csv file...\n")
+    log.info(f"Writing rows into new {dataset}.csv file...")
 
     header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
 
@@ -98,9 +101,37 @@ def get_attributes_dict(image_scene_graph):
     return attributes_dict
 
 
+def get_num_rows(path_csv_file: str) -> int:
+    with open(path_csv_file) as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=",")
+
+        # skip the first line (i.e. the header line)
+        next(csv_reader)
+
+        return sum(1 for row in csv_reader)
+
+
 def get_rows(path_csv_file: str) -> list[list]:
+    """_summary_
+
+    Args:
+        path_csv_file (str): path to one of the csv files in the folder silver_dataset/splits of the chest-imagenome-dataset
+
+    Returns:
+        new_rows (list[list]): inner list contains information about a single bbox:
+            - subject_id
+            - study_id
+            - image_id
+            - file path to image in mimic-cxr-jpg dataset on workstation
+            - bbox_name
+            - bbox coordinates
+            - phrases describing region inside bbox (if those phrases exist, else None)
+            - is_abnormal, boolean variable specifying if region inside bbox is normal or abnormal
+    """
     new_rows = []
     index = 0
+
+    num_rows = get_num_rows(path_csv_file)
 
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
@@ -108,11 +139,8 @@ def get_rows(path_csv_file: str) -> list[list]:
         # skip the first line (i.e. the header line)
         next(csv_reader)
 
-        # variable used to log which folder (between p10-p19) of MIMIC-CXR is currently being iterated through
-        current_folder_name = None
-
-        # iterate over all rows of the given csv file (i.e. over all images)
-        for row in tqdm(csv_reader):
+        # iterate over all rows of the given csv file (i.e. over all images), if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is not set to a specific value
+        for row in tqdm(csv_reader, total=num_rows):
 
             subject_id = row[1]
             study_id = row[2]
@@ -122,11 +150,6 @@ def get_rows(path_csv_file: str) -> list[list]:
             # (they also don't have corresponding scene graph json files anyway)
             if image_id in IMAGE_IDS_TO_IGNORE:
                 continue
-
-            # log folder name if it changes
-            if subject_id[:2] != current_folder_name:
-                current_folder_name = subject_id[:2]
-                log.info(f"Current folder: p{current_folder_name}")
 
             # image_file_path is of the form "files/p10/p10000980/s50985099/6ad03ed1-97ee17ee-9cf8b320-f7011003-cd93b42d.dcm"
             # i.e. f"files/p../p{subject_id}/s{study_id}/{image_id}.dcm"
@@ -159,27 +182,29 @@ def get_rows(path_csv_file: str) -> list[list]:
                 new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2]
 
                 # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
-                # if they exist, otherwise extend list with [None, None]
-                new_row.extend(anatomical_region_attributes.get(bbox_name, [None, None]))
+                # if there is no phrase, then the region inside bbox is normal and the new_row is extended with None for phrases and False for is_abnormal
+                new_row.extend(anatomical_region_attributes.get(bbox_name, [None, False]))
                 new_rows.append(new_row)
 
                 index += 1
+
+                if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
+                    return new_rows
 
     return new_rows
 
 
 def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
-    print()
-    log.info(f"Creating new {dataset}.csv file...\n")
+    log.info(f"Creating new {dataset}.csv file...")
 
     # get rows to create new csv_file
     # new_rows is a list of lists, where an inner list specifies all attributes of a single bbox of a single image
     new_rows = get_rows(path_csv_file)
 
+    # write those rows into a new csv file
     write_rows_in_new_csv_file(dataset, new_rows)
 
-    print()
-    log.info(f"Creating new {dataset}.csv file... DONE!\n")
+    log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
 def create_new_csv_files(csv_files_dict):
