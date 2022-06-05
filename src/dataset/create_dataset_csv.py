@@ -24,11 +24,13 @@ NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 1500
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
-    header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
+    new_csv_file_path = os.path.join(path_to_chest_imagenome_customized, dataset)
+    new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
-    new_csv_file_path = os.path.join(path_to_chest_imagenome_customized, dataset) + ".csv"
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
+
+        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
