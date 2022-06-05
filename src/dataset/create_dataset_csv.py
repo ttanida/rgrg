@@ -114,8 +114,7 @@ def get_total_num_rows(path_csv_file: str) -> int:
 
 
 def get_rows(path_csv_file: str) -> list[list]:
-    """_summary_
-
+    """
     Args:
         path_csv_file (str): path to one of the csv files in the folder silver_dataset/splits of the chest-imagenome-dataset
 
