@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full-dataset"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-partial"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -69,7 +69,7 @@ def normalize_text(phrases: list[str]) -> str:
         phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
 
     Returns:
-        str: a single normalized string, with the list of strings concatenated
+        phrases (str): a single normalized string, with the list of strings concatenated
     """
     # convert list of phrases into a single phrase
     phrases = " ".join(phrases)
@@ -84,7 +84,7 @@ def normalize_text(phrases: list[str]) -> str:
     return phrases
 
 
-def get_attributes_dict(image_scene_graph):
+def get_attributes_dict(image_scene_graph: dict) -> dict[list]:
     attributes_dict = {}
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
@@ -101,7 +101,7 @@ def get_attributes_dict(image_scene_graph):
     return attributes_dict
 
 
-def get_num_rows(path_csv_file: str) -> int:
+def get_total_num_rows(path_csv_file: str) -> int:
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
 
@@ -131,7 +131,7 @@ def get_rows(path_csv_file: str) -> list[list]:
     new_rows = []
     index = 0
 
-    num_rows = get_num_rows(path_csv_file)
+    total_num_rows = get_total_num_rows(path_csv_file)
 
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
@@ -140,7 +140,7 @@ def get_rows(path_csv_file: str) -> list[list]:
         next(csv_reader)
 
         # iterate over all rows of the given csv file (i.e. over all images), if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is not set to a specific value
-        for row in tqdm(csv_reader, total=num_rows):
+        for row in tqdm(csv_reader, total=total_num_rows):
 
             subject_id = row[1]
             study_id = row[2]
@@ -198,7 +198,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
     log.info(f"Creating new {dataset}.csv file...")
 
     # get rows to create new csv_file
-    # new_rows is a list of lists, where an inner list specifies all attributes of a single bbox of a single image
+    # new_rows is a list of lists, where an inner list specifies all information about a single bbox of a single image
     new_rows = get_rows(path_csv_file)
 
     # write those rows into a new csv file
