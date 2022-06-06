@@ -111,8 +111,9 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str) -> dict:
             # also update the bbox_with_phrases and outlier_bbox counter dicts
             update_stats_for_image(image_scene_graph, stats)
 
-            # for each image, there are 36 bboxes for 36 anatomical regions
-            stats["num_bboxes"] += 36
+            # for each image, there are normally 36 bboxes for 36 anatomical regions, but there may be less occasionally
+            for anatomical_region in image_scene_graph["objects"]:
+                stats["num_bboxes"] += 1
 
     print_stats(dataset=dataset, stats=stats)
 

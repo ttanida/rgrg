@@ -172,7 +172,7 @@ def get_rows(path_csv_file: str) -> list[list]:
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
-            # iterate over all 36 anatomical regions of the given image
+            # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present)
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
                 x1 = anatomical_region["original_x1"]
