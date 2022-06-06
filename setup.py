@@ -1,5 +1,5 @@
 """
-Used to be able to pip install src as a standalone package.
+Script used to pip install src as a standalone package.
 Necessary for package imports between sibling directories.
 """
 
