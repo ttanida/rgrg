@@ -1,6 +1,3 @@
-import os
-
-import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision.io import read_image
@@ -27,9 +24,8 @@ class CustomImageDataset(Dataset):
 
         cropped_image = self.transform(cropped_image)
 
-
-        bbox_class_index = ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]]  # get the bbox_name (2nd column of df) and convert it into class index
-        is_abnormal_int = int(self.dataset_df.iloc[index, 6]) # get the is_abnormal boolean variable (7th column of df) and convert it into integer
+        bbox_class_index = ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]]  # get the bbox_name (2nd column of df) and convert it into corresponding class index
+        is_abnormal_int = int(self.dataset_df.iloc[index, 6])  # get the is_abnormal boolean variable (7th column of df) and convert it into integer
 
         labels = torch.Tensor([bbox_class_index, is_abnormal_int])
         return cropped_image, labels
