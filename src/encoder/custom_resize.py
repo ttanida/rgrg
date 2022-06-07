@@ -1,5 +1,5 @@
 import torch
-from torchvision.transforms.functional import InterpolationMode
+from torchvision.transforms.functional import InterpolationMode, pil_modes_mapping
 
 
 class CustomResize(torch.nn.Module):
@@ -42,7 +42,7 @@ class CustomResize(torch.nn.Module):
     def __init__(self, output_size_longer_edge: int, interpolation=InterpolationMode.BILINEAR):
         super().__init__()
         self.output_size_longer_edge = output_size_longer_edge
-        self.interpolation = interpolation
+        self.interpolation = pil_modes_mapping[interpolation]  # map InterpolationMode to the corresponding int for pil
 
     def forward(self, img):
         """
