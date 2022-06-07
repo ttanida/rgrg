@@ -30,7 +30,7 @@ class CustomImageDataset(Dataset):
         cropped_image = image[y1:y2, x1:x2]  # cropped_image = image[Y:Y+H, X:X+W]
 
         # apply resize, pad, data augmentation transformations, normalize, toTensor
-        cropped_image = self.transform(cropped_image)
+        cropped_image = self.transform(image=cropped_image)["image"]
 
         # get the bbox_name (2nd column of df) and convert it into corresponding class index
         bbox_class_index = ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]]
