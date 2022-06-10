@@ -9,7 +9,7 @@ class CustomImageDataset(Dataset):
     def __init__(self, dataset_df, transforms):
         super().__init__()
         self.dataset_df = dataset_df
-        self.transform = transforms
+        self.transforms = transforms
 
     def __len__(self):
         return len(self.dataset_df)
@@ -19,7 +19,7 @@ class CustomImageDataset(Dataset):
         image_path = self.dataset_df.iloc[index, 0]
         image = cv2.imread(image_path)
 
-        # by default OpenCV uses BGR color space for color images, so we need to convert the image to RGB color space
+        # by default OpenCV uses BGR color ordering for color images, so we need to convert the image to RGB color ordering
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # get the coordinates of the bbox
@@ -29,8 +29,9 @@ class CustomImageDataset(Dataset):
         # crop the image (which is a np array at this point)
         cropped_image = image[y1:y2, x1:x2]  # cropped_image = image[Y:Y+H, X:X+W]
 
-        # apply resize, pad, data augmentation transformations, normalize, toTensor
-        cropped_image = self.transform(image=cropped_image)["image"]
+        # apply transformations
+        # albumentations transforms return a dict, which is why key "image" has to be selected
+        cropped_image = self.transforms(image=cropped_image)["image"]
 
         # get the bbox_name (2nd column of df) and convert it into corresponding class index
         bbox_class_index = ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]]
