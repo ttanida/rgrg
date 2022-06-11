@@ -17,10 +17,10 @@ class CustomImageDataset(Dataset):
     def __getitem__(self, index):
         # mimic_image_file_path is the 1st column of the dataframes
         image_path = self.dataset_df.iloc[index, 0]
-        image = cv2.imread(image_path)
 
-        # by default OpenCV uses BGR color ordering for color images, so we need to convert the image to RGB color ordering
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # cv2.imread by default loads an image with 3 channels
+        # since we have grayscale images, we only have 1 channel and thus use cv2.IMREAD_UNCHANGED to read in the 1 channel
+        image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
 
         # get the coordinates of the bbox
         # x1 and y1 are for the top left corner and x2 and y2 are for the bottom right corner
