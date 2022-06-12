@@ -22,7 +22,7 @@ import json
 import logging
 import os
 
-import cv2
+import imagesize
 from tokenizers import normalizers
 from tokenizers.normalizers import NFKC, Lowercase
 from tqdm import tqdm
@@ -229,8 +229,7 @@ def get_rows(path_csv_file: str) -> list[list]:
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
-            image = cv2.imread(mimic_image_file_path, cv2.IMREAD_UNCHANGED)
-            height, width = image.shape
+            width, height = imagesize.get(mimic_image_file_path)
 
             # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
             for anatomical_region in image_scene_graph["objects"]:
