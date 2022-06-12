@@ -1,3 +1,22 @@
+"""
+Script for creating custom train, valid, test csv files.
+
+Each row in the csv files specifies information about a single bbox (i.e. single anatomical region) of a single image.
+
+The specific information are:
+    - subject_id: id of the patient whose image is used
+    - study_id: id of the study of that patient (since a patient can have several studies done to document the progression of a disease etc.)
+    - image_id: id of the single image
+    - mimic_image_file_path: file path to the jpg of the single image on the workstation
+    - bbox_name: name of one of the anatomical region that is specified by the row
+    - x1 / y1 / x2 / y2 : bbox coordinates of said anatomical region in the single image
+    - is_abnormal: boolean variable that specifies if anatomical region is abnormal.
+    The value of the variable (True/False) is derived from the report corresponding to the single image (see determine_if_abnormal function).
+
+The custom train, valid, test csv files contain the bbox information of the images specified in the train, valid, test csv files of the
+chest-imagenome-dataset-1.0.0/silver_dataset/splits/ folder.
+"""
+
 import csv
 import json
 import logging
@@ -158,6 +177,10 @@ def get_rows(path_csv_file: str) -> list[list]:
             image_file_path = row[4].replace(".dcm", ".jpg")
             mimic_image_file_path = os.path.join(path_to_mimic_cxr, image_file_path)
 
+            if not os.path.exists(mimic_image_file_path):
+                # print("Does not exist: ", image_file_path)
+                continue
+
             chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
             with open(chest_imagenome_scene_graph_file_path) as fp:
@@ -172,7 +195,7 @@ def get_rows(path_csv_file: str) -> list[list]:
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
-            # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present)
+            # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
                 x1 = anatomical_region["original_x1"]
@@ -203,23 +226,24 @@ def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
     new_rows = get_rows(path_csv_file)
 
     # write those rows into a new csv file
-    write_rows_in_new_csv_file(dataset, new_rows)
+    # write_rows_in_new_csv_file(dataset, new_rows)
 
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
 def create_new_csv_files(csv_files_dict):
-    if os.path.exists(path_to_chest_imagenome_customized):
-        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
-        log.error("Delete dataset folder before running script to create new folder!")
-        return None
+    # if os.path.exists(path_to_chest_imagenome_customized):
+    #     log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
+    #     log.error("Delete dataset folder before running script to create new folder!")
+    #     return None
 
-    os.mkdir(path_to_chest_imagenome_customized)
+    # os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file)
 
 
 def get_train_val_test_csv_files():
+    """Return a dict with datasets as keys and paths to the corresponding csv files in the chest-imagenome dataset as values"""
     path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
     return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
