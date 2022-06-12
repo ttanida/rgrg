@@ -22,6 +22,7 @@ import json
 import logging
 import os
 
+import cv2
 from tokenizers import normalizers
 from tokenizers.normalizers import NFKC, Lowercase
 from tqdm import tqdm
@@ -53,6 +54,39 @@ def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
+
+
+def check_coordinate(coordinate: int, dim: int) -> int:
+    """
+    If an coordinate is smaller than 0 or bigger than its corresponding dimension (for x-coordinates the corresponding dim is width, for y-coordinates it's height),
+    then we set the coordinate to 0 or dim respectively as to not get an exception when an image is cropped by the coordinates in the CustomImageDataset __getitem__ method.
+    """
+    if coordinate < 0:
+        coordinate = 0
+    elif coordinate > dim:
+        coordinate = dim
+    return coordinate
+
+
+def check_coordinates_out_of_bounds(height, width, x1, y1, x2, y2) -> bool:
+    """
+    Checks if bbox coordinates are outside the image.
+
+    We have to make this check, since for some unknown reason there are negative bbox coordinates in the chest-imagenome dataset,
+    as well as bbox coordinates bigger than the given image height and weight.
+
+    Returns True if coordinates out of bounds, False otherwise.
+
+    Firstly checks if the bottom right corner (specified by (x2, y2)) is within the image (see smaller_than_zero).
+    Since we always have x1 < x2 and y1 < y2, we know that if x2 < 0, then x1 < x2 < 0, thus the bbox is not within the image (same for y1, y2).
+
+    Secondly checks if the top left corner (specified by (x1, y1)) is within the image (see exceeds_limits).
+    We know that if x1 > width, then x2 > x1 > width, thus the bbox is not within the image (same for y1, y2).
+    """
+    smaller_than_zero = x2 < 0 or y2 < 0
+    exceeds_limits = x1 > width or y1 > height
+
+    return smaller_than_zero or exceeds_limits
 
 
 def determine_if_abnormal(attributes_list: list[list]) -> bool:
@@ -195,6 +229,9 @@ def get_rows(path_csv_file: str) -> list[list]:
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
+            image = cv2.imread(mimic_image_file_path, cv2.IMREAD_UNCHANGED)
+            height, width = image.shape
+
             # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
@@ -202,6 +239,19 @@ def get_rows(path_csv_file: str) -> list[list]:
                 y1 = anatomical_region["original_y1"]
                 x2 = anatomical_region["original_x2"]
                 y2 = anatomical_region["original_y2"]
+
+                # check if whole bbox is outside of image height and width
+                # if so, skip the anatomical region/bbox
+                if check_coordinates_out_of_bounds(height, width, x1, y1, x2, y2):
+                    continue
+
+                # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
+                # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
+                # and set to height if y-coordinate > height
+                x1 = check_coordinate(x1, width)
+                y1 = check_coordinate(y1, height)
+                x2 = check_coordinate(x2, width)
+                y2 = check_coordinate(y2, height)
 
                 new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2]
 
@@ -226,18 +276,18 @@ def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
     new_rows = get_rows(path_csv_file)
 
     # write those rows into a new csv file
-    # write_rows_in_new_csv_file(dataset, new_rows)
+    write_rows_in_new_csv_file(dataset, new_rows)
 
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
 def create_new_csv_files(csv_files_dict):
-    # if os.path.exists(path_to_chest_imagenome_customized):
-    #     log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
-    #     log.error("Delete dataset folder before running script to create new folder!")
-    #     return None
+    if os.path.exists(path_to_chest_imagenome_customized):
+        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
+        log.error("Delete dataset folder before running script to create new folder!")
+        return None
 
-    # os.mkdir(path_to_chest_imagenome_customized)
+    os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file)
 
