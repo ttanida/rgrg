@@ -1,4 +1,5 @@
 import torch.nn as nn
+from torchinfo import summary
 import torchxrayvision as xrv
 
 
@@ -42,3 +43,7 @@ class ClassificationModel(nn.Module):
         x = self.classifier(x)
 
         return x
+
+
+# model = ClassificationModel()
+# summary(model, input_size=(64, 1, 224, 224))
