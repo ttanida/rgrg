@@ -36,9 +36,15 @@ class CustomImageDataset(Dataset):
         # get the bbox_name (2nd column of df) and convert it into corresponding class index
         bbox_class_index = int(ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]])
 
-        # get the is_abnormal boolean variable (7th column of df) and convert it into integer
-        is_abnormal_int = int(self.dataset_df.iloc[index, 6])
+        # get the is_abnormal boolean variable (7th column of df) and convert it to a float
+        is_abnormal = float(self.dataset_df.iloc[index, 6])
 
-        labels = torch.Tensor([bbox_class_index, is_abnormal_int], dtype=torch.uint8)
+        sample = {
+            "image": cropped_image,
+            # pytorch's cross entropy loss expects the targets to be of dtype int
+            "bbox_target": torch.tensor(bbox_class_index, dtype=torch.uint8),
+            # pytorch's binary cross entropy loss expects the targets to be of dtype float
+            "is_abnormal_target": torch.tensor(is_abnormal, dtype=torch.float32)
+        }
 
-        return cropped_image, labels
+        return sample
