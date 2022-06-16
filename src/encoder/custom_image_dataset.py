@@ -34,11 +34,11 @@ class CustomImageDataset(Dataset):
         cropped_image = self.transforms(image=cropped_image)["image"]
 
         # get the bbox_name (2nd column of df) and convert it into corresponding class index
-        bbox_class_index = ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]]
+        bbox_class_index = int(ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]])
 
         # get the is_abnormal boolean variable (7th column of df) and convert it into integer
         is_abnormal_int = int(self.dataset_df.iloc[index, 6])
 
-        labels = torch.Tensor([bbox_class_index, is_abnormal_int])
+        labels = torch.Tensor([bbox_class_index, is_abnormal_int], dtype=torch.uint8)
 
         return cropped_image, labels
