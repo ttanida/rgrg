@@ -15,17 +15,14 @@ class CustomImageDataset(Dataset):
         return len(self.dataset_df)
 
     def __getitem__(self, index):
-        # mimic_image_file_path is the 1st column of the dataframes
-        image_path = self.dataset_df.iloc[index, 0]
-
-        # cv2.imread by default loads an image with 3 channels
-        # since we have grayscale images, we only have 1 channel and thus use cv2.IMREAD_UNCHANGED to read in the 1 channel
         try:
+            # mimic_image_file_path is the 1st column of the dataframes
+            image_path = self.dataset_df.iloc[index, 0]
+
+            # cv2.imread by default loads an image with 3 channels
+            # since we have grayscale images, we only have 1 channel and thus use cv2.IMREAD_UNCHANGED to read in the 1 channel
             image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-        except:
-            return None
 
-        try:
             # get the coordinates of the bbox
             # x1 and y1 are for the top left corner and x2 and y2 are for the bottom right corner
             x1, y1, x2, y2 = self.dataset_df.iloc[index, 2:6]
@@ -50,7 +47,7 @@ class CustomImageDataset(Dataset):
                 # pytorch's binary cross entropy loss expects the targets to be of dtype float
                 "is_abnormal_target": torch.tensor(is_abnormal, dtype=torch.float32)
             }
-        except:
+        except Exception:
             return None
 
         return sample
