@@ -68,25 +68,32 @@ def check_coordinate(coordinate: int, dim: int) -> int:
     return coordinate
 
 
-def check_coordinates_out_of_bounds(height, width, x1, y1, x2, y2) -> bool:
+def coordinates_faulty(height, width, x1, y1, x2, y2) -> bool:
     """
-    Checks if bbox coordinates are outside the image.
+    Bbox coordinates are faulty if:
+        - bbox coordinates specify a bbox outside of the image
+        - bbox coordinates specify a bbox of area = 0 (if x1 == x2 or y1 == y2).
 
-    We have to make this check, since for some unknown reason there are negative bbox coordinates in the chest-imagenome dataset,
-    as well as bbox coordinates bigger than the given image height and weight.
+    We have to make this check, since for some unknown reason in the chest-imagenome dataset there are:
+        - negative bbox coordinates
+        - bbox coordinates bigger than the given image height and weight
+        - bbox coordinates where x1 == x2 or y1 == y2
 
-    Returns True if coordinates out of bounds, False otherwise.
+    Returns True if coordinates are faulty, False otherwise.
 
-    Firstly checks if the bottom right corner (specified by (x2, y2)) is within the image (see smaller_than_zero).
+    Firstly checks if area is zero, i.e. x1 == x2 or y1 == y2
+
+    Secondly checks if the bottom right corner (specified by (x2, y2)) is within the image (see smaller_than_zero).
     Since we always have x1 < x2 and y1 < y2, we know that if x2 < 0, then x1 < x2 < 0, thus the bbox is not within the image (same for y1, y2).
 
-    Secondly checks if the top left corner (specified by (x1, y1)) is within the image (see exceeds_limits).
+    Thirdly checks if the top left corner (specified by (x1, y1)) is within the image (see exceeds_limits).
     We know that if x1 > width, then x2 > x1 > width, thus the bbox is not within the image (same for y1, y2).
     """
+    area_of_bbox_is_zero = x1 == x2 or y1 == y2
     smaller_than_zero = x2 < 0 or y2 < 0
     exceeds_limits = x1 > width or y1 > height
 
-    return smaller_than_zero or exceeds_limits
+    return area_of_bbox_is_zero or smaller_than_zero or exceeds_limits
 
 
 def determine_if_abnormal(attributes_list: list[list]) -> bool:
@@ -239,9 +246,9 @@ def get_rows(path_csv_file: str) -> list[list]:
                 x2 = anatomical_region["original_x2"]
                 y2 = anatomical_region["original_y2"]
 
-                # check if whole bbox is outside of image height and width
+                # check if bbox coordinates are faulty
                 # if so, skip the anatomical region/bbox
-                if check_coordinates_out_of_bounds(height, width, x1, y1, x2, y2):
+                if coordinates_faulty(height, width, x1, y1, x2, y2):
                     continue
 
                 # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)

@@ -27,11 +27,9 @@ class ClassificationModel(nn.Module):
 
         # linear layers for classification
         self.classifier = nn.Sequential(
-            nn.Linear(in_features=1024, out_features=500),
+            nn.Linear(in_features=1024, out_features=512),
             nn.ReLU(),
-            nn.Linear(in_features=500, out_features=100),
-            nn.ReLU(),
-            nn.Linear(in_features=100, out_features=37)
+            nn.Linear(in_features=512, out_features=37)
         )
 
     def forward(self, x):
