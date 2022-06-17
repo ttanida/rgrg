@@ -13,7 +13,7 @@ path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-datas
 
 # reduce memory usage by only using necessary columns and selecting appropriate datatypes
 usecols = ["mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "is_abnormal"]
-dtype = {"x1": "int16", "x2": "int16", "y1": "int16", "y2": "int16", "bbox_name": "category"} 
+dtype = {"x1": "int16", "x2": "int16", "y1": "int16", "y2": "int16", "bbox_name": "category"}
 
 datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, dtype=dtype) for dataset, csv_file_path in datasets_as_dfs.items()}
@@ -62,13 +62,6 @@ train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False, n
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 
-# print("Val:")
-# try:
-#     for i, batch in tqdm(enumerate(val_loader)):
-#         continue
-# except Exception:
-#     print(f"Raised exception for batch {i}")
-
 # print("Test:")
 # try:
 #     for i, batch in tqdm(enumerate(test_loader)):
@@ -83,11 +76,9 @@ test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num
 # except Exception:
 #     print(f"Raised exception for batch {i}")
 
-# print("Train:")
-# for i in range(59000, 59500):
-#     try:
-#         train_dataset[i]
-#     except Exception:
-#         print(i)
-
-print(train_dataset[59379])
+print("Test:")
+for i in range(480000, 483264):
+    try:
+        test_dataset[i]
+    except Exception:
+        print(i)
