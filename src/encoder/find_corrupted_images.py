@@ -65,7 +65,6 @@ test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num
 # print("Val:")
 # try:
 #     for i, batch in tqdm(enumerate(val_loader)):
-#         if i == 1637:
 #         continue
 # except Exception:
 #     print(f"Raised exception for batch {i}")
@@ -85,7 +84,7 @@ test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num
 #     print(f"Raised exception for batch {i}")
 
 # print("Train:")
-# for i in range(59264, 60000):
+# for i in range(59000, 59500):
 #     try:
 #         train_dataset[i]
 #     except Exception:

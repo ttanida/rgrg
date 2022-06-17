@@ -84,14 +84,14 @@ def coordinates_faulty(height, width, x1, y1, x2, y2) -> bool:
     Firstly checks if area is zero, i.e. x1 == x2 or y1 == y2
 
     Secondly checks if the bottom right corner (specified by (x2, y2)) is within the image (see smaller_than_zero).
-    Since we always have x1 < x2 and y1 < y2, we know that if x2 < 0, then x1 < x2 < 0, thus the bbox is not within the image (same for y1, y2).
+    Since we always have x1 < x2 and y1 < y2, we know that if x2 < 0, then x1 < x2 <= 0, thus the bbox is not within the image (same for y1, y2).
 
     Thirdly checks if the top left corner (specified by (x1, y1)) is within the image (see exceeds_limits).
-    We know that if x1 > width, then x2 > x1 > width, thus the bbox is not within the image (same for y1, y2).
+    We know that if x1 > width, then x2 > x1 >= width, thus the bbox is not within the image (same for y1, y2).
     """
     area_of_bbox_is_zero = x1 == x2 or y1 == y2
-    smaller_than_zero = x2 < 0 or y2 < 0
-    exceeds_limits = x1 > width or y1 > height
+    smaller_than_zero = x2 <= 0 or y2 <= 0
+    exceeds_limits = x1 >= width or y1 >= height
 
     return area_of_bbox_is_zero or smaller_than_zero or exceeds_limits
 
@@ -268,6 +268,9 @@ def get_rows(path_csv_file: str) -> list[list]:
 
                 index += 1
 
+                if index == 33518:
+                    print("Hello")
+
                 if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
                     return new_rows
 
@@ -295,6 +298,8 @@ def create_new_csv_files(csv_files_dict):
 
     os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
+        if dataset != "test":
+            continue
         create_new_csv_file(dataset, path_csv_file)
 
 
