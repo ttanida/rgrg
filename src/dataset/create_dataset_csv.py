@@ -16,7 +16,6 @@ The specific information are:
 The custom train, valid, test csv files contain the bbox information of the images specified in the train, valid, test csv files of the
 chest-imagenome-dataset-1.0.0/silver_dataset/splits/ folder.
 """
-from skimage import io
 
 import csv
 import json
@@ -174,14 +173,6 @@ def get_total_num_rows(path_csv_file: str) -> int:
         return sum(1 for row in csv_reader)
 
 
-def check_image_corrupt(mimic_image_file_path):
-    try:
-        io.imread(mimic_image_file_path)
-    except Exception:
-        return False
-    return True
-
-
 def get_rows(path_csv_file: str) -> list[list]:
     """
     Args:
@@ -200,7 +191,6 @@ def get_rows(path_csv_file: str) -> list[list]:
     """
     new_rows = []
     index = 0
-    corrputed_images = 0
 
     total_num_rows = get_total_num_rows(path_csv_file)
 
@@ -232,60 +222,55 @@ def get_rows(path_csv_file: str) -> list[list]:
                 # print("Does not exist: ", image_file_path)
                 continue
 
-            if check_image_corrupt(mimic_image_file_path):
-                corrputed_images += 1
-                continue
+            chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
-            # chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
+            with open(chest_imagenome_scene_graph_file_path) as fp:
+                image_scene_graph = json.load(fp)
 
-            # with open(chest_imagenome_scene_graph_file_path) as fp:
-            #     image_scene_graph = json.load(fp)
+            # get the attributes specified for the specific image in its image_scene_graph
+            # the attributes contain (among other things) phrases used in the reference report used to describe different bbox regions and
+            # information whether a described bbox region is normal or abnormal
+            #
+            # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
+            # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
+            # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
+            anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
-            # # get the attributes specified for the specific image in its image_scene_graph
-            # # the attributes contain (among other things) phrases used in the reference report used to describe different bbox regions and
-            # # information whether a described bbox region is normal or abnormal
-            # #
-            # # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
-            # # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
-            # # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
-            # anatomical_region_attributes = get_attributes_dict(image_scene_graph)
+            width, height = imagesize.get(mimic_image_file_path)
 
-            # width, height = imagesize.get(mimic_image_file_path)
+            # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
+            for anatomical_region in image_scene_graph["objects"]:
+                bbox_name = anatomical_region["bbox_name"]
+                x1 = anatomical_region["original_x1"]
+                y1 = anatomical_region["original_y1"]
+                x2 = anatomical_region["original_x2"]
+                y2 = anatomical_region["original_y2"]
 
-            # # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
-            # for anatomical_region in image_scene_graph["objects"]:
-            #     bbox_name = anatomical_region["bbox_name"]
-            #     x1 = anatomical_region["original_x1"]
-            #     y1 = anatomical_region["original_y1"]
-            #     x2 = anatomical_region["original_x2"]
-            #     y2 = anatomical_region["original_y2"]
+                # check if bbox coordinates are faulty
+                # if so, skip the anatomical region/bbox
+                if coordinates_faulty(height, width, x1, y1, x2, y2):
+                    continue
 
-            #     # check if bbox coordinates are faulty
-            #     # if so, skip the anatomical region/bbox
-            #     if coordinates_faulty(height, width, x1, y1, x2, y2):
-            #         continue
+                # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
+                # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
+                # and set to height if y-coordinate > height
+                x1 = check_coordinate(x1, width)
+                y1 = check_coordinate(y1, height)
+                x2 = check_coordinate(x2, width)
+                y2 = check_coordinate(y2, height)
 
-            #     # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
-            #     # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
-            #     # and set to height if y-coordinate > height
-            #     x1 = check_coordinate(x1, width)
-            #     y1 = check_coordinate(y1, height)
-            #     x2 = check_coordinate(x2, width)
-            #     y2 = check_coordinate(y2, height)
+                new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2]
 
-            #     new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2]
+                # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
+                # if there is no phrase, then the region inside bbox is normal and the new_row is extended with None for phrases and False for is_abnormal
+                new_row.extend(anatomical_region_attributes.get(bbox_name, [None, False]))
+                new_rows.append(new_row)
 
-            #     # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
-            #     # if there is no phrase, then the region inside bbox is normal and the new_row is extended with None for phrases and False for is_abnormal
-            #     new_row.extend(anatomical_region_attributes.get(bbox_name, [None, False]))
-            #     new_rows.append(new_row)
+                index += 1
 
-            #     index += 1
+                if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
+                    return new_rows
 
-            #     if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
-            #         return new_rows
-
-    print(f"Num corrupted images: {corrputed_images}")
     return new_rows
 
 
@@ -297,18 +282,18 @@ def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
     new_rows = get_rows(path_csv_file)
 
     # write those rows into a new csv file
-    # write_rows_in_new_csv_file(dataset, new_rows)
+    write_rows_in_new_csv_file(dataset, new_rows)
 
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
 def create_new_csv_files(csv_files_dict):
-    # if os.path.exists(path_to_chest_imagenome_customized):
-    #     log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
-    #     log.error("Delete dataset folder before running script to create new folder!")
-    #     return None
+    if os.path.exists(path_to_chest_imagenome_customized):
+        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
+        log.error("Delete dataset folder before running script to create new folder!")
+        return None
 
-    # os.mkdir(path_to_chest_imagenome_customized)
+    os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file)
 
