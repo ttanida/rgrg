@@ -139,7 +139,7 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
                 phrases = phrases[:starting_index] + phrases[curr_index + 2:]
             return phrases
 
-        phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL | re.I)
+        phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL)
         phrases = remove_wet_read(phrases)
 
         return phrases
