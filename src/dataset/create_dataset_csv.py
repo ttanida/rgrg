@@ -21,10 +21,10 @@ import csv
 import json
 import logging
 import os
+import re
 
 import imagesize
-from tokenizers import normalizers
-from tokenizers.normalizers import NFKC, Lowercase
+import nltk.data
 from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
@@ -115,17 +115,14 @@ def determine_if_abnormal(attributes_list: list[list]) -> bool:
     return False
 
 
-def normalize_text(phrases: list[str]) -> str:
+def convert_phrases_to_single_string(phrases: list[str]) -> str:
     """
-    Takes a list of phrases describing the region of a single bbox and returns a single normalized string.
-    (Probably pre-trained tokenizer already applies normalization, so only joining list of strings to a single string is strictly necessary.)
+    Takes a list of phrases describing the region of a single bbox and returns a single string.
 
-    Normalization operations:
-
-    - concatenation of list of strings to a single string
-    - unicode normalization (NFKC)
-    - lowercasing
-    - removing whitespace characters (e.g. \n or \t) and redundant whitespaces
+    Also performs operations to clean the single string, such as:
+        - removes irrelevant substrings (like "wet read: ___ ___ 8:19 am")
+        - removes stop words (like "findings:", "impression:", "report:")
+        - removes whitespace characters (e.g. \n or \t) and redundant whitespaces
 
     Args:
         phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
@@ -133,15 +130,40 @@ def normalize_text(phrases: list[str]) -> str:
     Returns:
         phrases (str): a single normalized string, with the list of strings concatenated
     """
+    def remove_wet_read(phrases):
+        # replace substrings starting with "wet read" and ending in "am" or "pm" by ""
+        return re.sub('wet read.*am|wet read.*pm', '', phrases, flags=re.DOTALL | re.I)
+
+    def remove_whitespace_and_stop_word(phrases: str) -> str:
+        stop_words = ["findings:", "impression:", "report:", "1.", "2.", "3.", "4.", "5."]
+
+        # new_phrases collects all words that are not stop words
+        # words that come after a period are also capitalized
+        new_phrases = ""
+
+        # set the previous word as a period, such that the first word in phrases is capitalized
+        prev_word = "."
+
+        for word in phrases.split():
+            if word.lower() not in stop_words:
+                new_phrases += word.capitalize() if prev_word[-1] == "." else word
+
+                prev_word = word
+
+                # add a space for the next word
+                phrases += " "
+
+        # get rid of the trailing whitespace
+        return new_phrases.rstrip()
+
     # convert list of phrases into a single phrase
     phrases = " ".join(phrases)
 
-    # apply a sequence of normalization operations
-    normalizer = normalizers.Sequence([NFKC(), Lowercase()])
-    phrases = normalizer.normalize_str(phrases)
+    # remove "wet read: ___ ___ 8:19 am" and similar substrings from phrases, since they don't add any relevant information
+    phrases = remove_wet_read(phrases)
 
-    # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.)
-    phrases = " ".join(phrases.split())
+    # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.) and stop words
+    phrases = remove_whitespace_and_stop_word(phrases)
 
     return phrases
 
@@ -155,7 +177,7 @@ def get_attributes_dict(image_scene_graph: dict) -> dict[list]:
         if bbox_name not in ANATOMICAL_REGIONS:
             continue
 
-        phrases = normalize_text(attribute["phrases"])
+        phrases = convert_phrases_to_single_string(attribute["phrases"])
         is_abnormal = determine_if_abnormal(attribute["attributes"])
 
         attributes_dict[bbox_name] = [phrases, is_abnormal]

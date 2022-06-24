@@ -1,5 +1,5 @@
 import torch.nn as nn
-from torchinfo import summary
+# from torchinfo import summary
 import torchxrayvision as xrv
 
 
@@ -44,5 +44,5 @@ class ClassificationModel(nn.Module):
         return x
 
 
-model = ClassificationModel()
-summary(model, input_size=(64, 1, 224, 224))
+# model = ClassificationModel()
+# summary(model, input_size=(64, 1, 224, 224))
