@@ -401,7 +401,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
     # save the model with the overall lowest val loss
     torch.save(best_model_state, best_model_save_path)
     print("\nFinished training!")
-    print("Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
+    print(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
     return None
 
 

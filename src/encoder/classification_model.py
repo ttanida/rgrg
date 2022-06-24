@@ -1,5 +1,5 @@
 import torch.nn as nn
-# from torchinfo import summary
+from torchinfo import summary
 import torchxrayvision as xrv
 
 
@@ -28,6 +28,7 @@ class ClassificationModel(nn.Module):
         # linear layers for classification
         self.classifier = nn.Sequential(
             nn.Linear(in_features=1024, out_features=512),
+            nn.BatchNorm1d(num_features=512),
             nn.ReLU(),
             nn.Linear(in_features=512, out_features=37)
         )
@@ -43,5 +44,5 @@ class ClassificationModel(nn.Module):
         return x
 
 
-# model = ClassificationModel()
-# summary(model, input_size=(64, 1, 224, 224))
+model = ClassificationModel()
+summary(model, input_size=(64, 1, 224, 224))
