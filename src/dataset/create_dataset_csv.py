@@ -26,7 +26,7 @@ import re
 import imagesize
 from tqdm import tqdm
 
-from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
+from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
 path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-partial-new"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
@@ -119,8 +119,7 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     Takes a list of phrases describing the region of a single bbox and returns a single string.
 
     Also performs operations to clean the single string, such as:
-        - removes irrelevant substrings (like "wet read: ___ ___ 8:19 am")
-        - removes stop words (like "findings:", "impression:", "report:")
+        - removes irrelevant substrings (like "PORTABLE UPRIGHT AP VIEW OF THE CHEST:")
         - removes whitespace characters (e.g. \n or \t) and redundant whitespaces
 
     Args:
@@ -129,8 +128,9 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     Returns:
         phrases (str): a single string, with the list of strings concatenated
     """
-    def remove_sub_strings(phrases):
+    def remove_substrings(phrases):
         def remove_wet_read(phrases):
+            """Removes substring like 'WET READ: ___ ___ 8:19 AM' that is irrelevant."""
             while "WET READ" in phrases:
                 starting_index = phrases.find("WET READ")
                 curr_index = starting_index
@@ -139,43 +139,42 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
                 phrases = phrases[:starting_index] + phrases[curr_index + 2:]
             return phrases
 
-        sub_strings_to_remove = 'AP FRONTAL CHEST RADIOGRAPH:|SEMI-UPRIGHT AP VIEW OF THE CHEST:'
-        phrases = re.sub(sub_strings_to_remove, '', phrases, flags=re.DOTALL | re.I)
-
+        phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL | re.I)
         phrases = remove_wet_read(phrases)
 
         return phrases
 
-    def remove_whitespace_and_stop_word(phrases: str) -> str:
-        stop_words = ["findings:", "impression:", "report:", "conclusion:", "1.", "2.", "3.", "4.", "5."]
-
-        # new_phrases collects all words that are not stop words
-        # words that come after a period are also capitalized
+    def remove_whitespace(phrases: str) -> str:
+        """Remove white space and capitalize words that come after a period."""
+        # new_phrases collects all words
         new_phrases = ""
 
-        # set the previous word as a period, such that the first word in phrases is capitalized
+        # set the previous word as a period, such that the first word in new_phrases is capitalized
         prev_word = "."
 
         for word in phrases.split():
-            if word.lower() not in stop_words:
-                new_phrases += word.capitalize() if prev_word[-1] == "." else word
+            if prev_word[-1] == ".":
+                new_phrases += (word[0].upper() + word[1:])  # capitalize the word
+            else:
+                new_phrases += word
 
-                # add a space for the next word
-                new_phrases += " "
+            # add a space for the next word
+            new_phrases += " "
 
-                prev_word = word
+            # set current word as previous word for the next word
+            prev_word = word
 
-        # get rid of the trailing whitespace
+        # remove the trailing whitespace
         return new_phrases.rstrip()
 
     # convert list of phrases into a single phrase
     phrases = " ".join(phrases)
 
-    # remove "wet read: ___ ___ 8:19 am" and similar substrings from phrases, since they don't add any relevant information
-    phrases = remove_sub_strings(phrases)
+    # remove "PORTABLE UPRIGHT AP VIEW OF THE CHEST:" and similar substrings from phrases, since they don't add any relevant information
+    phrases = remove_substrings(phrases)
 
-    # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.) and stop words
-    phrases = remove_whitespace_and_stop_word(phrases)
+    # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.)
+    phrases = remove_whitespace(phrases)
 
     return phrases
 
