@@ -24,12 +24,11 @@ import os
 import re
 
 import imagesize
-import nltk.data
 from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-partial-new"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -38,7 +37,7 @@ log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
 # if constant is None, then all possible rows are created (resulting in csv files of huge file sizes)
-NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
+NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 5000
 
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
@@ -128,14 +127,27 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
         phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
 
     Returns:
-        phrases (str): a single normalized string, with the list of strings concatenated
+        phrases (str): a single string, with the list of strings concatenated
     """
-    def remove_wet_read(phrases):
-        # replace substrings starting with "wet read" and ending in "am" or "pm" by ""
-        return re.sub('wet read.*am|wet read.*pm', '', phrases, flags=re.DOTALL | re.I)
+    def remove_sub_strings(phrases):
+        def remove_wet_read(phrases):
+            while "WET READ" in phrases:
+                starting_index = phrases.find("WET READ")
+                curr_index = starting_index
+                while phrases[curr_index:curr_index + 2] not in ["AM", "PM"]:
+                    curr_index += 1
+                phrases = phrases[:starting_index] + phrases[curr_index + 2:]
+            return phrases
+
+        sub_strings_to_remove = 'AP FRONTAL CHEST RADIOGRAPH:|SEMI-UPRIGHT AP VIEW OF THE CHEST:'
+        phrases = re.sub(sub_strings_to_remove, '', phrases, flags=re.DOTALL | re.I)
+
+        phrases = remove_wet_read(phrases)
+
+        return phrases
 
     def remove_whitespace_and_stop_word(phrases: str) -> str:
-        stop_words = ["findings:", "impression:", "report:", "1.", "2.", "3.", "4.", "5."]
+        stop_words = ["findings:", "impression:", "report:", "conclusion:", "1.", "2.", "3.", "4.", "5."]
 
         # new_phrases collects all words that are not stop words
         # words that come after a period are also capitalized
@@ -148,10 +160,10 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
             if word.lower() not in stop_words:
                 new_phrases += word.capitalize() if prev_word[-1] == "." else word
 
-                prev_word = word
-
                 # add a space for the next word
-                phrases += " "
+                new_phrases += " "
+
+                prev_word = word
 
         # get rid of the trailing whitespace
         return new_phrases.rstrip()
@@ -160,7 +172,7 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     phrases = " ".join(phrases)
 
     # remove "wet read: ___ ___ 8:19 am" and similar substrings from phrases, since they don't add any relevant information
-    phrases = remove_wet_read(phrases)
+    phrases = remove_sub_strings(phrases)
 
     # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.) and stop words
     phrases = remove_whitespace_and_stop_word(phrases)
