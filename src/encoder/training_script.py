@@ -34,22 +34,17 @@ dtype = {"x1": "int16", "x2": "int16", "y1": "int16", "y2": "int16", "bbox_name"
 datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, dtype=dtype) for dataset, csv_file_path in datasets_as_dfs.items()}
 
-# take the first 500.000 normal and 500.000 abnormal samples from the train set and combine them
-normal_train_df = datasets_as_dfs["train"].loc[datasets_as_dfs["train"]["is_abnormal"] == False][:500000]
-abnormal_train_df = datasets_as_dfs["train"].loc[datasets_as_dfs["train"]["is_abnormal"] == True][:500000]
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
+total_num_samples_train = len(datasets_as_dfs["train"])
 
-balanced_train_df = normal_train_df.append(abnormal_train_df)
-
-# if we don't want to validate on the full val set, we can specify the constant below to limit the val set
+new_num_samples_train = int(PERCENTAGE_OF_TRAIN_SET_TO_USE * total_num_samples_train)
+datasets_as_dfs["train"] = datasets_as_dfs["train"][:new_num_samples_train]
 
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
 total_num_samples_val = len(datasets_as_dfs["valid"])
 
 new_num_samples_val = int(PERCENTAGE_OF_VAL_SET_TO_USE * total_num_samples_val)
-
 datasets_as_dfs["valid"] = datasets_as_dfs["valid"][:new_num_samples_val]
-
-# constants for image transformations
 
 # see compute_mean_std_dataset.py in src/dataset
 mean = 0.471
@@ -58,26 +53,24 @@ std = 0.302
 # pre-trained DenseNet121 model expects images to be of size 224x224
 IMAGE_INPUT_SIZE = 224
 
-
 # note: transforms are applied to the already cropped images (see __getitem__ method of CustomImageDataset class)!
 
 # use albumentations for Compose and transforms
-train_transforms = A.Compose(
-    [
-        # we want the long edge of the image to be resized to IMAGE_INPUT_SIZE, and the short edge of the image to be padded to IMAGE_INPUT_SIZE on both sides,
-        # such that the aspect ratio of the images are kept (i.e. a resized image of a lung is not distorted),
-        # while getting images of uniform size (IMAGE_INPUT_SIZE x IMAGE_INPUT_SIZE)
-        A.LongestMaxSize(
-            max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA
-        ),  # resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio (INTER_AREA works best for shrinking images)
-        A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),  # pads both sides of the shorter edge with 0's (black pixels)
-        # A.HueSaturationValue(),
-        # A.Affine(mode=cv2.BORDER_CONSTANT),
-        # A.GaussianBlur(),
-        A.Normalize(mean=mean, std=std),
-        ToTensorV2(),
-    ]
-)
+train_transforms = A.Compose([
+    # we want the long edge of the image to be resized to IMAGE_INPUT_SIZE, and the short edge of the image to be padded to IMAGE_INPUT_SIZE on both sides,
+    # such that the aspect ratio of the images are kept (i.e. a resized image of a lung is not distorted),
+    # while getting images of uniform size (IMAGE_INPUT_SIZE x IMAGE_INPUT_SIZE)
+    A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),  # resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio (INTER_AREA works best for shrinking images)
+    A.RandomBrightnessContrast(),  # randomly (by default prob=0.5) change brightness and contrast (by a default factor of 0.2)
+    # randomly (by default prob=0.5) translate and rotate image
+    # mode and cval specify that black pixels are used to fill in newly created pixels
+    # translate between -2% and 2% of the image height/width, rotate between -2 and 2 degrees
+    A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
+    A.GaussianBlur(),  # randomly (by default prob=0.5) blur the image
+    A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),  # pads both sides of the shorter edge with 0's (black pixels)
+    A.Normalize(mean=mean, std=std),
+    ToTensorV2()
+])
 
 # don't apply data augmentations to val and test set
 val_test_transforms = A.Compose(
@@ -89,7 +82,7 @@ val_test_transforms = A.Compose(
     ]
 )
 
-train_dataset = CustomImageDataset(dataset_df=balanced_train_df, transforms=train_transforms)
+train_dataset = CustomImageDataset(dataset_df=datasets_as_dfs["train"], transforms=train_transforms)
 val_dataset = CustomImageDataset(dataset_df=datasets_as_dfs["valid"], transforms=val_test_transforms)
 test_dataset = CustomImageDataset(dataset_df=datasets_as_dfs["test"], transforms=val_test_transforms)
 
@@ -154,9 +147,8 @@ def train_one_epoch(model, train_dl, optimizer, epoch):
         # compute the binary cross entropy loss, use pos_weight to adding weights to positive samples (i.e. abnormal samples)
         # since we have around 7.6x more normal bbox images than abnormal bbox images (see compute_stats_dataset.py),
         # we set pos_weight=7.6 to put 7.6 more weight on the loss of abnormal images
-        # pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)
-        # binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
-        binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets)
+        pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)
+        binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
 
         # total loss is weighted 1:1 between cross_entropy_loss and binary_cross_entropy_loss
         total_loss = cross_entropy_loss + binary_cross_entropy_loss
@@ -240,9 +232,8 @@ def evaluate_one_epoch(model, val_dl, lr_scheduler, epoch):
         abnormal_logits = logits[:, -1]
 
         cross_entropy_loss = cross_entropy(bbox_class_logits, bbox_targets)
-        # pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)  # we have 7.6x more normal bbox images than abnormal ones
-        # binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
-        binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets)
+        pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)  # we have 7.6x more normal bbox images than abnormal ones
+        binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
 
         total_loss = cross_entropy_loss + binary_cross_entropy_loss
 
@@ -407,14 +398,14 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
 
 EPOCHS = 30
 LR = 1e-4
-PATIENCE = 6  # number of epochs to wait before early stopping
-PATIENCE_LR_SCHEDULER = 3  # number of epochs to wait for val loss to reduce before lr is reduced by 1e-1
+PATIENCE = 7  # number of epochs to wait before early stopping
+PATIENCE_LR_SCHEDULER = 2  # number of epochs to wait for val loss to reduce before lr is reduced by 1e-1
 
 model = ClassificationModel()
 model.to(device, non_blocking=True)
 opt = AdamW(model.parameters(), lr=LR)
 lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
-writer = SummaryWriter(log_dir="/u/home/tanida/weights/classification_model/runs/1")
+writer = SummaryWriter(log_dir="/u/home/tanida/weights/classification_model/runs/2")
 train_model(
     model=model,
     train_dl=train_loader,
