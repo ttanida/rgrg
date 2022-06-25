@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-partial-new"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-partial"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -131,20 +131,40 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     def remove_substrings(phrases):
         def remove_wet_read(phrases):
             """Removes substring like 'WET READ: ___ ___ 8:19 AM' that is irrelevant."""
-            while "WET READ" in phrases:
-                starting_index = phrases.find("WET READ")
-                curr_index = starting_index
-                while phrases[curr_index:curr_index + 2] not in ["AM", "PM"]:
-                    curr_index += 1
-                phrases = phrases[:starting_index] + phrases[curr_index + 2:]
-            return phrases
+            wet_read_detected = False
 
+            # since there can be multiple WET READS's, collect the indices where they start and end in index_slices_to_remove
+            index_slices_to_remove = []
+            for index in range(len(phrases)):
+                if phrases[index:index + 8] == "WET READ":
+                    wet_read_detected = True
+
+                    # curr_index searches for "AM" or "PM" that signals the end of the WET READ substring
+                    for curr_index in range(index + 8, len(phrases)):
+                        # since it's possible that a WET READ substring does not have an"AM" or "PM" that signals its end, we also have to break out of the iteration
+                        # if the next WET READ substring is encountered
+                        if phrases[curr_index:curr_index + 2] in ["AM", "PM"] or phrases[curr_index:curr_index + 8] == "WET READ":
+                            break
+
+                    # only add (index, curr_index + 2) (i.e. the indices of the found WET READ substring) to index_slices_to_remove if an "AM" or "PM" were found
+                    if phrases[curr_index:curr_index + 2] in ["AM", "PM"]:
+                        index_slices_to_remove.append((index, curr_index + 2))
+
+            # remove the slices in reversed order, such that the correct index order is preserved
+            for indices_tuple in reversed(index_slices_to_remove):
+                start_index, end_index = indices_tuple
+                phrases = phrases[:start_index] + phrases[end_index:]
+
+            return phrases, wet_read_detected
+
+        # since phrases with WET READ substring are also prone to duplicate sentences, we return the boolean wet_read_detected
+        # later we remove duplicate sentences if wet_read_detected is True
+        phrases, wet_read_detected = remove_wet_read(phrases)
         phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL)
-        phrases = remove_wet_read(phrases)
 
-        return phrases
+        return phrases, wet_read_detected
 
-    def remove_whitespace(phrases: str) -> str:
+    def remove_whitespace(phrases):
         """Remove white space and capitalize words that come after a period."""
         # new_phrases collects all words
         new_phrases = ""
@@ -167,14 +187,28 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
         # remove the trailing whitespace
         return new_phrases.rstrip()
 
+    def remove_duplicate_sentences(phrases):
+        """
+        Only remove duplicate sentences from phrases if a WET READ substring was detected earlier.
+        This is because those phrases are likely to contain duplicate sentences.
+        """
+        # dicts are insertion ordered as of Python 3.6
+        phrases_dict = {phrase: None for phrase in phrases.split(". ")}
+
+        return ". ".join(phrase for phrase in phrases_dict)
+
     # convert list of phrases into a single phrase
     phrases = " ".join(phrases)
 
     # remove "PORTABLE UPRIGHT AP VIEW OF THE CHEST:" and similar substrings from phrases, since they don't add any relevant information
-    phrases = remove_substrings(phrases)
+    phrases, wet_read_detected = remove_substrings(phrases)
 
     # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.)
     phrases = remove_whitespace(phrases)
+
+    if wet_read_detected:
+        # since phrases with WET READ substrings are prone to duplicate sentences, we remove them here
+        phrases = remove_duplicate_sentences(phrases)
 
     return phrases
 
@@ -235,7 +269,6 @@ def get_rows(path_csv_file: str) -> list[list]:
 
         # iterate over all rows of the given csv file (i.e. over all images), if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is not set to a specific value
         for row in tqdm(csv_reader, total=total_num_rows):
-
             subject_id = row[1]
             study_id = row[2]
             image_id = row[3]
