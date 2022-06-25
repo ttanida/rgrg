@@ -121,6 +121,7 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     Also performs operations to clean the single string, such as:
         - removes irrelevant substrings (like "PORTABLE UPRIGHT AP VIEW OF THE CHEST:")
         - removes whitespace characters (e.g. \n or \t) and redundant whitespaces
+        - removes duplicate sentences
 
     Args:
         phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
@@ -131,13 +132,10 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     def remove_substrings(phrases):
         def remove_wet_read(phrases):
             """Removes substring like 'WET READ: ___ ___ 8:19 AM' that is irrelevant."""
-            wet_read_detected = False
-
             # since there can be multiple WET READS's, collect the indices where they start and end in index_slices_to_remove
             index_slices_to_remove = []
             for index in range(len(phrases)):
                 if phrases[index:index + 8] == "WET READ":
-                    wet_read_detected = True
 
                     # curr_index searches for "AM" or "PM" that signals the end of the WET READ substring
                     for curr_index in range(index + 8, len(phrases)):
@@ -155,14 +153,12 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
                 start_index, end_index = indices_tuple
                 phrases = phrases[:start_index] + phrases[end_index:]
 
-            return phrases, wet_read_detected
+            return phrases
 
-        # since phrases with WET READ substring are also prone to duplicate sentences, we return the boolean wet_read_detected
-        # later we remove duplicate sentences if wet_read_detected is True
-        phrases, wet_read_detected = remove_wet_read(phrases)
+        phrases = remove_wet_read(phrases)
         phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL)
 
-        return phrases, wet_read_detected
+        return phrases
 
     def remove_whitespace(phrases):
         """Remove white space and capitalize words that come after a period."""
@@ -188,27 +184,28 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
         return new_phrases.rstrip()
 
     def remove_duplicate_sentences(phrases):
-        """
-        Only remove duplicate sentences from phrases if a WET READ substring was detected earlier.
-        This is because those phrases are likely to contain duplicate sentences.
-        """
+        # remove the last period
+        if phrases[-1] == ".":
+            phrases = phrases[:-1]
+
         # dicts are insertion ordered as of Python 3.6
         phrases_dict = {phrase: None for phrase in phrases.split(". ")}
 
-        return ". ".join(phrase for phrase in phrases_dict)
+        phrases = ". ".join(phrase for phrase in phrases_dict)
+
+        # add last period
+        return phrases + "."
 
     # convert list of phrases into a single phrase
     phrases = " ".join(phrases)
 
     # remove "PORTABLE UPRIGHT AP VIEW OF THE CHEST:" and similar substrings from phrases, since they don't add any relevant information
-    phrases, wet_read_detected = remove_substrings(phrases)
+    phrases = remove_substrings(phrases)
 
     # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.)
     phrases = remove_whitespace(phrases)
 
-    if wet_read_detected:
-        # since phrases with WET READ substrings are prone to duplicate sentences, we remove them here
-        phrases = remove_duplicate_sentences(phrases)
+    phrases = remove_duplicate_sentences(phrases)
 
     return phrases
 
