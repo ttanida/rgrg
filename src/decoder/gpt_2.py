@@ -1,16 +1,18 @@
+from black import out
 from numpy import dtype
 import torch
 import torch.nn as nn
 from torchinfo import summary
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
+from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
 
 
-class Decoder(nn.Module):
+class DecoderModel(nn.Module):
     """
     GPT2 model's high level structure (i.e. children):
-    (0): (wte): word embedding layer (maps each id in the vocab to a vector of dimension 1024)
+    (0): (wte): word embedding layer (maps each id in the vocab to an embedding vector of dimension 1024)
     (1): (wpe): positional encoding (maps each of the position in the input to a positional encoding vector also of dimension 1024)
-    note: there are overall 1024 positions, since the context size (n_ctx, see model config) is 1024
+    note: there are overall 1024 positions, see n_positions in model.config
     (2): (ModuleList): a list of 24 GPT2Blocks (since GPT2 medium has 24 stacked decoder layers) and a LayerNorm at the end
     (3): (lm_head): languaging modeling head, which is a linear layer that maps from the hidden dimension of 1024 to the vocab dimension of 50257
     -> the next word can be predicted by taking the argmax of the 50257-dimensional vector and selecting the corresponding word as the next word
@@ -18,12 +20,17 @@ class Decoder(nn.Module):
     Each GPT2Block has the following structure:
     (0): (ln_1): LayerNorm
     (1): (attn): masked multi-head self-attention
-    (2): (ln_2):LayerNorm
+    (2): (ln_2): LayerNorm
     (3): (mlp): feed-forward neural network
 
     Each (attn) self-attention block consists of:
-    (0): (c_attn):
-    (1): (c_proj):
+    (0): (c_attn): Conv1D(3 * 1024, 1024) layer, which is a sort of linear layer that transforms an input tensor of the shape
+    (batch_size, seq_len, hidden_dim) to (batch_size, seq_len, 3 * hidden_dim) to retrieve the query, key, value matrices
+
+    note: the Conv1D layer is implemented in Huggingface (transformers.pytorch_utils.py) and is not to be confused with
+    the PyTorch implementation (torch.nn.modules) that has a lowercase d (i.e. Conv1d)
+
+    (1): (c_proj): Conv1D(1024, 1024) layer
     (2): (attn_dropout): Dropout layer
     (3): (resid_dropout): Dropout layer
     """
@@ -38,13 +45,24 @@ class Decoder(nn.Module):
         for param in self.pretrained_model.parameters():
             param.requires_grad = False
 
+        # read out weights/tensors of c_attn and attn, save them, reinitialize attn block with those weights and additional ones for the image embeddings
+        # with torch.no_grad():
+        #     nn.Parameter(c_attn.weight)
+        #     nn.Parameter(c_attn.bias) ... or something like that
+
 
 
 model = GPT2LMHeadModel.from_pretrained("healx/gpt-2-pubmed-medium")
+print(model.lm_head.weight.shape)
 # model.lm_head = nn.Linear(1024, 2048)
 # summary(model)
-for child in model.named_children():
-    print(child)
+# for child in model.transformer.h[0].attn.named_parameters():
+#     print(f"{child[0]}: {child[1].shape}")
+
+# print()
+# summary(model.transformer.h[0].attn)
+# print(model.transformer.h[0].attn)
+# summary(torch.nn.Conv1d(in_channels=1024, out_channels=3072, kernel_size=1))
 # for param in model.named_parameters():
 #     print(param)
 #     print()
@@ -71,14 +89,14 @@ for child in model.named_children():
 # # tokenizer = AutoTokenizer.from_pretrained(model_path)
 
 # checkpoint = "stanford-crfm/pubmed_gpt"
-checkpoint = "healx/gpt-2-pubmed-medium"
-tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+# checkpoint = "healx/gpt-2-pubmed-medium"
+# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 
 # setting `pad_token_id` to `eos_token_id`:50256 for open-end generation
-tokenizer.pad_token = tokenizer.eos_token
+# tokenizer.pad_token = tokenizer.eos_token
 
 # the trained model uses <|endoftext|> as its start token (i.e. 50256)
-print(tokenizer.bos_token_id)
+# print(tokenizer.bos_token_id)
 
 # raw_inputs = [
 #     "I've been waiting for a HuggingFace course my whole life.",
