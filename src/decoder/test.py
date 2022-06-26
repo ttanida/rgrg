@@ -57,13 +57,13 @@ class GPT2PseudoAttention(GPT2Attention):
         self.c_proj = Conv1DWithTrainedWeights(trained_weight=c_proj_weights_and_bias[0], trained_bias=c_proj_weights_and_bias[1])
 
 
-c_attn_weights_and_bias = (torch.ones(1024, 3072)*5, torch.ones(3072))
-c_proj_weights_and_bias = (torch.zeros(1024, 3072), torch.zeros(3072))
-PSA = GPT2PseudoAttention(c_attn_weights_and_bias=c_attn_weights_and_bias, c_proj_weights_and_bias=c_proj_weights_and_bias)
+# c_attn_weights_and_bias = (torch.ones(1024, 3072)*5, torch.ones(3072))
+# c_proj_weights_and_bias = (torch.zeros(1024, 3072), torch.zeros(3072))
+# PSA = GPT2PseudoAttention(c_attn_weights_and_bias=c_attn_weights_and_bias, c_proj_weights_and_bias=c_proj_weights_and_bias)
 # for param in PSA.named_parameters():
 #     print(param)
 
-print(PSA)
+# print(PSA)
 
 # weight = torch.ones(1024, 3072)
 # bias = torch.ones(3072)

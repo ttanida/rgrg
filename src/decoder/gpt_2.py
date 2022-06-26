@@ -1,19 +1,9 @@
-import enum
-from multiprocessing import set_start_method
-from black import out
-from jinja2 import ChoiceLoader
-from numpy import dtype
 import torch
 import torch.nn as nn
 from torchinfo import summary
 from transformers import GPT2Config
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
-
-import logging
-
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
-log = logging.getLogger(__name__)
 
 
 class Conv1DWithTrainedWeights(nn.Module):
@@ -27,13 +17,11 @@ class Conv1DWithTrainedWeights(nn.Module):
 
     def __init__(self, trained_weight, trained_bias):
         super(Conv1DWithTrainedWeights, self).__init__()
-        self.weight = nn.Parameter(trained_weight)  # of shape (1024 x 3072)
-        self.bias = nn.Parameter(trained_bias)  # of shape (3072)
+        self.weight = nn.Parameter(trained_weight, requires_grad=False)  # of shape (1024 x 3072)
+        self.bias = nn.Parameter(trained_bias, requires_grad=False)  # of shape (3072)
 
     def forward(self, x):  # x has shape (batch x sequence_len x 1024)
-        size_out = x.size()[:-1] + (
-            self.weight.size(-1),
-        )  # size_out has shape (batch x sequence_len x 3072)
+        size_out = x.size()[:-1] + (self.weight.size(-1),)  # size_out has shape (batch x sequence_len x 3072)
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         x = x.view(size_out)
         return x  # x has shape (batch x sequence_len x 3072)
@@ -42,12 +30,8 @@ class Conv1DWithTrainedWeights(nn.Module):
 class GPT2PseudoAttention(GPT2Attention):
     def __init__(
         self,
-        c_attn_weights_and_bias: tuple[
-            torch.FloatTensor
-        ],  # pre-trained weights and bias
-        c_proj_weights_and_bias: tuple[
-            torch.FloatTensor
-        ],  # pre-trained weights and bias
+        c_attn_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias
+        c_proj_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias
         is_cross_attention=False,
         layer_idx=None,
     ):
@@ -102,15 +86,38 @@ class DecoderModel(nn.Module):
         self.checkpoint = "healx/gpt-2-pubmed-medium"
 
         # use GPT2 model with language modeling head, since we want to generate phrases
-        self.pretrained_model = GPT2LMHeadModel.from_pretrained(self.checkpoint)
+        self.gpt_with_lm_head = GPT2LMHeadModel.from_pretrained(self.checkpoint)
 
-        # freeze all parameters of the GPT2 model
-        # for param in self.pretrained_model.parameters():
-        #     param.requires_grad = False
+        # freeze all parameters of the model
+        for param in self.gpt_with_lm_head.parameters():
+            param.requires_grad = False
 
+        # replace normal attention layers by pseudo attention layers
+        self._replace_attention_by_pseudo_attention()
+
+        # divide model into GPT part and language modeling head part
+        self.gpt = self.gpt_with_lm_head.transformer
+        self.lm_head = self.gpt_with_lm_head.lm_head
+
+        # divide GPT part into word and positional embedding, gpt2 blocks and final layernorm
+        self.word_and_positional_embedding = nn.Sequential(*list(self.gpt.children())[:3])
+        self.gpt2_blocks = list(self.gpt.children())[3]  # type: nn.ModuleList
+        self.final_layernorm = list(self.gpt.children())[4]
+
+        # convert each individual gpt2_block into a nn.ModuleList
+        self.gpt2_blocks = nn.ModuleList(nn.ModuleList(gpt2_block.children()) for gpt2_block in self.gpt2_blocks)
+
+        # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
+        self.feature_space_transformation_nn = nn.Sequential(
+            nn.Linear(in_features=1024, out_features=1024),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1024)
+        )
+
+    def _replace_attention_by_pseudo_attention(self):
         GPT2PSA_list = []
 
-        for gpt2_block in self.pretrained_model.transformer.h:
+        for gpt2_block in self.gpt_with_lm_head.transformer.h:
             # extract trained weights and biases
             attn = gpt2_block.attn
             c_attn_weights = attn.c_attn.weight.detach()
@@ -126,10 +133,26 @@ class DecoderModel(nn.Module):
 
             GPT2PSA_list.append(GPT2PSA)
 
-        log.info(len(GPT2PSA_list))
-
         for i, GPT2PSA in enumerate(GPT2PSA_list):
-            self.pretrained_model.transformer.h[i].attn = GPT2PSA
+            self.gpt_with_lm_head.transformer.h[i].attn = GPT2PSA
+
+    def forward(self, image_features, text_features):
+        # transform image_features from image feature space to text feature space
+        image_features = self.feature_space_transformation_nn(image_features)
+
+        text_features = self.word_and_positional_embedding(text_features)
+        for gpt2_block in self.gpt2_blocks:
+            for i, gpt2_block_module in enumerate(gpt2_block):
+                if i == 1:  # the second module is the pseudo self-attention module
+                    text_features = gpt2_block_module(image_features, text_features)
+                else:
+                    text_features = gpt2_block_module(text_features)
+
+        text_features = self.final_layernorm(text_features)
+        text_features = self.lm_head(text_features)
+
+        return text_features
+
 
 
 
@@ -141,11 +164,38 @@ class DecoderModel(nn.Module):
 # )
 
 model = DecoderModel()
-print(model)
+for name, module in model.named_modules():
+    print(name)
 
+
+# print(model.pretrained_model.transformer.h[0].attn.use_cache)
 
 # model = GPT2LMHeadModel.from_pretrained("healx/gpt-2-pubmed-medium")
-# print(model)
+# my_model = nn.Sequential(*list(model.transformer.modules())[:2])
+
+# print(my_model)
+
+# gpt = model.transformer
+# gpt2_blocks = list(gpt.children())[3]
+
+# gpt2_blocks = nn.ModuleList(nn.ModuleList(gpt2_block.children()) for gpt2_block in gpt2_blocks)
+# gpt2_block = gpt2_blocks[0]
+# print(gpt2_block)
+
+
+
+
+# print(len(list(model.transformer.children())))
+# for i, child in enumerate(model.transformer.children()):
+#     if i == 3:
+#         print(child)
+
+
+
+
+# for child in model.children():
+#     print(child)
+
 
 # my_dict = {}
 # for name, module in model.named_modules():
