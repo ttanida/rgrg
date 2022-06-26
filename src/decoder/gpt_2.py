@@ -1,10 +1,72 @@
+import enum
+from multiprocessing import set_start_method
 from black import out
+from jinja2 import ChoiceLoader
 from numpy import dtype
 import torch
 import torch.nn as nn
 from torchinfo import summary
+from transformers import GPT2Config
 from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
+
+import logging
+
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
+log = logging.getLogger(__name__)
+
+
+class Conv1DWithTrainedWeights(nn.Module):
+    """
+    Same functionality as Conv1D class of transformers.pytorch_utils but allows initialization with trained weights.
+
+    Conv1D has the same functionality as a linear layer.
+    It transforms the inputted hidden_states from shape (batch x sequence_len x hidden_dim) to (batch x sequence_len x 3*hidden_dim),
+    thus allowing the retrieval of the query, key and value matrices
+    """
+
+    def __init__(self, trained_weight, trained_bias):
+        super(Conv1DWithTrainedWeights, self).__init__()
+        self.weight = nn.Parameter(trained_weight)  # of shape (1024 x 3072)
+        self.bias = nn.Parameter(trained_bias)  # of shape (3072)
+
+    def forward(self, x):  # x has shape (batch x sequence_len x 1024)
+        size_out = x.size()[:-1] + (
+            self.weight.size(-1),
+        )  # size_out has shape (batch x sequence_len x 3072)
+        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
+        x = x.view(size_out)
+        return x  # x has shape (batch x sequence_len x 3072)
+
+
+class GPT2PseudoAttention(GPT2Attention):
+    def __init__(
+        self,
+        c_attn_weights_and_bias: tuple[
+            torch.FloatTensor
+        ],  # pre-trained weights and bias
+        c_proj_weights_and_bias: tuple[
+            torch.FloatTensor
+        ],  # pre-trained weights and bias
+        is_cross_attention=False,
+        layer_idx=None,
+    ):
+        config = GPT2Config(
+            vocab_size=50257,
+            n_positions=1024,
+            n_embd=1024,
+            n_layer=24,
+            n_head=16,
+        )
+        super().__init__(config, is_cross_attention, layer_idx)
+        self.c_attn = Conv1DWithTrainedWeights(
+            trained_weight=c_attn_weights_and_bias[0],
+            trained_bias=c_attn_weights_and_bias[1],
+        )
+        self.c_proj = Conv1DWithTrainedWeights(
+            trained_weight=c_proj_weights_and_bias[0],
+            trained_bias=c_proj_weights_and_bias[1],
+        )
 
 
 class DecoderModel(nn.Module):
@@ -34,6 +96,7 @@ class DecoderModel(nn.Module):
     (2): (attn_dropout): Dropout layer
     (3): (resid_dropout): Dropout layer
     """
+
     def __init__(self):
         super().__init__()
         self.checkpoint = "healx/gpt-2-pubmed-medium"
@@ -42,22 +105,87 @@ class DecoderModel(nn.Module):
         self.pretrained_model = GPT2LMHeadModel.from_pretrained(self.checkpoint)
 
         # freeze all parameters of the GPT2 model
-        for param in self.pretrained_model.parameters():
-            param.requires_grad = False
+        # for param in self.pretrained_model.parameters():
+        #     param.requires_grad = False
 
-        # read out weights/tensors of c_attn and attn, save them, reinitialize attn block with those weights and additional ones for the image embeddings
-        # with torch.no_grad():
-        #     nn.Parameter(c_attn.weight)
-        #     nn.Parameter(c_attn.bias) ... or something like that
+        GPT2PSA_list = []
+
+        for gpt2_block in self.pretrained_model.transformer.h:
+            # extract trained weights and biases
+            attn = gpt2_block.attn
+            c_attn_weights = attn.c_attn.weight.detach()
+            c_attn_bias = attn.c_attn.bias.detach()
+            c_proj_weights = attn.c_proj.weight.detach()
+            c_proj_bias = attn.c_proj.bias.detach()
+
+            # initialize GPT2PseudoAttention module
+            GPT2PSA = GPT2PseudoAttention(
+                c_attn_weights_and_bias=(c_attn_weights, c_attn_bias),
+                c_proj_weights_and_bias=(c_proj_weights, c_proj_bias),
+            )
+
+            GPT2PSA_list.append(GPT2PSA)
+
+        log.info(len(GPT2PSA_list))
+
+        for i, GPT2PSA in enumerate(GPT2PSA_list):
+            self.pretrained_model.transformer.h[i].attn = GPT2PSA
 
 
 
-model = GPT2LMHeadModel.from_pretrained("healx/gpt-2-pubmed-medium")
-print(model.lm_head.weight.shape)
-# model.lm_head = nn.Linear(1024, 2048)
-# summary(model)
-# for child in model.transformer.h[0].attn.named_parameters():
-#     print(f"{child[0]}: {child[1].shape}")
+# c_attn_weights_and_bias = (torch.ones(1024, 3072) * 5, torch.ones(3072))
+# c_proj_weights_and_bias = (torch.zeros(1024, 3072), torch.zeros(3072))
+# PSA = GPT2PseudoAttention(
+#     c_attn_weights_and_bias=c_attn_weights_and_bias,
+#     c_proj_weights_and_bias=c_proj_weights_and_bias,
+# )
+
+model = DecoderModel()
+print(model)
+
+
+# model = GPT2LMHeadModel.from_pretrained("healx/gpt-2-pubmed-medium")
+# print(model)
+
+# my_dict = {}
+# for name, module in model.named_modules():
+#     if isinstance(module, GPT2Attention):
+#         my_dict[name] = PSA
+
+# for k, v in my_dict.items():
+#     setattr(model, k, v)
+
+# gpt2_block = model.transformer.h[1]
+# print(gpt2_block.attn)
+
+# model.transformer.h[0] = nn.Linear(1024, 1024)
+
+# for name, module in model.named_modules():
+#     print(name)
+
+# first_GPT2_attention_module = model.transformer.h[0].attn
+# for name, param in first_GPT2_attention_module.named_parameters():
+#     print(name, param)
+
+
+
+# print(first_GPT2_attention_module)
+# c_attn_weights = first_GPT2_attention_module.c_attn.weight.detach()
+# print(c_attn_weights.shape)
+
+# for name_module, module in model.named_modules():
+#     if isinstance(module, GPT2Attention):
+#         print(name_module)
+
+# print(model)
+
+# i = 0
+# for gpt2_block in model.transformer.h.children():
+#     print(i)
+#     for child in gpt2_block.children():
+#         print(child)
+#     i += 1
+# print(f"{child[0]}: {child[1].shape}")
 
 # print()
 # summary(model.transformer.h[0].attn)
@@ -67,19 +195,6 @@ print(model.lm_head.weight.shape)
 #     print(param)
 #     print()
 # print(model)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ###################
@@ -142,4 +257,3 @@ print(model.lm_head.weight.shape)
 # outputs = model(**inputs)
 # print(type(outputs))
 # print(outputs.last_hidden_state.shape)  # (batch_size x num_tokens x d_hidden)
-
