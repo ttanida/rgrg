@@ -61,7 +61,8 @@ class DecoderModel(nn.Module):
     note: there are overall 1024 positions, see n_positions in model.config
     (2): (ModuleList): a list of 24 GPT2Blocks (since GPT2 medium has 24 stacked decoder layers) and a LayerNorm at the end
     (3): (lm_head): languaging modeling head, which is a linear layer that maps from the hidden dimension of 1024 to the vocab dimension of 50257
-    -> the next word can be predicted by taking the argmax of the 50257-dimensional vector and selecting the corresponding word as the next word
+    -> the output represents the next word logits, which can now by passed through a Softmax layer and taken the argmax of to get the position of
+    the word inside the vocab with the highest probability
 
     Each GPT2Block has the following structure:
     (0): (ln_1): LayerNorm
@@ -76,7 +77,8 @@ class DecoderModel(nn.Module):
     note: the Conv1D layer is implemented in Huggingface (transformers.pytorch_utils.py) and is not to be confused with
     the PyTorch implementation (torch.nn.modules) that has a lowercase d (i.e. Conv1d)
 
-    (1): (c_proj): Conv1D(1024, 1024) layer
+    (1): (c_proj): Conv1D(1024, 1024) layer, which is another "linear" transformation that is applied after the multi-heads have been concatenated again
+    (called W^O in the original paper)
     (2): (attn_dropout): Dropout layer
     (3): (resid_dropout): Dropout layer
     """
@@ -164,8 +166,7 @@ class DecoderModel(nn.Module):
 # )
 
 model = DecoderModel()
-for name, module in model.named_modules():
-    print(name)
+summary(model)
 
 
 # print(model.pretrained_model.transformer.h[0].attn.use_cache)
