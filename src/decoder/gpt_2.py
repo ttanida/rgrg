@@ -31,7 +31,7 @@ class GPT2PseudoAttention(nn.Module):
     def __init__(
         self,
         c_attn_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias for retrieving query, key, value matrices
-        c_proj_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias for projecting concatenated heads to original hidden dimension
+        c_proj_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias for projecting concatenated heads to original hidden dim
     ):
 
         super().__init__()
@@ -48,22 +48,69 @@ class GPT2PseudoAttention(nn.Module):
         self.num_heads = 16
         self.head_dim = self.embed_dim // self.num_heads
         self.split_size = self.embed_dim
-        self.scale_attn_weights = True
 
         self.attn_dropout = nn.Dropout(p=0.1)
         self.resid_dropout = nn.Dropout(p=0.1)
 
+        # seq_len can maximally be 1024 tokens
+        max_positions = 1024
+
+        # create a causal mask for masking out attention weights in the masked self-attention operator (masking out weights of tokens that lie ahead of the attended token)
+        # first create a lower triangular matrix
+        lower_triangular_matrix = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8))
+        # then save lower_triangular_matrix (with additional dimensions for batch_size and num_heads) in a buffer
+        # (since the causal mask is a tensor that should not be optimized)
+        self.register_buffer("causal_mask", lower_triangular_matrix.view(1, 1, max_positions, max_positions))
+
+        # value for masking out attention weights
+        self.register_buffer("mask_out_value", torch.tensor(-1e4))
+
         # matrices for getting key and value matrices for image hidden states
-        self.uk = nn.Linear(in_features=self.embed_dim, out_features=3 * self.embed_dim)
-        self.uv = nn.Linear(in_features=self.embed_dim, out_features=3 * self.embed_dim)
+        self.uk = nn.Linear(in_features=self.embed_dim, out_features=self.embed_dim)
+        self.uv = nn.Linear(in_features=self.embed_dim, out_features=self.embed_dim)
+
+    def _split_heads(self, tensor, num_heads, head_dim):
+        """
+        Splits hidden_dim (i.e. 1024) into num_heads (i.e. 16) and head_dim (i.e. 64)
+        """
+        new_shape = tensor.size()[:-1] + (num_heads, head_dim)
+        tensor = tensor.view(new_shape)
+        return tensor.permute(0, 2, 1, 3)  # (batch_size, num_heads, seq_len, head_dim)
+
+    def _attn(self, query_word, key_image_word, value_image_word, attention_mask):
+        attn_weights = torch.matmul(query_word, key_image_word.transpose(-1, -2))  # shape (batch_size x num_heads x seq_len x 1+seq_len)
+
+        # scale attention weights
+        attn_weights = attn_weights / (value_image_word.size(-1) ** 0.5)
+
+        # apply causal mask to weights
+        query_length, key_length = query_word.size(-2), key_image_word.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].to(torch.bool)
+        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+    
 
     def forward(self,
-                word_hidden_states,  # shape (batch_size x seq_len x hidden_dimension)
-                image_hidden_states,  # shape (batch_size x seq_len x hidden_dimension)
+                word_hidden_states,  # shape (batch_size x seq_len x hidden_dim)
+                image_hidden_states,  # shape (batch_size x hidden_dim)
                 attention_mask):  # shape (batch_size, 1, 1, seq_len)
 
-        # query, key, value matrices each have shape (batch_size x seq_len x hidden_dimension)
+        # query, key, value matrices each have shape (batch_size x seq_len x hidden_dim)
         query_word, key_word, value_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
+
+        # add an addition dimension to the image_hidden_states
+        image_hidden_states = image_hidden_states[:, None, :]  # shape (batch_size x 1 x hidden_dim)
+
+        key_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
+        value_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
+
+        key_image_word = torch.cat((key_image, key_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
+        value_image_word = torch.cat((value_image, value_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
+
+        query_word = self._split_heads(query_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x seq_len x head_dim)
+        key_image_word = self._split_heads(key_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
+        value_image_word = self._split_heads(value_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
+
+        attn_output = self._attn(query_word, key_image_word, value_image_word, attention_mask)
 
 
 class DecoderModel(nn.Module):
@@ -157,15 +204,15 @@ class DecoderModel(nn.Module):
     def forward(self,
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
-                image_hidden_states: torch.FloatTensor   # shape (batch_size x image_hidden_dimension) (with image_hidden_dimension = 1024, so same as word_hidden_dim)
+                image_hidden_states: torch.FloatTensor   # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
                 ):
         # transform image_hidden_states from image feature space to text feature space
-        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dimension)
+        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dime)
 
-        # from now, word_hidden_dimension will just be called hidden_dimension
+        # from now, word_hidden_dim will just be called hidden_dim
 
         # pass the token ids through the word embedding layer to get the word embeddings
-        inputs_embeds = self.wte(input_ids)  # shape (batch_size x seq_len x hidden_dimension)
+        inputs_embeds = self.wte(input_ids)  # shape (batch_size x seq_len x hidden_dim)
 
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         device = input_ids.device
@@ -174,10 +221,10 @@ class DecoderModel(nn.Module):
         position_ids = position_ids.unsqueeze(0).view(-1, seq_len)  # shape (1 x seq_len)
 
         # pass the position ids through the positional embedding layer to get the positional embeddings
-        position_embeds = self.wte(position_ids)  # shape (1 x seq_len x hidden_dimension)
+        position_embeds = self.wte(position_ids)  # shape (1 x seq_len x hidden_dim)
 
         # addition is broadcasted around batch_size dimension
-        word_hidden_states = inputs_embeds + position_embeds  # shape (batch_size x seq_len x hidden_dimension)
+        word_hidden_states = inputs_embeds + position_embeds  # shape (batch_size x seq_len x hidden_dim)
 
         word_hidden_states = self.drop(word_hidden_states)
 
