@@ -17,32 +17,24 @@ class Conv1DWithTrainedWeights(nn.Module):
 
     def __init__(self, trained_weight, trained_bias):
         super(Conv1DWithTrainedWeights, self).__init__()
-        self.weight = nn.Parameter(trained_weight, requires_grad=False)  # of shape (1024 x 3072)
-        self.bias = nn.Parameter(trained_bias, requires_grad=False)  # of shape (3072)
+        self.weight = nn.Parameter(trained_weight, requires_grad=False)  # of shape (hidden_dim x 3*hidden_dim)
+        self.bias = nn.Parameter(trained_bias, requires_grad=False)  # of shape (3 * hidden_dim)
 
-    def forward(self, x):  # x has shape (batch x sequence_len x 1024)
-        size_out = x.size()[:-1] + (self.weight.size(-1),)  # size_out has shape (batch x sequence_len x 3072)
+    def forward(self, x):  # x has shape (batch x sequence_len x hidden_dim)
+        size_out = x.size()[:-1] + (self.weight.size(-1),)  # size_out has shape (batch x sequence_len x 3*hidden_dim)
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         x = x.view(size_out)
-        return x  # x has shape (batch x sequence_len x 3072)
+        return x  # x has shape (batch x sequence_len x 3*hidden_dim)
 
 
-class GPT2PseudoAttention(GPT2Attention):
+class GPT2PseudoAttention(nn.Module):
     def __init__(
         self,
-        c_attn_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias
-        c_proj_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias
-        is_cross_attention=False,
-        layer_idx=None,
+        c_attn_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias for retrieving query, key, value matrices
+        c_proj_weights_and_bias: tuple[torch.FloatTensor],  # pre-trained weights and bias for projecting concatenated heads to original hidden dimension
     ):
-        config = GPT2Config(
-            vocab_size=50257,
-            n_positions=1024,
-            n_embd=1024,
-            n_layer=24,
-            n_head=16,
-        )
-        super().__init__(config, is_cross_attention, layer_idx)
+
+        super().__init__()
         self.c_attn = Conv1DWithTrainedWeights(
             trained_weight=c_attn_weights_and_bias[0],
             trained_bias=c_attn_weights_and_bias[1],
@@ -51,6 +43,27 @@ class GPT2PseudoAttention(GPT2Attention):
             trained_weight=c_proj_weights_and_bias[0],
             trained_bias=c_proj_weights_and_bias[1],
         )
+
+        self.embed_dim = 1024
+        self.num_heads = 16
+        self.head_dim = self.embed_dim // self.num_heads
+        self.split_size = self.embed_dim
+        self.scale_attn_weights = True
+
+        self.attn_dropout = nn.Dropout(p=0.1)
+        self.resid_dropout = nn.Dropout(p=0.1)
+
+        # matrices for getting key and value matrices for image hidden states
+        self.uk = nn.Linear(in_features=self.embed_dim, out_features=3 * self.embed_dim)
+        self.uv = nn.Linear(in_features=self.embed_dim, out_features=3 * self.embed_dim)
+
+    def forward(self,
+                word_hidden_states,  # shape (batch_size x seq_len x hidden_dimension)
+                image_hidden_states,  # shape (batch_size x seq_len x hidden_dimension)
+                attention_mask):  # shape (batch_size, 1, 1, seq_len)
+
+        # query, key, value matrices each have shape (batch_size x seq_len x hidden_dimension)
+        query_word, key_word, value_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
 
 
 class DecoderModel(nn.Module):
@@ -101,10 +114,13 @@ class DecoderModel(nn.Module):
         self.gpt = self.gpt_with_lm_head.transformer
         self.lm_head = self.gpt_with_lm_head.lm_head
 
-        # divide GPT part into word and positional embedding, gpt2 blocks and final layernorm
-        self.word_and_positional_embedding = nn.Sequential(*list(self.gpt.children())[:3])
-        self.gpt2_blocks = list(self.gpt.children())[3]  # type: nn.ModuleList
-        self.final_layernorm = list(self.gpt.children())[4]
+        # divide GPT part into word embedding layer, positional embedding layer, dropout layer, gpt2 blocks and final layernorm
+        gpt_children = list(self.gpt.children())
+        self.wte = gpt_children[0]  # word embedding layer
+        self.wpe = gpt_children[1]  # positional embedding layer
+        self.drop = gpt_children[2]  # dropout layer
+        self.gpt2_blocks = gpt_children[3]  # type: nn.ModuleList
+        self.final_layernorm = gpt_children[4]
 
         # convert each individual gpt2_block into a nn.ModuleList
         self.gpt2_blocks = nn.ModuleList(nn.ModuleList(gpt2_block.children()) for gpt2_block in self.gpt2_blocks)
@@ -138,25 +154,75 @@ class DecoderModel(nn.Module):
         for i, GPT2PSA in enumerate(GPT2PSA_list):
             self.gpt_with_lm_head.transformer.h[i].attn = GPT2PSA
 
-    def forward(self, image_features, text_features):
-        # transform image_features from image feature space to text feature space
-        image_features = self.feature_space_transformation_nn(image_features)
+    def forward(self,
+                input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
+                attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
+                image_hidden_states: torch.FloatTensor   # shape (batch_size x image_hidden_dimension) (with image_hidden_dimension = 1024, so same as word_hidden_dim)
+                ):
+        # transform image_hidden_states from image feature space to text feature space
+        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dimension)
 
-        text_features = self.word_and_positional_embedding(text_features)
+        # from now, word_hidden_dimension will just be called hidden_dimension
+
+        # pass the token ids through the word embedding layer to get the word embeddings
+        inputs_embeds = self.wte(input_ids)  # shape (batch_size x seq_len x hidden_dimension)
+
+        # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
+        device = input_ids.device
+        seq_len = inputs_embeds.size(-1)
+        position_ids = torch.arange(start=0, end=seq_len, dtype=torch.long, device=device)
+        position_ids = position_ids.unsqueeze(0).view(-1, seq_len)  # shape (1 x seq_len)
+
+        # pass the position ids through the positional embedding layer to get the positional embeddings
+        position_embeds = self.wte(position_ids)  # shape (1 x seq_len x hidden_dimension)
+
+        # addition is broadcasted around batch_size dimension
+        word_hidden_states = inputs_embeds + position_embeds  # shape (batch_size x seq_len x hidden_dimension)
+
+        word_hidden_states = self.drop(word_hidden_states)
+
+        # we change the attention_mask shape to (batch_size, 1, 1, seq_len), so we can broadcast to (batch_size, num_heads, from_seq_len, to_seq_len)
+        # later on in the multi-head self-attention module
+        attention_mask = attention_mask[:, None, None, :]
+
+        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+        # masked positions, this operation will create a tensor which is 0.0 for
+        # positions we want to attend and -10000.0 for masked positions.
+        # Since we are adding it to the raw scores before the softmax, this is
+        # effectively the same as removing these entirely
+        attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        attention_mask = (1.0 - attention_mask) * -10000.0
+
         for gpt2_block in self.gpt2_blocks:
             for i, gpt2_block_module in enumerate(gpt2_block):
+                if i == 0:  # first layernorm
+                    word_hidden_states = gpt2_block_module(word_hidden_states)
+                if i == 1:  # pseudo self-attention module
+                    word_hidden_states = gpt2_block_module(word_hidden_states, image_hidden_states, attention_mask)
+                if i == 2:  # second layernorm
+                    pass
+                else:  # MLP
+                    pass
+
+
+
                 if i == 1:  # the second module is the pseudo self-attention module
-                    text_features = gpt2_block_module(image_features, text_features)
+                    text_hidden_states = gpt2_block_module(image_hidden_states, text_hidden_states)
                 else:
-                    text_features = gpt2_block_module(text_features)
+                    text_hidden_states = gpt2_block_module(text_hidden_states)
 
-        text_features = self.final_layernorm(text_features)
-        text_features = self.lm_head(text_features)
+        # text_hidden_states = self.final_layernorm(text_hidden_states)
+        # text_hidden_states = self.lm_head(text_hidden_states)
 
-        return text_features
+        # return text_hidden_states
 
 
 
+
+model = GPT2LMHeadModel.from_pretrained("healx/gpt-2-pubmed-medium")
+transformer_children = list(model.transformer.children())
+gpt2_blocks = transformer_children[3]
+print(gpt2_blocks[0])
 
 # c_attn_weights_and_bias = (torch.ones(1024, 3072) * 5, torch.ones(3072))
 # c_proj_weights_and_bias = (torch.zeros(1024, 3072), torch.zeros(3072))
@@ -165,8 +231,8 @@ class DecoderModel(nn.Module):
 #     c_proj_weights_and_bias=c_proj_weights_and_bias,
 # )
 
-model = DecoderModel()
-summary(model)
+# model = DecoderModel()
+# summary(model)
 
 
 # print(model.pretrained_model.transformer.h[0].attn.use_cache)
