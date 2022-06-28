@@ -83,11 +83,26 @@ class GPT2PseudoAttention(nn.Module):
         # scale attention weights
         attn_weights = attn_weights / (value_image_word.size(-1) ** 0.5)
 
-        # apply causal mask to weights
+        # create and apply the final causal mask to weights
         query_length, key_length = query_word.size(-2), key_image_word.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length: key_length, :key_length].to(torch.bool)
-        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
-    
+
+        # note that this causal mask has a shape of seq_len x 1+seq_len (disregarding the first 2 dims),
+        # with the first column only consisting of True boolean values
+        # meaning attention weights corresponding to images (which are stored in the first column) are not masked out!
+        causal_mask = self.causal_mask[:, :, key_length - query_length: key_length, :key_length].to(torch.bool)
+
+        # select the attention weights where the causal mask has True values, select -1e4 where the causal mask has False values
+        attn_weights = torch.where(causal_mask, attn_weights, self.mask_out_value.to(attn_weights.dtype))
+
+        # apply the attention mask (for masking out padding tokens)
+        # currently, the attention mask is of shape (batch_size, 1, 1, seq_len)
+        # but since the first column of the attention weights hold the weights corresponding to the images, they should not be masked out
+
+        # to achieve this, concatenate a column of zeros from the left to the seq_len dimension (since zero values means no masking out)
+        attention_mask_size = attention_mask.size()
+        zero_column = torch.zeros(attention_mask_size[:-1] + (1,))  # shape (batch_size, 1, 1, 1)
+        attention_mask = torch.cat((zero_column, attention_mask), dim=-1)  # shape (batch_size, 1, 1, 1+seq_len)
+        attn_weights = attn_weights + attention_mask
 
     def forward(self,
                 word_hidden_states,  # shape (batch_size x seq_len x hidden_dim)
