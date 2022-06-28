@@ -104,6 +104,19 @@ class GPT2PseudoAttention(nn.Module):
         attention_mask = torch.cat((zero_column, attention_mask), dim=-1)  # shape (batch_size, 1, 1, 1+seq_len)
         attn_weights = attn_weights + attention_mask
 
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
+        attn_weights = attn_weights.type(value_image_word.dtype)
+        attn_weights = self.attn_dropout(attn_weights)
+
+        attn_output = torch.matmul(attn_weights, value_image_word)  # shape (batch_size x num_heads x seq_len x head_dim)
+
+        return attn_output
+
+    def _merge_heads(self, tensor, num_heads, head_dim):
+        pass
+
     def forward(self,
                 word_hidden_states,  # shape (batch_size x seq_len x hidden_dim)
                 image_hidden_states,  # shape (batch_size x hidden_dim)
@@ -126,6 +139,8 @@ class GPT2PseudoAttention(nn.Module):
         value_image_word = self._split_heads(value_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
 
         attn_output = self._attn(query_word, key_image_word, value_image_word, attention_mask)
+
+        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
 
 
 class DecoderModel(nn.Module):
