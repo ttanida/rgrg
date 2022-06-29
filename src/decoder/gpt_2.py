@@ -1,10 +1,8 @@
-from re import A
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 from torchinfo import summary
-from transformers import GPT2Config
-from transformers import GPT2Tokenizer, GPT2Model, GPT2LMHeadModel
-from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 
 class Conv1DWithTrainedWeights(nn.Module):
@@ -231,12 +229,15 @@ class DecoderModel(nn.Module):
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
                 image_hidden_states: torch.FloatTensor,   # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
-                # labels: torch.LongTensor = None  # shape (batch_size x seq_len)
+                labels: torch.LongTensor = None  # shape (batch_size x seq_len)
                 ):
         """
         Labels for language modeling. Note that the labels are shifted inside the model, i.e. you can set labels = input_ids
         Indices are selected in [-100, 0, ..., config.vocab_size], with all labels that are set to -100 being ignored (masked),
         and the loss only computed for labels in [0, ..., config.vocab_size]
+
+        If labels are None, returns language modeling logits (of shape batch_size x seq_len x vocab_size).
+        If labels are specified, returns a tuple of the cross entropy loss and language modeling logits.
         """
 
         # transform image_hidden_states from image feature space to text feature space
@@ -270,7 +271,7 @@ class DecoderModel(nn.Module):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely
-        attention_mask = attention_mask.to(dtype=torch.float32)  # fp16 compatibility, dtype should be set to either torch.float32 or torch.float16
+        attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # dtype should be either torch.float32 or torch.float16
         attention_mask = (1.0 - attention_mask) * -10000.0
 
         for gpt2_block in self.gpt2_blocks:
@@ -295,13 +296,28 @@ class DecoderModel(nn.Module):
 
         word_hidden_states = self.final_layernorm(word_hidden_states)
 
-        lm_logits = self.lm_head(word_hidden_states)
+        lm_logits = self.lm_head(word_hidden_states)  # shape (batch_size x seq_len x vocab_size), with vocab_size = 50257
 
-        # loss = None
-        # if labels is not None:
-        #     pass
+        loss = None
+        if labels is not None:
+            # shift the tokens, i.e. discard the last token in the sequence for the logits,
+            # and discard the first token in the sequence for the labels
 
-        return lm_logits#, loss if loss is not None else lm_logits
+            # this way, the logits of the first token are "aligned" with the second token label,
+            # the logits of the second token are "aligned" with the third token label, and so on...
+            # since the previous token should predict the next token
+
+            shift_logits = lm_logits[:, :-1, :].contiguous()  # shape (batch_size x seq_len-1 x vocab_size)
+            shift_labels = labels[:, 1:].contiguous()  # shape (batch_size x seq_len-1)
+
+            # flatten the tokens
+            shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # shape (batch_size*seq_len-1 x vocab_size)
+            shift_labels = shift_labels.view(-1)  # shape (batch_size * seq_len-1)
+
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(shift_logits, shift_labels)
+
+        return (loss, lm_logits) if loss is not None else lm_logits
 
 
 def print_model_summary(verbose):
@@ -362,6 +378,7 @@ inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=10
 
 # add a batch of 3 image hidden states
 inputs["image_hidden_states"] = torch.rand(3, 1024)
+inputs["labels"] = torch.randint(low=0, high=10, size=(3, 14))
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -372,5 +389,5 @@ inputs = inputs.to(device)
 
 output = model(**inputs)
 print(output)
-print(len(output))
-print(output[0].shape)
+print(output[0])
+print(output[1].shape)
