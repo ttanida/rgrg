@@ -281,10 +281,6 @@ def get_rows(path_csv_file: str) -> list[list]:
             image_file_path = row[4].replace(".dcm", ".jpg")
             mimic_image_file_path = os.path.join(path_to_mimic_cxr, image_file_path)
 
-            if not os.path.exists(mimic_image_file_path):
-                # print("Does not exist: ", image_file_path)
-                continue
-
             chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
             with open(chest_imagenome_scene_graph_file_path) as fp:
