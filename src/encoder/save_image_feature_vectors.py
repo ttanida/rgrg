@@ -19,12 +19,20 @@ path_to_parent_folder = "/u/home/tanida/image_feature_vectors"
 def save_image_features(dataset_name: str, dataset: CustomImageDataset, model):
     path_to_dataset_folder = os.path.join(path_to_parent_folder, dataset_name)
 
+    # use batching to speed up!
+
     with torch.no_grad():
         for i, sample in tqdm(enumerate(dataset)):
             image_tensor = sample["image"].to(device)
+            image_tensor = torch.unsqueeze(image_tensor, dim=0)  # add a batch dimension
             image_feature_vector = model(image_tensor).cpu().numpy()
             image_save_path = os.path.join(path_to_dataset_folder, f"{i}_image_feature")
             np.save(file=image_save_path, arr=image_feature_vector)
+
+# ask Philip about file size
+# for around 1.000.000 bbox feature vectors, it would be 8GB
+#
+#
 
 
 def create_datasets(datasets_as_dfs):
