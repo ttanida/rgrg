@@ -1,3 +1,4 @@
+from re import A
 import torch
 import torch.nn as nn
 from torchinfo import summary
@@ -35,6 +36,8 @@ class GPT2PseudoAttention(nn.Module):
     ):
 
         super().__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.c_attn = Conv1DWithTrainedWeights(
             trained_weight=c_attn_weights_and_bias[0],
             trained_bias=c_attn_weights_and_bias[1],
@@ -100,7 +103,7 @@ class GPT2PseudoAttention(nn.Module):
 
         # to achieve this, concatenate a column of zeros from the left to the seq_len dimension (since zero values means no masking out)
         attention_mask_size = attention_mask.size()
-        zero_column = torch.zeros(attention_mask_size[:-1] + (1,))  # shape (batch_size, 1, 1, 1)
+        zero_column = torch.zeros(attention_mask_size[:-1] + (1,)).to(self.device)  # shape (batch_size, 1, 1, 1)
         attention_mask = torch.cat((zero_column, attention_mask), dim=-1)  # shape (batch_size, 1, 1, 1+seq_len)
         attn_weights = attn_weights + attention_mask
 
@@ -168,6 +171,7 @@ class DecoderModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.checkpoint = "healx/gpt-2-pubmed-medium"
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # use GPT2 model with language modeling head, since we want to generate phrases
         self.gpt_with_lm_head = GPT2LMHeadModel.from_pretrained(self.checkpoint)
@@ -234,7 +238,7 @@ class DecoderModel(nn.Module):
         Indices are selected in [-100, 0, ..., config.vocab_size], with all labels that are set to -100 being ignored (masked),
         and the loss only computed for labels in [0, ..., config.vocab_size]
         """
-            
+
         # transform image_hidden_states from image feature space to text feature space
         image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dime)
 
@@ -242,9 +246,7 @@ class DecoderModel(nn.Module):
 
         # pass the token ids through the word embedding layer to get the word embeddings
         inputs_embeds = self.wte(input_ids)  # shape (batch_size x seq_len x hidden_dim)
-        batch_size = inputs_embeds.size(0)
         seq_len = inputs_embeds.size(1)
-        hidden_dim = inputs_embeds.size(2)
 
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         device = input_ids.device
@@ -302,37 +304,62 @@ class DecoderModel(nn.Module):
         return lm_logits#, loss if loss is not None else lm_logits
 
 
+def print_model_summary(verbose):
+    checkpoint = "healx/gpt-2-pubmed-medium"
+    tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+    tokenizer.pad_token = tokenizer.eos_token
 
-checkpoint = "healx/gpt-2-pubmed-medium"
-tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+    # use a batch of 3 phrases
+    raw_inputs = [
+        "I've been waiting for a HuggingFace course my whole life.",
+        "I hate this so much!",
+        ""]
 
-# setting `pad_token_id` to `eos_token_id`:50256 for open-end generation
-tokenizer.pad_token = tokenizer.eos_token
+    inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
 
-raw_inputs = [
-    "I've been waiting for a HuggingFace course my whole life.",
-    "You hate this so much!",
-    ""
-]
+    # add a batch of 3 image hidden states
+    inputs["image_hidden_states"] = torch.rand(3, 1024)
 
-inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-# print(inputs.keys())
-# print('input ids: ', inputs['input_ids'])
-# print('attention mask: ', inputs['attention_mask'])
-# print('shape: ', inputs['input_ids'].shape)
+    if verbose > 0:
+        print(inputs.keys())
+        print('input ids: ', inputs['input_ids'])
+        print('attention mask: ', inputs['attention_mask'])
+        print('image_hidden_states mask: ', inputs['image_hidden_states'])
+        print('shape: ', inputs['input_ids'].shape)
 
-inputs["image_hidden_states"] = torch.rand(3, 1024)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-print(inputs)
-print(type(inputs))
+    model = DecoderModel()
+    model.to(device)
+
+    inputs = inputs.to(device)
+
+    if verbose == 0:
+        summary(model)
+    else:
+        summary(model, input_data=dict(inputs), verbose=verbose)
 
 
-model = DecoderModel()
-output = model(**inputs)
-print(output)
-print(len(output))
-print(output[0].shape)
-print(output[1].shape)
+# choose between:
+# verbose = 0 (only model params)
+# verbose = 1 (model params and output shape of batch)
+# verbose = 2 (model params and output shape of batch, more detailed)
+print_model_summary(verbose=1)
+
+
+
+
+
+
+
+
+
+
+# output = model(**inputs)
+# print(output)
+# print(len(output))
+# print(output[0].shape)
+# print(output[1].shape)
 
 
 # summary(model, input_data=dict(inputs))
