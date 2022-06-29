@@ -59,7 +59,7 @@ class GPT2PseudoAttention(nn.Module):
         # first create a lower triangular matrix
         lower_triangular_matrix = torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8))
         # then save lower_triangular_matrix (with additional dimensions for batch_size and num_heads) in a buffer
-        # (since the causal mask is a tensor that should not be optimized)
+        # (to make sure the causal mask does not get updated during backprop)
         self.register_buffer("causal_mask", lower_triangular_matrix.view(1, 1, max_positions, max_positions))
 
         # value for masking out attention weights
@@ -115,7 +115,12 @@ class GPT2PseudoAttention(nn.Module):
         return attn_output
 
     def _merge_heads(self, tensor, num_heads, head_dim):
-        pass
+        """
+        Merges num_heads (i.e. 16) and head_dim (i.e. 64) into hidden_dim (i.e. 1024)
+        """
+        tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        new_shape = tensor.size()[:-2] + (num_heads * head_dim,)
+        return tensor.view(new_shape)
 
     def forward(self,
                 word_hidden_states,  # shape (batch_size x seq_len x hidden_dim)
@@ -138,39 +143,26 @@ class GPT2PseudoAttention(nn.Module):
         key_image_word = self._split_heads(key_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
         value_image_word = self._split_heads(value_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
 
-        attn_output = self._attn(query_word, key_image_word, value_image_word, attention_mask)
+        attn_output = self._attn(query_word, key_image_word, value_image_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
 
-        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
+        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)  # shape (batch_size x seq_len x hidden_dim)
+        attn_output = self.c_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        return attn_output  # shape (batch_size x seq_len x hidden_dim)
 
 
 class DecoderModel(nn.Module):
     """
-    GPT2 model's high level structure (i.e. children):
-    (0): (wte): word embedding layer (maps each id in the vocab to an embedding vector of dimension 1024)
-    (1): (wpe): positional encoding (maps each of the position in the input to a positional encoding vector also of dimension 1024)
-    note: there are overall 1024 positions, see n_positions in model.config
-    (2): (ModuleList): a list of 24 GPT2Blocks (since GPT2 medium has 24 stacked decoder layers) and a LayerNorm at the end
-    (3): (lm_head): languaging modeling head, which is a linear layer that maps from the hidden dimension of 1024 to the vocab dimension of 50257
-    -> the output represents the next word logits, which can now by passed through a Softmax layer and taken the argmax of to get the position of
-    the word inside the vocab with the highest probability
+    GPT2 model with a language modeling head and pseudo self-attention.
 
-    Each GPT2Block has the following structure:
-    (0): (ln_1): LayerNorm
-    (1): (attn): masked multi-head self-attention
-    (2): (ln_2): LayerNorm
-    (3): (mlp): feed-forward neural network
+    Pseudo self-attention is based on the papar Encoder-Agnostic Adaptation for Conditional Language Generation (https://arxiv.org/abs/1908.06938).
+    It is a technique to condition a pretrained language model to arbitrary conditional input (in my case features of chest x-ray images).
 
-    Each (attn) self-attention block consists of:
-    (0): (c_attn): Conv1D(3 * 1024, 1024) layer, which is a sort of linear layer that transforms an input tensor of the shape
-    (batch_size, seq_len, hidden_dim) to (batch_size, seq_len, 3 * hidden_dim) to retrieve the query, key, value matrices
+    The code is largely the same as the GPT2 implementation by Huggingface (https://github.com/huggingface/transformers/blob/d0acc9537829e7d067edbb791473bbceb2ecf056/src/transformers/models/gpt2/modeling_gpt2.py),
+    except for the custom GPT2PseudoAttention class replacing the GPT2Attention class.
 
-    note: the Conv1D layer is implemented in Huggingface (transformers.pytorch_utils.py) and is not to be confused with
-    the PyTorch implementation (torch.nn.modules) that has a lowercase d (i.e. Conv1d)
-
-    (1): (c_proj): Conv1D(1024, 1024) layer, which is another "linear" transformation that is applied after the multi-heads have been concatenated again
-    (called W^O in the original paper)
-    (2): (attn_dropout): Dropout layer
-    (3): (resid_dropout): Dropout layer
+    Recommended reading to understand the GPT2 source code: https://amaarora.github.io/2020/02/18/annotatedGPT2.html
     """
 
     def __init__(self):
@@ -234,8 +226,15 @@ class DecoderModel(nn.Module):
     def forward(self,
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
-                image_hidden_states: torch.FloatTensor   # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
+                image_hidden_states: torch.FloatTensor,   # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
+                labels: torch.LongTensor = None  # shape (batch_size x seq_len)
                 ):
+        """
+        Labels for language modeling. Note that the labels are shifted inside the model, i.e. you can set labels = input_ids
+        Indices are selected in [-100, 0, ..., config.vocab_size], with all labels that are set to -100 being ignored (masked),
+        and the loss only computed for labels in [0, ..., config.vocab_size]
+        """
+            
         # transform image_hidden_states from image feature space to text feature space
         image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dime)
 
@@ -243,10 +242,12 @@ class DecoderModel(nn.Module):
 
         # pass the token ids through the word embedding layer to get the word embeddings
         inputs_embeds = self.wte(input_ids)  # shape (batch_size x seq_len x hidden_dim)
+        batch_size = inputs_embeds.size(0)
+        seq_len = inputs_embeds.size(1)
+        hidden_dim = inputs_embeds.size(2)
 
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         device = input_ids.device
-        seq_len = inputs_embeds.size(-1)
         position_ids = torch.arange(start=0, end=seq_len, dtype=torch.long, device=device)
         position_ids = position_ids.unsqueeze(0).view(-1, seq_len)  # shape (1 x seq_len)
 
@@ -267,39 +268,70 @@ class DecoderModel(nn.Module):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely
-        attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        attention_mask = attention_mask.to(dtype=torch.float32)  # fp16 compatibility, dtype should be set to either torch.float32 or torch.float16
         attention_mask = (1.0 - attention_mask) * -10000.0
 
         for gpt2_block in self.gpt2_blocks:
-            for i, gpt2_block_module in enumerate(gpt2_block):
-                if i == 0:  # first layernorm
-                    word_hidden_states = gpt2_block_module(word_hidden_states)
-                if i == 1:  # pseudo self-attention module
-                    word_hidden_states = gpt2_block_module(word_hidden_states, image_hidden_states, attention_mask)
-                if i == 2:  # second layernorm
-                    pass
-                else:  # MLP
-                    pass
+            layer_norm_1 = gpt2_block[0]
+            pseudo_self_attention = gpt2_block[1]
+            layer_norm_2 = gpt2_block[2]
+            mlp = gpt2_block[3]
+
+            residual = word_hidden_states
+            word_hidden_states = layer_norm_1(word_hidden_states)
+            word_hidden_states = pseudo_self_attention(word_hidden_states, image_hidden_states, attention_mask)
+
+            # residual connection
+            word_hidden_states = word_hidden_states + residual
+
+            residual = word_hidden_states
+            word_hidden_states = layer_norm_2(word_hidden_states)
+            word_hidden_states = mlp(word_hidden_states)
+
+            # residual connection
+            word_hidden_states = word_hidden_states + residual
+
+        word_hidden_states = self.final_layernorm(word_hidden_states)
+
+        assert word_hidden_states.shape == torch.Size([batch_size, seq_len, hidden_dim])  # should be shape (batch_size x seq_len x hidden_dim)
+
+        lm_logits = self.lm_head(word_hidden_states)
+
+        loss = None
+        if labels is not None:
+            pass
+
+        return lm_logits, loss if loss is not None else lm_logits
 
 
 
-                if i == 1:  # the second module is the pseudo self-attention module
-                    text_hidden_states = gpt2_block_module(image_hidden_states, text_hidden_states)
-                else:
-                    text_hidden_states = gpt2_block_module(text_hidden_states)
+checkpoint = "healx/gpt-2-pubmed-medium"
+tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 
-        # text_hidden_states = self.final_layernorm(text_hidden_states)
-        # text_hidden_states = self.lm_head(text_hidden_states)
+# setting `pad_token_id` to `eos_token_id`:50256 for open-end generation
+tokenizer.pad_token = tokenizer.eos_token
 
-        # return text_hidden_states
+raw_inputs = [
+    "I've been waiting for a HuggingFace course my whole life.",
+    "You hate this so much!",
+    ""
+]
+
+inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# print(inputs.keys())
+# print('input ids: ', inputs['input_ids'])
+# print('attention mask: ', inputs['attention_mask'])
+# print('shape: ', inputs['input_ids'].shape)
+
+inputs["image_hidden_states"] = torch.rand(3, 1024)
+
+print(inputs)
+print(type(inputs))
 
 
-
-
-model = GPT2LMHeadModel.from_pretrained("healx/gpt-2-pubmed-medium")
-transformer_children = list(model.transformer.children())
-gpt2_blocks = transformer_children[3]
-print(gpt2_blocks[0])
+model = DecoderModel()
+print(model(**inputs))
+# summary(model, input_data=dict(inputs))
 
 # c_attn_weights_and_bias = (torch.ones(1024, 3072) * 5, torch.ones(3072))
 # c_proj_weights_and_bias = (torch.zeros(1024, 3072), torch.zeros(3072))
@@ -398,20 +430,20 @@ print(gpt2_blocks[0])
 # # tokenizer = AutoTokenizer.from_pretrained(model_path)
 
 # checkpoint = "stanford-crfm/pubmed_gpt"
-# checkpoint = "healx/gpt-2-pubmed-medium"
-# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+checkpoint = "healx/gpt-2-pubmed-medium"
+tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 
 # setting `pad_token_id` to `eos_token_id`:50256 for open-end generation
-# tokenizer.pad_token = tokenizer.eos_token
+tokenizer.pad_token = tokenizer.eos_token
 
 # the trained model uses <|endoftext|> as its start token (i.e. 50256)
 # print(tokenizer.bos_token_id)
 
-# raw_inputs = [
-#     "I've been waiting for a HuggingFace course my whole life.",
-#     "You hate this so much!",
-#     ""
-# ]
+raw_inputs = [
+    "I've been waiting for a HuggingFace course my whole life.",
+    "You hate this so much!",
+    ""
+]
 
 
 # sequence = "I've been waiting for a HuggingFace course my whole life mediastinum"
@@ -421,11 +453,11 @@ print(gpt2_blocks[0])
 # print(tokenizer.decode(model_inputs["input_ids"]))
 
 
-# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-# print(inputs.keys())
-# print('input ids: ', inputs['input_ids'])
-# print('attention mask: ', inputs['attention_mask'])
-# print('shape: ', inputs['input_ids'].shape)
+inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+print(inputs.keys())
+print('input ids: ', inputs['input_ids'])
+print('attention mask: ', inputs['attention_mask'])
+print('shape: ', inputs['input_ids'].shape)
 
 # for _, output in inputs.items():
 #     print(list(output.size()))
