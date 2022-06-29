@@ -321,8 +321,8 @@ def get_rows(path_csv_file: str) -> list[list]:
                 new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2]
 
                 # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
-                # if there is no phrase, then the region inside bbox is normal and the new_row is extended with None for phrases and False for is_abnormal
-                new_row.extend(anatomical_region_attributes.get(bbox_name, [None, False]))
+                # if there is no phrase, then the region inside bbox is normal and the new_row is extended with "" for phrases (empty phrase) and False for is_abnormal
+                new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False]))
                 new_rows.append(new_row)
 
                 index += 1

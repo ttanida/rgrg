@@ -9,7 +9,7 @@ class ClassificationModel(nn.Module):
 
     Note that all parameters are trainable (even those of feature_extractor), since requires_grad was not set to False explicitly.
     """
-    def __init__(self):
+    def __init__(self, return_feature_vectors=False):
         super().__init__()
         self.pretrained_model = xrv.models.DenseNet(weights="densenet121-res224-all")
 
@@ -33,9 +33,15 @@ class ClassificationModel(nn.Module):
             nn.Linear(in_features=512, out_features=37)
         )
 
+        # boolean to specify if feature vectors should be returned after avg_pool
+        self.return_feature_vectors = return_feature_vectors
+
     def forward(self, x):
         x = self.feature_extractor(x)
         x = self.avg_pool(x)
+
+        if self.return_feature_vectors:
+            return x.squeeze()  # remove all dimensions of size 1
 
         # flatten for linear layers
         x = x.view(x.size(0), -1)
