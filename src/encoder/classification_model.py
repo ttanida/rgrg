@@ -36,7 +36,7 @@ class ClassificationModel(nn.Module):
         # boolean to specify if feature vectors should be returned after avg_pool
         self.return_feature_vectors = return_feature_vectors
 
-    def forward(self, x):
+    def forward(self, x):  # x is of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
         x = self.feature_extractor(x)
         x = self.avg_pool(x)
 

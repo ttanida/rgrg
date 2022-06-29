@@ -34,7 +34,7 @@ class CustomImageDataset(Dataset):
 
             # apply transformations
             # albumentations transforms return a dict, which is why key "image" has to be selected
-            cropped_image = self.transforms(image=cropped_image)["image"]
+            cropped_image_tensor = self.transforms(image=cropped_image)["image"]
 
             # get the bbox_name (2nd column of df) and convert it into corresponding class index
             bbox_class_index = int(ANATOMICAL_REGIONS[self.dataset_df.iloc[index, 1]])
@@ -43,7 +43,7 @@ class CustomImageDataset(Dataset):
             is_abnormal = float(self.dataset_df.iloc[index, 6])
 
             sample = {
-                "image": cropped_image,
+                "image": cropped_image_tensor,
                 # pytorch's cross entropy loss expects the targets to be of dtype int
                 "bbox_target": torch.tensor(bbox_class_index, dtype=torch.uint8),
                 # pytorch's binary cross entropy loss expects the targets to be of dtype float
