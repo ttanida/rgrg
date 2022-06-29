@@ -344,173 +344,33 @@ def print_model_summary(verbose):
 # verbose = 0 (only model params)
 # verbose = 1 (model params and output shape of batch)
 # verbose = 2 (model params and output shape of batch, more detailed)
-print_model_summary(verbose=1)
+# print_model_summary(verbose=1)
 
 
 
+checkpoint = "healx/gpt-2-pubmed-medium"
+tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+tokenizer.pad_token = tokenizer.eos_token
 
+# use a batch of 3 phrases
+raw_inputs = [
+    "I've been waiting for a HuggingFace course my whole life.",
+    "I hate this so much!",
+    ""]
 
+inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
 
+# add a batch of 3 image hidden states
+inputs["image_hidden_states"] = torch.rand(3, 1024)
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+model = DecoderModel()
+model.to(device)
 
+inputs = inputs.to(device)
 
-# output = model(**inputs)
-# print(output)
-# print(len(output))
-# print(output[0].shape)
-# print(output[1].shape)
-
-
-# summary(model, input_data=dict(inputs))
-
-# c_attn_weights_and_bias = (torch.ones(1024, 3072) * 5, torch.ones(3072))
-# c_proj_weights_and_bias = (torch.zeros(1024, 3072), torch.zeros(3072))
-# PSA = GPT2PseudoAttention(
-#     c_attn_weights_and_bias=c_attn_weights_and_bias,
-#     c_proj_weights_and_bias=c_proj_weights_and_bias,
-# )
-
-# model = DecoderModel()
-# summary(model)
-
-
-# print(model.pretrained_model.transformer.h[0].attn.use_cache)
-
-# model = GPT2LMHeadModel.from_pretrained("healx/gpt-2-pubmed-medium")
-# my_model = nn.Sequential(*list(model.transformer.modules())[:2])
-
-# print(my_model)
-
-# gpt = model.transformer
-# gpt2_blocks = list(gpt.children())[3]
-
-# gpt2_blocks = nn.ModuleList(nn.ModuleList(gpt2_block.children()) for gpt2_block in gpt2_blocks)
-# gpt2_block = gpt2_blocks[0]
-# print(gpt2_block)
-
-
-
-
-# print(len(list(model.transformer.children())))
-# for i, child in enumerate(model.transformer.children()):
-#     if i == 3:
-#         print(child)
-
-
-
-
-# for child in model.children():
-#     print(child)
-
-
-# my_dict = {}
-# for name, module in model.named_modules():
-#     if isinstance(module, GPT2Attention):
-#         my_dict[name] = PSA
-
-# for k, v in my_dict.items():
-#     setattr(model, k, v)
-
-# gpt2_block = model.transformer.h[1]
-# print(gpt2_block.attn)
-
-# model.transformer.h[0] = nn.Linear(1024, 1024)
-
-# for name, module in model.named_modules():
-#     print(name)
-
-# first_GPT2_attention_module = model.transformer.h[0].attn
-# for name, param in first_GPT2_attention_module.named_parameters():
-#     print(name, param)
-
-
-
-# print(first_GPT2_attention_module)
-# c_attn_weights = first_GPT2_attention_module.c_attn.weight.detach()
-# print(c_attn_weights.shape)
-
-# for name_module, module in model.named_modules():
-#     if isinstance(module, GPT2Attention):
-#         print(name_module)
-
-# print(model)
-
-# i = 0
-# for gpt2_block in model.transformer.h.children():
-#     print(i)
-#     for child in gpt2_block.children():
-#         print(child)
-#     i += 1
-# print(f"{child[0]}: {child[1].shape}")
-
-# print()
-# summary(model.transformer.h[0].attn)
-# print(model.transformer.h[0].attn)
-# summary(torch.nn.Conv1d(in_channels=1024, out_channels=3072, kernel_size=1))
-# for param in model.named_parameters():
-#     print(param)
-#     print()
-# print(model)
-
-
-###################
-###################
-
-# # model_path = "/u/home/tanida/gpt-2-pubmed-medium"
-# # tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-# checkpoint = "stanford-crfm/pubmed_gpt"
-# checkpoint = "healx/gpt-2-pubmed-medium"
-# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-
-# setting `pad_token_id` to `eos_token_id`:50256 for open-end generation
-# tokenizer.pad_token = tokenizer.eos_token
-
-# the trained model uses <|endoftext|> as its start token (i.e. 50256)
-# print(tokenizer.bos_token_id)
-
-# raw_inputs = [
-#     "I've been waiting for a HuggingFace course my whole life.",
-#     "You hate this so much!",
-#     ""
-# ]
-
-
-# sequence = "I've been waiting for a HuggingFace course my whole life mediastinum"
-
-# model_inputs = tokenizer(sequence)
-
-# print(tokenizer.decode(model_inputs["input_ids"]))
-
-
-# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-# print(inputs.keys())
-# print('input ids: ', inputs['input_ids'])
-# print('attention mask: ', inputs['attention_mask'])
-# print('shape: ', inputs['input_ids'].shape)
-
-# for _, output in inputs.items():
-#     print(list(output.size()))
-
-# model = AutoModel.from_pretrained(model_path)
-
-# setting `pad_token_id` to `eos_token_id`:50256 for open-end generation
-# model = GPT2Model.from_pretrained(checkpoint, pad_token_id=tokenizer.eos_token_id)
-# print()
-# model = GPT2LMHeadModel.from_pretrained(checkpoint, pad_token_id=tokenizer.eos_token_id)
-# output = model.generate(inputs=torch.tensor([[50256]], dtype=torch.int), max_length=100)
-# print(tokenizer.decode(output[0], skip_special_tokens=True))
-# print(model)
-# print()
-# summary(model)
-# print(model)
-
-# print(model.config)
-
-# print(model)
-# summary(model, input_data=inputs)
-
-# outputs = model(**inputs)
-# print(type(outputs))
-# print(outputs.last_hidden_state.shape)  # (batch_size x num_tokens x d_hidden)
+output = model(**inputs)
+print(output)
+print(len(output))
+print(output[0].shape)
