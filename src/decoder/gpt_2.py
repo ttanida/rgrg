@@ -227,7 +227,7 @@ class DecoderModel(nn.Module):
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
                 image_hidden_states: torch.FloatTensor,   # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
-                labels: torch.LongTensor = None  # shape (batch_size x seq_len)
+                # labels: torch.LongTensor = None  # shape (batch_size x seq_len)
                 ):
         """
         Labels for language modeling. Note that the labels are shifted inside the model, i.e. you can set labels = input_ids
@@ -293,15 +293,13 @@ class DecoderModel(nn.Module):
 
         word_hidden_states = self.final_layernorm(word_hidden_states)
 
-        assert word_hidden_states.shape == torch.Size([batch_size, seq_len, hidden_dim])  # should be shape (batch_size x seq_len x hidden_dim)
-
         lm_logits = self.lm_head(word_hidden_states)
 
-        loss = None
-        if labels is not None:
-            pass
+        # loss = None
+        # if labels is not None:
+        #     pass
 
-        return lm_logits, loss if loss is not None else lm_logits
+        return lm_logits#, loss if loss is not None else lm_logits
 
 
 
@@ -330,7 +328,13 @@ print(type(inputs))
 
 
 model = DecoderModel()
-print(model(**inputs))
+output = model(**inputs)
+print(output)
+print(len(output))
+print(output[0].shape)
+print(output[1].shape)
+
+
 # summary(model, input_data=dict(inputs))
 
 # c_attn_weights_and_bias = (torch.ones(1024, 3072) * 5, torch.ones(3072))
@@ -430,20 +434,20 @@ print(model(**inputs))
 # # tokenizer = AutoTokenizer.from_pretrained(model_path)
 
 # checkpoint = "stanford-crfm/pubmed_gpt"
-checkpoint = "healx/gpt-2-pubmed-medium"
-tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+# checkpoint = "healx/gpt-2-pubmed-medium"
+# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 
 # setting `pad_token_id` to `eos_token_id`:50256 for open-end generation
-tokenizer.pad_token = tokenizer.eos_token
+# tokenizer.pad_token = tokenizer.eos_token
 
 # the trained model uses <|endoftext|> as its start token (i.e. 50256)
 # print(tokenizer.bos_token_id)
 
-raw_inputs = [
-    "I've been waiting for a HuggingFace course my whole life.",
-    "You hate this so much!",
-    ""
-]
+# raw_inputs = [
+#     "I've been waiting for a HuggingFace course my whole life.",
+#     "You hate this so much!",
+#     ""
+# ]
 
 
 # sequence = "I've been waiting for a HuggingFace course my whole life mediastinum"
@@ -453,11 +457,11 @@ raw_inputs = [
 # print(tokenizer.decode(model_inputs["input_ids"]))
 
 
-inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-print(inputs.keys())
-print('input ids: ', inputs['input_ids'])
-print('attention mask: ', inputs['attention_mask'])
-print('shape: ', inputs['input_ids'].shape)
+# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# print(inputs.keys())
+# print('input ids: ', inputs['input_ids'])
+# print('attention mask: ', inputs['attention_mask'])
+# print('shape: ', inputs['input_ids'].shape)
 
 # for _, output in inputs.items():
 #     print(list(output.size()))
