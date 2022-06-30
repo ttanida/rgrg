@@ -1,11 +1,13 @@
 import os
+from tabnanny import verbose
 
 from datasets import Dataset
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
-from transformers import GPT2Tokenizer, DataCollatorWithPadding
+from transformers import GPT2Tokenizer
 
+from custom_image_word_dataset import CustomImageWordDataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -34,81 +36,54 @@ datasets_as_dfs["valid"] = datasets_as_dfs["valid"][:new_num_samples_val]
 raw_train_dataset = Dataset.from_pandas(datasets_as_dfs["train"])
 raw_val_dataset = Dataset.from_pandas(datasets_as_dfs["valid"])
 
-print()
-print("------")
-print("------")
-print()
-
-print(raw_train_dataset)
-print(raw_val_dataset)
-
-print()
-print("------")
-print("------")
-print()
-
-print(raw_train_dataset[0])
-print(raw_train_dataset[1])
-
-print()
-print("------")
-print("------")
-print()
 
 checkpoint = "healx/gpt-2-pubmed-medium"
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 tokenizer.pad_token = tokenizer.eos_token
-# TODO: set end of sequence token?
 
 
 def tokenize_function(example):
-    return tokenizer(example["phrases"], truncation=True, max_length=1024)
+    phrase = example["phrases"]
+    if len(phrase) == 0:
+        phrase = tokenizer.eos_token  # becomes "<|endoftext|>"
+    return tokenizer(phrase, truncation=True, max_length=1024)
 
 
 tokenized_train_dataset = raw_train_dataset.map(tokenize_function, batched=True)
-tokenized_val_dataset = raw_val_dataset.map(tokenize_function, batched=True)
+tokenized_val_dataset = raw_val_dataset.map(tokenize_function, batched=True )
 
-print()
-print("------")
-print("------")
-print()
 
 tokenized_train_dataset = tokenized_train_dataset.remove_columns(["phrases"])
-tokenized_train_dataset = tokenized_train_dataset.add_column("labels", tokenized_train_dataset["input_ids"])
-
 tokenized_val_dataset = tokenized_val_dataset.remove_columns(["phrases"])
-tokenized_val_dataset = tokenized_val_dataset.add_column("labels", tokenized_val_dataset["input_ids"])
 
-print(tokenized_train_dataset)
-print(tokenized_val_dataset)
+# custom dataset also returns image feature vectors
+train_dataset_complete = CustomImageWordDataset("train", tokenized_train_dataset)
+val_dataset_complete = CustomImageWordDataset("val", tokenized_val_dataset)
 
-print()
-print("------")
-print("------")
-print()
+# print(train_dataset_complete[0])
+# print(train_dataset_complete[1])
+# print(train_dataset_complete[2])
 
-print(tokenized_train_dataset[0])
-print(type(tokenized_train_dataset[0]["input_ids"]))
-print(tokenized_train_dataset[1])
 
-print()
-print("------")
-print("------")
-print()
+def custom_collate_fn(batch):
+    # discard sampples from batch where __getitem__ from custom_image_worddataset failed (i.e. return None)
+    # otherwise, whole training loop woudl stop
+    print(batch)
+    batch = list(filter(lambda x: x is not None, batch))
 
-data_collator = DataCollatorWithPadding(tokenizer=tokenizer, padding="longest", return_tensors="pt")
+    print(batch)
 
-samples = tokenized_train_dataset[:2]
-batch = data_collator(samples)
+    input_ids_and_attention_mask = {k: v for k, v in batch.items() if k != "image_hidden_states"}
+    padded_input_ids_and_attention_mask = tokenizer.pad(input_ids_and_attention_mask, padding="longest", return_tensors="pt")
 
-print()
-print("------")
-print("------")
-print()
+    batch["input_ids"] = padded_input_ids_and_attention_mask["input_ids"]
+    batch["attention_mask"] = padded_input_ids_and_attention_mask["attention_mask"]
+    return torch.utils.data.dataloader.default_collate(batch)
 
-print(batch)
+BATCH_SIZE = 64
+NUM_WORKERS = 12
 
-print()
-print("------")
-print("------")
-print()
+train_loader = DataLoader(train_dataset_complete, collate_fn=custom_collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
+val_loader = DataLoader(val_dataset_complete, collate_fn=custom_collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+
+print(next(iter(train_loader)))

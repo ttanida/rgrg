@@ -1,4 +1,3 @@
-from lib2to3.pgen2 import token
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
@@ -372,22 +371,42 @@ checkpoint = "healx/gpt-2-pubmed-medium"
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 tokenizer.pad_token = tokenizer.eos_token
 
-# use a batch of 3 phrases
-raw_inputs = [
-    "I've been waiting for a HuggingFace course my whole life.",
-    "I hate this so much!",
-    ""]
+phrase = "I love huggingface"
+if len(phrase) == 0:
+    print(tokenizer.eos_token)
+    print(tokenizer(tokenizer.eos_token))
+else:
+    print(tokenizer(phrase))
 
-inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# input = tokenizer.encode("", return_tensors="pt", add_special_tokens=True)
+# print(input)
+# print(tokenizer.bos_token)
 
-# add a batch of 3 image hidden states
-inputs["image_hidden_states"] = torch.rand(3, 1024)
-inputs["labels"] = torch.randint(low=0, high=10, size=(3, 14))
+# # use a batch of 3 phrases
+# raw_inputs = [
+#     "I've been waiting for a HuggingFace course my whole life.",
+#     "I hate this so much!",
+#     ""]
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
 
-model = GPT2LMHeadModel.from_pretrained(checkpoint)
-print(model.generate(tokenizer.encode("I enjoy walking", return_tensors="pt")))
+# # add a batch of 3 image hidden states
+# inputs["image_hidden_states"] = torch.rand(3, 1024)
+# inputs["labels"] = torch.randint(low=0, high=10, size=(3, 14))
+
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# model = GPT2LMHeadModel.from_pretrained(checkpoint)
+# input = tokenizer.encode(f"{tokenizer.bos_token}", return_tensors="pt")
+# print(input)
+# output = model.generate(input)
+# print(output)
+# dec_output_without_special_tokens = tokenizer.decode(output[0], skip_special_tokens=True)
+# dec_output_with_special_tokens = tokenizer.decode(output[0], skip_special_tokens=False)
+# print(dec_output_without_special_tokens)
+# print(dec_output_with_special_tokens)
+
+
 # inputs = inputs.to(device)
 
 # output = model(**inputs)
