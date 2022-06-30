@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from classification_model import ClassificationModel
@@ -15,27 +16,35 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_2/val_loss_53.536_epoch_11.pth"
 path_to_parent_folder = "/u/home/tanida/image_feature_vectors"
 
+BATCH_SIZE = 128
+NUM_WORKERS = 12
+IMAGE_HIDDEN_DIM = 1024
 
-def save_image_features(dataset_name: str, dataset: CustomImageDataset, model):
-    path_to_dataset_folder = os.path.join(path_to_parent_folder, dataset_name)
 
-    # use batching to speed up!
+def save_image_features(dataset_name: str, dataloader, model):
+    file_saving_path = os.path.join(path_to_parent_folder, dataset_name, f"image_features_{dataset_name}")
+
+    size_of_overall_tensor = (BATCH_SIZE * len(dataloader), IMAGE_HIDDEN_DIM)
+    image_features = torch.empty(size=size_of_overall_tensor, dtype=torch.float32, device=torch.device("cpu"))
 
     with torch.no_grad():
-        for i, sample in tqdm(enumerate(dataset)):
-            image_tensor = sample["image"].to(device)
-            image_tensor = torch.unsqueeze(image_tensor, dim=0)  # add a batch dimension
-            image_feature_vector = model(image_tensor).cpu().numpy()
-            image_save_path = os.path.join(path_to_dataset_folder, f"{i}_image_feature")
-            np.save(file=image_save_path, arr=image_feature_vector)
+        for i, batch in tqdm(enumerate(dataloader)):
+            batch_images, _, _ = batch.values()
+            batch_images = batch_images.to(device, non_blocking=True)
+            batch_image_features = model(batch_images).cpu()  # shape (batch_size, image_hidden_dimension)
+            try:
+                image_features[i * BATCH_SIZE: i * BATCH_SIZE + BATCH_SIZE] = batch_image_features
+            except RuntimeError:  # since the last batch can be smaller than BATCH_SIZE
+                print(f"Last batch number: {i} (out of {len(dataloader)} batches)")
+                last_batch_size = batch_image_features.size(0)
+                print(f"Number of samples in last batch: {last_batch_size}")
+                image_features[i * BATCH_SIZE: i * BATCH_SIZE + last_batch_size] = batch_image_features
 
-# ask Philip about file size
-# for around 1.000.000 bbox feature vectors, it would be 8GB
-#
-#
+    print(f"Saving image feature tensor of shape {image_features.shape}")
+    torch.save(image_features, file_saving_path)
 
 
-def create_datasets(datasets_as_dfs):
+def create_dataloaders(datasets_as_dfs):
     # see compute_mean_std_dataset.py in src/dataset
     mean = 0.471
     std = 0.302
@@ -58,7 +67,10 @@ def create_datasets(datasets_as_dfs):
     train_dataset = CustomImageDataset(dataset_df=datasets_as_dfs["train"], transforms=transforms)
     val_dataset = CustomImageDataset(dataset_df=datasets_as_dfs["valid"], transforms=transforms)
 
-    return train_dataset, val_dataset
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+
+    return train_loader, val_loader
 
 
 def get_datasets_as_dfs():
@@ -86,15 +98,15 @@ def get_datasets_as_dfs():
 
 def main():
     datasets_as_dfs = get_datasets_as_dfs()
-    train_dataset, val_dataset = create_datasets(datasets_as_dfs)
+    train_dataloader, val_dataloader = create_dataloaders(datasets_as_dfs)
 
     model = ClassificationModel(return_feature_vectors=True)
     model.load_state_dict(torch.load(path_to_best_weights))
     model.eval()
-    model.to(device)
+    model.to(device, non_blocking=True)
 
-    save_image_features("train", train_dataset, model)
-    save_image_features("val", val_dataset, model)
+    save_image_features("train", train_dataloader, model)
+    save_image_features("val", val_dataloader, model)
 
 
 if __name__ == "__main__":

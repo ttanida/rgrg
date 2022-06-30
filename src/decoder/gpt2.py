@@ -95,19 +95,14 @@ class GPT2PseudoAttention(nn.Module):
         # select the attention weights where the causal mask has True values, select -1e4 where the causal mask has False values
         attn_weights = torch.where(causal_mask, attn_weights, self.mask_out_value.to(attn_weights.dtype))
 
-        # apply the attention mask (for masking out padding tokens)
-        # currently, the attention mask is of shape (batch_size, 1, 1, seq_len)
-        # but since the first column of the attention weights hold the weights corresponding to the images, they should not be masked out
-
-        # to achieve this, concatenate a column of zeros from the left to the seq_len dimension (since zero values means no masking out)
-        attention_mask_size = attention_mask.size()
-        zero_column = torch.zeros(attention_mask_size[:-1] + (1,)).to(self.device)  # shape (batch_size, 1, 1, 1)
-        attention_mask = torch.cat((zero_column, attention_mask), dim=-1)  # shape (batch_size, 1, 1, 1+seq_len)
+        # apply the attention mask of shape (batch_size, 1, 1, 1+seq_len) for masking out padding tokens
+        # there is an additional column of zeros for the attention weights corresponding to the image,
+        # such that these are not masked out
         attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-        # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
+        # downcast (if necessary) back to V's dtype (if in mixed-precision) -- no-op otherwise
         attn_weights = attn_weights.type(value_image_word.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
@@ -126,7 +121,7 @@ class GPT2PseudoAttention(nn.Module):
     def forward(self,
                 word_hidden_states,  # shape (batch_size x seq_len x hidden_dim)
                 image_hidden_states,  # shape (batch_size x hidden_dim)
-                attention_mask):  # shape (batch_size, 1, 1, seq_len)
+                attention_mask):  # shape (batch_size, 1, 1, 1+seq_len)
 
         # query, key, value matrices each have shape (batch_size x seq_len x hidden_dim)
         query_word, key_word, value_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
@@ -241,7 +236,7 @@ class DecoderModel(nn.Module):
         """
 
         # transform image_hidden_states from image feature space to text feature space
-        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dime)
+        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dim)
 
         # from now, word_hidden_dim will just be called hidden_dim
 
@@ -262,9 +257,16 @@ class DecoderModel(nn.Module):
 
         word_hidden_states = self.drop(word_hidden_states)
 
-        # we change the attention_mask shape to (batch_size, 1, 1, seq_len), so we can broadcast to (batch_size, num_heads, from_seq_len, to_seq_len)
-        # later on in the multi-head self-attention module
+        # we change the attention_mask shape to (batch_size, 1, 1, seq_len), since the attention_mask is later applied to the last dimension of
+        # the attention weights that are of shape (batch_size x num_heads x seq_len x 1+seq_len)
         attention_mask = attention_mask[:, None, None, :]
+
+        # since we have 1 additional column in the attention weights (i.e. 1+seq_len in the last dimension) due to the additional concatenated key matrix
+        # of the image hidden states (see forward method of GPT2PseudoAttention), we have to shift the attention mask "one to the right" and add a column of ones
+        # to the left such that the attention weights corresponding to the image are not masked out
+        attention_mask_size = attention_mask.size()
+        ones_column = torch.ones(attention_mask_size[:-1] + (1,), dtype=torch.int64).to(self.device)  # shape (batch_size, 1, 1, 1)
+        attention_mask = torch.cat((ones_column, attention_mask), dim=-1)  # shape (batch_size, 1, 1, 1+seq_len)
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -390,4 +392,6 @@ inputs = inputs.to(device)
 output = model(**inputs)
 print(output)
 print(output[0])
+print(output[1])
+print(output[0].shape)
 print(output[1].shape)
