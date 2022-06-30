@@ -3,7 +3,6 @@ import os
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
-import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
@@ -53,8 +52,6 @@ def create_dataloaders(datasets_as_dfs):
     IMAGE_INPUT_SIZE = 224
 
     # note: transforms are applied to the already cropped images (see __getitem__ method of CustomImageDataset class)!
-
-    # don't apply data augmentations to val and test set
     transforms = A.Compose(
         [
             A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
@@ -82,7 +79,7 @@ def get_datasets_as_dfs():
     usecols = ["mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "is_abnormal"]
     dtype = {"x1": "int16", "x2": "int16", "y1": "int16", "y2": "int16", "bbox_name": "category"}
 
-    datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
+    datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid"]}
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, dtype=dtype) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])

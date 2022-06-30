@@ -1,3 +1,4 @@
+from lib2to3.pgen2 import token
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
@@ -224,15 +225,14 @@ class DecoderModel(nn.Module):
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
                 image_hidden_states: torch.FloatTensor,   # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
-                labels: torch.LongTensor = None  # shape (batch_size x seq_len)
+                return_loss: bool = False
                 ):
         """
-        Labels for language modeling. Note that the labels are shifted inside the model, i.e. you can set labels = input_ids
-        Indices are selected in [-100, 0, ..., config.vocab_size], with all labels that are set to -100 being ignored (masked),
-        and the loss only computed for labels in [0, ..., config.vocab_size]
+        If return_loss is False, returns language modeling logits (of shape batch_size x seq_len x vocab_size).
+        If return_loss is True, returns a tuple of the cross entropy loss and language modeling logits.
 
-        If labels are None, returns language modeling logits (of shape batch_size x seq_len x vocab_size).
-        If labels are specified, returns a tuple of the cross entropy loss and language modeling logits.
+        To compute the loss, the input_ids are used as labels, by shifting them by one position
+        (see shift_logits and shift_labels variables towards the end of the forward method).
         """
 
         # transform image_hidden_states from image feature space to text feature space
@@ -300,8 +300,10 @@ class DecoderModel(nn.Module):
 
         lm_logits = self.lm_head(word_hidden_states)  # shape (batch_size x seq_len x vocab_size), with vocab_size = 50257
 
-        loss = None
-        if labels is not None:
+        if return_loss:
+            # use input_ids as ground_truth labels
+            labels = input_ids
+
             # shift the tokens, i.e. discard the last token in the sequence for the logits,
             # and discard the first token in the sequence for the labels
 
@@ -319,7 +321,7 @@ class DecoderModel(nn.Module):
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits, shift_labels)
 
-        return (loss, lm_logits) if loss is not None else lm_logits
+        return (loss, lm_logits) if return_loss else lm_logits
 
 
 def print_model_summary(verbose):
@@ -364,7 +366,7 @@ def print_model_summary(verbose):
 # verbose = 2 (model params and output shape of batch, more detailed)
 # print_model_summary(verbose=1)
 
-
+# TODO: Implement generate function for DecoderModel
 
 checkpoint = "healx/gpt-2-pubmed-medium"
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
@@ -384,14 +386,13 @@ inputs["labels"] = torch.randint(low=0, high=10, size=(3, 14))
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = DecoderModel()
-model.to(device)
+model = GPT2LMHeadModel.from_pretrained(checkpoint)
+print(model.generate(tokenizer.encode("I enjoy walking", return_tensors="pt")))
+# inputs = inputs.to(device)
 
-inputs = inputs.to(device)
-
-output = model(**inputs)
-print(output)
-print(output[0])
-print(output[1])
-print(output[0].shape)
-print(output[1].shape)
+# output = model(**inputs)
+# print(output)
+# print(output[0])
+# print(output[1])
+# print(output[0].shape)
+# print(output[1].shape)

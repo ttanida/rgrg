@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
-# if constant is None, then all possible rows are created (resulting in csv files of huge file sizes)
+# if constant is None, then all possible rows are created
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
 
