@@ -1,5 +1,4 @@
 import os
-from tabnanny import verbose
 
 from datasets import Dataset
 import pandas as pd
@@ -13,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
 # PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.001
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.005
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.001
 
 path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
@@ -49,9 +48,9 @@ def tokenize_function(example):
     return tokenizer(phrase, truncation=True, max_length=1024)
 
 
-tokenized_train_dataset = raw_train_dataset.map(tokenize_function, batched=True)
-tokenized_val_dataset = raw_val_dataset.map(tokenize_function, batched=True )
-
+# don't set batched=True, otherwise phrases that are empty will not get a eos token for some reason (see tokenize_function)
+tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
+tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
 tokenized_train_dataset = tokenized_train_dataset.remove_columns(["phrases"])
 tokenized_val_dataset = tokenized_val_dataset.remove_columns(["phrases"])
@@ -60,30 +59,44 @@ tokenized_val_dataset = tokenized_val_dataset.remove_columns(["phrases"])
 train_dataset_complete = CustomImageWordDataset("train", tokenized_train_dataset)
 val_dataset_complete = CustomImageWordDataset("val", tokenized_val_dataset)
 
-# print(train_dataset_complete[0])
-# print(train_dataset_complete[1])
-# print(train_dataset_complete[2])
+print("*******")
+print(train_dataset_complete[18])
+print(train_dataset_complete[19])
+print(train_dataset_complete[20])
+print("*******")
 
 
-def custom_collate_fn(batch):
-    # discard sampples from batch where __getitem__ from custom_image_worddataset failed (i.e. return None)
-    # otherwise, whole training loop woudl stop
-    print(batch)
-    batch = list(filter(lambda x: x is not None, batch))
+class CustomDataCollatorWithPadding:
+    def __init__(self, tokenizer, padding):
+        self.tokenizer = tokenizer
+        self.padding = padding
 
-    print(batch)
+    def __call__(self, batch: list[dict[str]]):
+        # discard samples from batch where __getitem__ from custom_image_word_dataset failed (i.e. returned None)
+        # otherwise, whole training loop would stop
+        batch = list(filter(lambda x: x is not None, batch))  # filter out samples that are None
 
-    input_ids_and_attention_mask = {k: v for k, v in batch.items() if k != "image_hidden_states"}
-    padded_input_ids_and_attention_mask = tokenizer.pad(input_ids_and_attention_mask, padding="longest", return_tensors="pt")
+        image_hidden_dim = batch[0]["image_hidden_states"].size(0)
+        image_hidden_states_batch = torch.empty(size=(len(batch), image_hidden_dim))
 
-    batch["input_ids"] = padded_input_ids_and_attention_mask["input_ids"]
-    batch["attention_mask"] = padded_input_ids_and_attention_mask["attention_mask"]
-    return torch.utils.data.dataloader.default_collate(batch)
+        for i, sample in enumerate(batch):
+            # remove image_hidden_states vectors from batch and store them in dedicated image_hidden_states_batch matrix
+            image_hidden_states_batch[i] = sample.pop("image_hidden_states")
 
-BATCH_SIZE = 64
+        # batch only contains samples with input_ids and attention_mask keys
+        # the tokenizer will turn the batch variable into a single dict with input_ids and attention_mask keys,
+        # that map to tensors of shape [batch_size x (longest) seq_len (in batch)] respectively
+        batch = self.tokenizer.pad(batch, padding=self.padding, return_tensors="pt")
+
+        # add the image_hidden_states_batch tensor to the dict
+        batch["image_hidden_states"] = image_hidden_states_batch
+
+        return batch
+
+BATCH_SIZE = 3
 NUM_WORKERS = 12
 
-train_loader = DataLoader(train_dataset_complete, collate_fn=custom_collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
-val_loader = DataLoader(val_dataset_complete, collate_fn=custom_collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+custom_collate_with_padding = CustomDataCollatorWithPadding(tokenizer=tokenizer, padding="longest")
 
-print(next(iter(train_loader)))
+train_loader = DataLoader(train_dataset_complete, collate_fn=custom_collate_with_padding, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
+val_loader = DataLoader(val_dataset_complete, collate_fn=custom_collate_with_padding, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)

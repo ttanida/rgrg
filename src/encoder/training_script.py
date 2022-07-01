@@ -88,7 +88,7 @@ test_dataset = CustomImageDataset(dataset_df=datasets_as_dfs["test"], transforms
 
 
 def collate_fn(batch):
-    # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. return None)
+    # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. returned None)
     # otherwise, whole training loop will stop (even if only 1 image fails to open)
     batch = list(filter(lambda x: x is not None, batch))
     return torch.utils.data.dataloader.default_collate(batch)

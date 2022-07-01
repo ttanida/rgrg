@@ -87,8 +87,8 @@ class GPT2PseudoAttention(nn.Module):
         # create and apply the final causal mask to weights
         query_length, key_length = query_word.size(-2), key_image_word.size(-2)
 
-        # note that this causal mask has a shape of seq_len x 1+seq_len (disregarding the first 2 dims),
-        # with the first column only consisting of True boolean values
+        # note that this causal mask has a shape of seq_len x 1+seq_len (in the last 2 dims),
+        # with the first column of the mask only consisting of True boolean values
         # meaning attention weights corresponding to images (which are stored in the first column) are not masked out!
         causal_mask = self.causal_mask[:, :, key_length - query_length: key_length, :key_length].to(torch.bool)
 
@@ -310,8 +310,18 @@ class DecoderModel(nn.Module):
             # the logits of the second token are "aligned" with the third token label, and so on...
             # since the previous token should predict the next token
 
-            shift_logits = lm_logits[:, :-1, :].contiguous()  # shape (batch_size x seq_len-1 x vocab_size)
-            shift_labels = labels[:, 1:].contiguous()  # shape (batch_size x seq_len-1)
+            # only exception is if seq_len == 1, since this means that all the sequences in the batch only consist
+            # of the eos token, meaning all of them were originally empty phrases (i.e. "")
+            # in this case, we don't shift the logits/labels, because the single logit should predict end of sentence
+            # (theoretically, it could be possible that the batch consists of batch_size sequences of exactly 1 eos or non-eos token,
+            # but this would be too improbable)
+
+            if seq_len == 1:
+                shift_logits = lm_logits  # shape (batch_size x 1 x vocab_size)
+                shift_labels = labels  # shape (batch_size x 1)
+            else:
+                shift_logits = lm_logits[:, :-1, :].contiguous()  # shape (batch_size x seq_len-1 x vocab_size)
+                shift_labels = labels[:, 1:].contiguous()  # shape (batch_size x seq_len-1)
 
             # flatten the tokens
             shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # shape (batch_size*seq_len-1 x vocab_size)
@@ -370,13 +380,14 @@ def print_model_summary(verbose):
 checkpoint = "healx/gpt-2-pubmed-medium"
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 tokenizer.pad_token = tokenizer.eos_token
+print(tokenizer("<|endoftext|>", truncation=True, max_length=1024))
 
-phrase = "I love huggingface"
-if len(phrase) == 0:
-    print(tokenizer.eos_token)
-    print(tokenizer(tokenizer.eos_token))
-else:
-    print(tokenizer(phrase))
+# phrase = "I love huggingface"
+# if len(phrase) == 0:
+#     print(tokenizer.eos_token)
+#     print(tokenizer(tokenizer.eos_token))
+# else:
+#     print(tokenizer(phrase))
 
 # input = tokenizer.encode("", return_tensors="pt", add_special_tokens=True)
 # print(input)
