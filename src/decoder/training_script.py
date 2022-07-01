@@ -106,7 +106,7 @@ class CustomDataCollatorWithPadding:
         return batch
 
 
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 NUM_WORKERS = 12
 
 custom_collate_with_padding = CustomDataCollatorWithPadding(tokenizer=tokenizer, padding="longest")

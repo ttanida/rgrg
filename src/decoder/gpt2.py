@@ -327,7 +327,7 @@ class DecoderModel(nn.Module):
             shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # shape (batch_size*seq_len-1 x vocab_size)
             shift_labels = shift_labels.view(-1)  # shape (batch_size * seq_len-1)
 
-            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits, shift_labels)
 
         return (loss, lm_logits) if return_loss else lm_logits
