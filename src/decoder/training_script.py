@@ -1,6 +1,7 @@
 from copy import deepcopy
 import os
 
+# import evaluate
 from datasets import Dataset
 import numpy as np
 import pandas as pd
@@ -14,6 +15,9 @@ from tqdm import tqdm
 
 from custom_image_word_dataset import CustomImageWordDataset
 from gpt2 import DecoderModel
+
+# bertscore_metric = evaluate.load("bertscore")
+# bleu_metric = evaluate.load("bleu")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -289,7 +293,7 @@ LR = 1e-4
 PATIENCE = 7  # number of epochs to wait before early stopping
 PATIENCE_LR_SCHEDULER = 2  # number of epochs to wait for val loss to reduce before lr is reduced by 1e-1
 
-run = 0
+run = 1
 model_save_path = os.path.join(model_save_path_parent_dir, f"weights_run_{run}")
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)

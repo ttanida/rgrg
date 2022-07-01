@@ -377,10 +377,10 @@ def print_model_summary(verbose):
 
 # TODO: Implement generate function for DecoderModel
 
-checkpoint = "healx/gpt-2-pubmed-medium"
-tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-tokenizer.pad_token = tokenizer.eos_token
-print(tokenizer("<|endoftext|>", truncation=True, max_length=1024))
+# checkpoint = "healx/gpt-2-pubmed-medium"
+# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+# tokenizer.pad_token = tokenizer.eos_token
+# print(tokenizer("<|endoftext|>", truncation=True, max_length=1024))
 
 # phrase = "I love huggingface"
 # if len(phrase) == 0:
