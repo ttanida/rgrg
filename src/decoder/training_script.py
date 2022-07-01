@@ -21,10 +21,10 @@ from gpt2 import DecoderModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
-# PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.00005
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
+# PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.00005
+# PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
 
 path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
 
