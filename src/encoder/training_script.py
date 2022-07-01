@@ -101,8 +101,6 @@ train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH
 val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 test_loader = DataLoader(test_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 
-model_save_path = "/u/home/tanida/weights/classification_model"
-
 
 def train_one_epoch(model, train_dl, optimizer, epoch):
     """
@@ -213,60 +211,61 @@ def evaluate_one_epoch(model, val_dl, lr_scheduler, epoch):
     # list collects the recall of is_abnormal variables calculated for each batch
     recall_is_abnormal = []
 
-    for batch in tqdm(val_dl):
-        batch_images, bbox_targets, is_abnormal_targets = batch.values()
+    with torch.no_grad():
+        for batch in tqdm(val_dl):
+            batch_images, bbox_targets, is_abnormal_targets = batch.values()
 
-        batch_size = batch_images.size(0)
+            batch_size = batch_images.size(0)
 
-        batch_images = batch_images.to(device, non_blocking=True)  # shape: (BATCH_SIZE, 1, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE), with IMAGE_INPUT_SIZE usually 224
-        bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 35 specifying the class for each bbox image
-        is_abnormal_targets = is_abnormal_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), floats that are either 0. (normal) or 1. (abnormal) specifying if bbox image is normal/abnormal
+            batch_images = batch_images.to(device, non_blocking=True)  # shape: (BATCH_SIZE, 1, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE), with IMAGE_INPUT_SIZE usually 224
+            bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 35 specifying the class for each bbox image
+            is_abnormal_targets = is_abnormal_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), floats that are either 0. (normal) or 1. (abnormal) specifying if bbox image is normal/abnormal
 
-        # logits has output shape: (BATCH_SIZE, 37)
-        logits = model(batch_images)
+            # logits has output shape: (BATCH_SIZE, 37)
+            logits = model(batch_images)
 
-        # use the first 36 columns as logits for bbox classes, shape: (BATCH_SIZE, 36)
-        bbox_class_logits = logits[:, :36]
+            # use the first 36 columns as logits for bbox classes, shape: (BATCH_SIZE, 36)
+            bbox_class_logits = logits[:, :36]
 
-        # use the last column (i.e. 37th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
-        abnormal_logits = logits[:, -1]
+            # use the last column (i.e. 37th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
+            abnormal_logits = logits[:, -1]
 
-        cross_entropy_loss = cross_entropy(bbox_class_logits, bbox_targets)
-        pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)  # we have 7.6x more normal bbox images than abnormal ones
-        binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
+            cross_entropy_loss = cross_entropy(bbox_class_logits, bbox_targets)
+            pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)  # we have 7.6x more normal bbox images than abnormal ones
+            binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
 
-        total_loss = cross_entropy_loss + binary_cross_entropy_loss
+            total_loss = cross_entropy_loss + binary_cross_entropy_loss
 
-        val_loss += total_loss.item() * batch_size
+            val_loss += total_loss.item() * batch_size
 
-        preds_bbox = torch.argmax(bbox_class_logits, dim=1)
-        preds_is_abnormal = abnormal_logits > 0
+            preds_bbox = torch.argmax(bbox_class_logits, dim=1)
+            preds_is_abnormal = abnormal_logits > 0
 
-        # f1-score uses average='binary' by default
-        is_abnormal_targets = is_abnormal_targets.cpu()
-        preds_is_abnormal = preds_is_abnormal.cpu()
-        f1_score_is_abnormal_current_batch = f1_score(is_abnormal_targets, preds_is_abnormal)  # single float value
-        f1_scores_is_abnormal.append(f1_score_is_abnormal_current_batch)
+            # f1-score uses average='binary' by default
+            is_abnormal_targets = is_abnormal_targets.cpu()
+            preds_is_abnormal = preds_is_abnormal.cpu()
+            f1_score_is_abnormal_current_batch = f1_score(is_abnormal_targets, preds_is_abnormal)  # single float value
+            f1_scores_is_abnormal.append(f1_score_is_abnormal_current_batch)
 
-        # average='micro': calculate metrics globally by counting the total true positives, false negatives and false positives
-        f1_score_bbox_globally_current_batch = f1_score(bbox_targets.cpu(), preds_bbox.cpu(), average="micro")  # single float value
-        f1_scores_bboxes.append(f1_score_bbox_globally_current_batch)
+            # average='micro': calculate metrics globally by counting the total true positives, false negatives and false positives
+            f1_score_bbox_globally_current_batch = f1_score(bbox_targets.cpu(), preds_bbox.cpu(), average="micro")  # single float value
+            f1_scores_bboxes.append(f1_score_bbox_globally_current_batch)
 
-        # average=None: f1-score for each class are returned
-        f1_scores_per_bbox_class_current_batch = f1_score(
-            bbox_targets.cpu(), preds_bbox.cpu(), average=None, labels=[i for i in range(num_classes)]
-        )  # list of 36 f1-scores (float values) for 36 regions
+            # average=None: f1-score for each class are returned
+            f1_scores_per_bbox_class_current_batch = f1_score(
+                bbox_targets.cpu(), preds_bbox.cpu(), average=None, labels=[i for i in range(num_classes)]
+            )  # list of 36 f1-scores (float values) for 36 regions
 
-        for i in range(num_classes):
-            f1_scores_bboxes_class[i].append(f1_scores_per_bbox_class_current_batch[i])
+            for i in range(num_classes):
+                f1_scores_bboxes_class[i].append(f1_scores_per_bbox_class_current_batch[i])
 
-        # precision_score uses average='binary' by default
-        precision_is_abnormal_current_batch = precision_score(is_abnormal_targets, preds_is_abnormal)
-        precision_is_abnormal.append(precision_is_abnormal_current_batch)
+            # precision_score uses average='binary' by default
+            precision_is_abnormal_current_batch = precision_score(is_abnormal_targets, preds_is_abnormal)
+            precision_is_abnormal.append(precision_is_abnormal_current_batch)
 
-        # recall_score uses average='binary' by default
-        recall_is_abnormal_current_batch = recall_score(is_abnormal_targets, preds_is_abnormal)
-        recall_is_abnormal.append(recall_is_abnormal_current_batch)
+            # recall_score uses average='binary' by default
+            recall_is_abnormal_current_batch = recall_score(is_abnormal_targets, preds_is_abnormal)
+            recall_is_abnormal.append(recall_is_abnormal_current_batch)
 
     val_loss /= len(val_dl)
 
@@ -324,7 +323,7 @@ def print_stats_to_console(
             print(f"\tVal f1_score bbox '{bbox_name}': {f1_scores_per_bbox_class[i]:.3f}")
 
 
-def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience):
+def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience, run):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -346,6 +345,8 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
     patience: int
         Number of epochs to wait for val loss to decrease.
         If patience is exceeded, then training is stopped early.
+    run: int
+        Number of current run.
 
     Returns
     -------
@@ -396,16 +397,23 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
     return None
 
 
+model_save_path_parent_dir = "/u/home/tanida/weights/classification_model"
+
 EPOCHS = 30
 LR = 1e-4
 PATIENCE = 7  # number of epochs to wait before early stopping
 PATIENCE_LR_SCHEDULER = 2  # number of epochs to wait for val loss to reduce before lr is reduced by 1e-1
 
+run = 2
+model_save_path = os.path.join(model_save_path_parent_dir, f"weights_run_{run}")
+if not os.path.exists(model_save_path):
+    os.mkdir(model_save_path)
+
 model = ClassificationModel()
 model.to(device, non_blocking=True)
 opt = AdamW(model.parameters(), lr=LR)
 lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
-writer = SummaryWriter(log_dir="/u/home/tanida/weights/classification_model/runs/2")
+writer = SummaryWriter(log_dir=f"/u/home/tanida/weights/classification_model/runs/{run}")
 train_model(
     model=model,
     train_dl=train_loader,
@@ -414,4 +422,5 @@ train_model(
     lr_scheduler=lr_scheduler,
     epochs=EPOCHS,
     patience=PATIENCE,
+    run=run
 )

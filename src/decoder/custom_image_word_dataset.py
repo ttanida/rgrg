@@ -1,6 +1,5 @@
 import os
 
-import cv2
 import torch
 from torch.utils.data import Dataset
 
@@ -17,7 +16,6 @@ class CustomImageWordDataset(Dataset):
         return len(self.tokenized_dataset)
 
     def __getitem__(self, index):
-        # TODO: implement try/except block and augment DataCollatorWithPadding function to handle None cases
         # if something in __get__item fails, then return None
         # collate_fn in dataloader filters out None values
         try:
