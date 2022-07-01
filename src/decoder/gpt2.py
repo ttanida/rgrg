@@ -16,14 +16,14 @@ class Conv1DWithTrainedWeights(nn.Module):
 
     def __init__(self, trained_weight, trained_bias):
         super(Conv1DWithTrainedWeights, self).__init__()
-        self.weight = nn.Parameter(trained_weight, requires_grad=False)  # of shape (hidden_dim x 3*hidden_dim)
-        self.bias = nn.Parameter(trained_bias, requires_grad=False)  # of shape (3 * hidden_dim)
+        self.weight = nn.Parameter(trained_weight, requires_grad=False)  # of shape (hidden_dim x 3*hidden_dim) for c_attn, of shape (hidden_dim x hidden_dim) for c_proj
+        self.bias = nn.Parameter(trained_bias, requires_grad=False)  # of shape (3 * hidden_dim) for c_attn, of shape (hidden_dim) for c_proj
 
     def forward(self, x):  # x has shape (batch x sequence_len x hidden_dim)
-        size_out = x.size()[:-1] + (self.weight.size(-1),)  # size_out has shape (batch x sequence_len x 3*hidden_dim)
+        size_out = x.size()[:-1] + (self.weight.size(-1),)
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         x = x.view(size_out)
-        return x  # x has shape (batch x sequence_len x 3*hidden_dim)
+        return x  # x has shape (batch x sequence_len x 3*hidden_dim) for c_attn, shape (batch x sequence_len x hidden_dim) for c_proj
 
 
 class GPT2PseudoAttention(nn.Module):
@@ -124,22 +124,22 @@ class GPT2PseudoAttention(nn.Module):
                 attention_mask):  # shape (batch_size, 1, 1, 1+seq_len)
 
         # query, key, value matrices each have shape (batch_size x seq_len x hidden_dim)
-        query_word, key_word, value_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
+        q_word, k_word, v_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
 
         # add an addition dimension to the image_hidden_states
         image_hidden_states = image_hidden_states[:, None, :]  # shape (batch_size x 1 x hidden_dim)
 
-        key_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
-        value_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
+        k_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
+        v_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
 
-        key_image_word = torch.cat((key_image, key_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
-        value_image_word = torch.cat((value_image, value_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
+        k_image_word = torch.cat((k_image, k_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
+        v_image_word = torch.cat((v_image, v_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
 
-        query_word = self._split_heads(query_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x seq_len x head_dim)
-        key_image_word = self._split_heads(key_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
-        value_image_word = self._split_heads(value_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
+        q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x seq_len x head_dim)
+        k_image_word = self._split_heads(k_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
+        v_image_word = self._split_heads(v_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
 
-        attn_output = self._attn(query_word, key_image_word, value_image_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
+        attn_output = self._attn(q_word, k_image_word, v_image_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)  # shape (batch_size x seq_len x hidden_dim)
         attn_output = self.c_proj(attn_output)
@@ -346,6 +346,8 @@ def print_model_summary(verbose):
 
     inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
 
+    # inputs
+
     # add a batch of 3 image hidden states
     inputs["image_hidden_states"] = torch.rand(3, 1024)
 
@@ -373,7 +375,7 @@ def print_model_summary(verbose):
 # verbose = 0 (only model params)
 # verbose = 1 (model params and output shape of batch)
 # verbose = 2 (model params and output shape of batch, more detailed)
-# print_model_summary(verbose=1)
+print_model_summary(verbose=1)
 
 # TODO: Implement generate function for DecoderModel
 
