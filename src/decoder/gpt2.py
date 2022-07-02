@@ -311,7 +311,10 @@ class DecoderModel(nn.Module):
             # the logits of the second token are "aligned" with the third token label, and so on...
             # since the previous token should predict the next token
 
+            # discard the last lm_logit corresponding to the last token
             shift_logits = lm_logits[:, :-1, :].contiguous()  # shape (batch_size x seq_len-1 x vocab_size)
+
+            # discard the first token in the sequence
             shift_labels = labels[:, 1:].contiguous()  # shape (batch_size x seq_len-1)
 
             # flatten the tokens
