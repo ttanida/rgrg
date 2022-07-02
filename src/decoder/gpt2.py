@@ -231,9 +231,15 @@ class DecoderModel(nn.Module):
         If return_loss is False, returns language modeling logits (of shape batch_size x seq_len x vocab_size).
         If return_loss is True, returns a tuple of the cross entropy loss and language modeling logits.
 
-        To compute the loss, the input_ids are used as labels, by shifting them by one position
-        (see shift_logits and shift_labels variables towards the end of the forward method).
+        To compute the loss, the input_ids are used as labels.
+        To prevent padding tokens from counting towards the loss, the inverted attention_mask (i.e.) is applied to the labels tensor to convert padding token ids to -100.
+        In the cross entropy loss, the ignore_index is set to -100, such that padding token ids are ignored as targets.
+
+        Furthermore, the label at the first position of the sequence is discarded and the labels are shifted accordingly (i.e. one to the left),
+        such that the language modeling logits align with the labels that they are trying to predict.
         """
+        # get an boolean copy of the attention_mask and invert it
+        mask_to_ignore_padding_tokens_for_loss_computation = ~(attention_mask.to(torch.bool))
 
         # transform image_hidden_states from image feature space to text feature space
         image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dim)
@@ -304,6 +310,9 @@ class DecoderModel(nn.Module):
             # use input_ids as ground_truth labels
             labels = input_ids
 
+            # set padding tokens to -100, such that they are ignored and don't count towards the loss
+            labels[mask_to_ignore_padding_tokens_for_loss_computation] = -100
+
             # shift the tokens, i.e. discard the last token in the sequence for the logits,
             # and discard the first token in the sequence for the labels
 
@@ -321,7 +330,8 @@ class DecoderModel(nn.Module):
             shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # shape (batch_size*seq_len-1 x vocab_size)
             shift_labels = shift_labels.view(-1)  # shape (batch_size * seq_len-1)
 
-            loss_fct = CrossEntropyLoss()
+            # padding tokens are ignored for loss computation, and loss is averaged over non-ignored targets
+            loss_fct = CrossEntropyLoss(ignore_index=-100, size_average=True)
             loss = loss_fct(shift_logits, shift_labels)
 
         return (loss, lm_logits) if return_loss else lm_logits
@@ -358,52 +368,31 @@ def print_model_summary(batch_size, seq_len, verbose):
 
 # TODO: Implement generate function for DecoderModel
 
-# checkpoint = "healx/gpt-2-pubmed-medium"
-# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-# tokenizer.pad_token = tokenizer.eos_token
-# print(tokenizer("<|endoftext|>", truncation=True, max_length=1024))
+from transformers import GPT2Tokenizer
 
-# phrase = "I love huggingface"
-# if len(phrase) == 0:
-#     print(tokenizer.eos_token)
-#     print(tokenizer(tokenizer.eos_token))
-# else:
-#     print(tokenizer(phrase))
+checkpoint = "healx/gpt-2-pubmed-medium"
+tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+tokenizer.pad_token_id = tokenizer.eos_token_id
 
-# input = tokenizer.encode("", return_tensors="pt", add_special_tokens=True)
-# print(input)
-# print(tokenizer.bos_token)
+# use a batch of 3 phrases
+raw_inputs = [
+    "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
+    "<|endoftext|>I hate this!<|endoftext|>",
+    "<|endoftext|><|endoftext|>"]
 
-# # use a batch of 3 phrases
-# raw_inputs = [
-#     "I've been waiting for a HuggingFace course my whole life.",
-#     "I hate this so much!",
-#     ""]
+inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+print(inputs)
 
-# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# add a batch of 3 image hidden states
+inputs["image_hidden_states"] = torch.rand(3, 1024)
 
-# # add a batch of 3 image hidden states
-# inputs["image_hidden_states"] = torch.rand(3, 1024)
-# inputs["labels"] = torch.randint(low=0, high=10, size=(3, 14))
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = DecoderModel()
+model.to(device)
+inputs = {k: v.to(device) for k, v in inputs.items()}
 
-# model = GPT2LMHeadModel.from_pretrained(checkpoint)
-# input = tokenizer.encode(f"{tokenizer.bos_token}", return_tensors="pt")
-# print(input)
-# output = model.generate(input)
-# print(output)
-# dec_output_without_special_tokens = tokenizer.decode(output[0], skip_special_tokens=True)
-# dec_output_with_special_tokens = tokenizer.decode(output[0], skip_special_tokens=False)
-# print(dec_output_without_special_tokens)
-# print(dec_output_with_special_tokens)
-
-
-# inputs = inputs.to(device)
-
-# output = model(**inputs)
-# print(output)
-# print(output[0])
-# print(output[1])
-# print(output[0].shape)
-# print(output[1].shape)
+loss, lm_logits = model(**inputs, return_loss=True)
+print(loss)
+print(lm_logits)
+print(lm_logits.shape)

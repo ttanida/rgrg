@@ -24,6 +24,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
+# set the seed value for reproducibility
+seed_val = 42
+
+random.seed(seed_val)
+np.random.seed(seed_val)
+torch.manual_seed(seed_val)
+torch.cuda.manual_seed_all(seed_val)
+
 # define configurations for training run
 RUN = 0
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
@@ -225,7 +233,7 @@ def get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete):
     custom_collate_with_padding = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest")
 
     g = torch.Generator()
-    g.manual_seed(2022)
+    g.manual_seed(seed_val)
 
     train_loader = DataLoader(
         train_dataset_complete,
