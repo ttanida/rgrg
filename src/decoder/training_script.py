@@ -24,9 +24,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
-# path to the csv files specifying the train, val, test sets
-path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
-
 # define configurations for training run
 RUN = 0
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
@@ -35,78 +32,24 @@ BATCH_SIZE = 32
 NUM_WORKERS = 12
 EPOCHS = 30
 LR = 1e-4
-PATIENCE = 7  # number of epochs to wait before early stopping
-PATIENCE_LR_SCHEDULER = 2  # number of epochs to wait for val loss to reduce before lr is reduced by 1e-1
+EVALUATE_EVERY_K_STEPS = 10000  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
+PATIENCE = 15  # number of evaluations to wait before early stopping
+PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
 # bertscore_metric = evaluate.load("bertscore")
 # bleu_metric = evaluate.load("bleu")
 
-
-def train_one_epoch(model, train_dl, optimizer, epoch, writer):
-    """
-    Train model for 1 epoch.
-    Write train loss to tensorboard.
-
-    Args:
-        model (nn.Module): The input model to be trained.
-        train_dl (torch.utils.data.Dataloder): The train dataloader to train on.
-        optimizer (Optimizer): The model's optimizer.
-        epoch (int): Current epoch number.
-
-    Returns:
-        train_loss (float): Train loss for 1 epoch.
-    """
-    # training the model on the train set
-    model.train()
-    train_loss = 0.0
-
-    for batch in tqdm(train_dl):
-        # batch is a dict with keys for 'input_ids', 'attention_mask', 'image_hidden_states' (see custom_image_word_dataset)
-        input_ids, attention_mask, image_hidden_states = batch.values()
-
-        batch_size = input_ids.size(0)
-
-        input_ids = input_ids.to(device, non_blocking=True)  # shape (batch_size x seq_len)
-        attention_mask = attention_mask.to(device, non_blocking=True)  # shape (batch_size x seq_len)
-        image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
-
-        # model returns loss and language modeling logits (not needed here), if return_loss=True
-        loss, _ = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_hidden_states=image_hidden_states,
-            return_loss=True,
-        )
-
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-
-        train_loss += loss.item() * batch_size
-
-    train_loss /= len(train_dl)
-
-    writer.add_scalar("training loss", train_loss, epoch)
-
-    return train_loss
-
-
-def evaluate_one_epoch(model, val_dl, lr_scheduler, epoch, writer):
+def evaluate_model(model, val_dl):
     """
     Evaluate model on val set.
-
-    Write to tensorboard:
-        - val loss
 
     Args:
         model (nn.Module): The input model to be evaluated.
         val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
-        lr_scheduler (torch.optim.lr_scheduler): The learning rate scheduler to use.
-        epoch (int): Current epoch number.
 
     Returns:
-        val_loss (float): Val loss for 1 epoch.
+        val_loss (float): Val loss for val set.
     """
     # evaluating the model on the val set
     model.eval()
@@ -133,11 +76,6 @@ def evaluate_one_epoch(model, val_dl, lr_scheduler, epoch, writer):
             val_loss += loss.item() * batch_size
 
     val_loss /= len(val_dl)
-
-    writer.add_scalar("val loss", val_loss, epoch)
-
-    # decrease lr by 1e-1 if val loss has not decreased after certain number of epochs
-    lr_scheduler.step(val_loss)
 
     return val_loss
 
@@ -186,32 +124,83 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
 
     lowest_val_loss = np.inf
 
-    # the best_model_state is the one where the val loss is the lowest over all epochs
+    # the best_model_state is the one where the val loss is the lowest over all evaluations
     best_model_state = None
-    num_epochs_without_decrease_val_loss = 0  # parameter to determine early stopping
+
+    # parameter to determine early stopping
+    num_evaluations_without_decrease_val_loss = 0
+
     num_epochs_without_saving_best_model = 0  # parameter to determine if model should be saved
     save_model_every_k_epochs = 3  # intermittently save the best current model
 
+    overall_steps_taken = 0  # for logging to tensorboard
+
     for epoch in range(epochs):
-        train_loss = train_one_epoch(model, train_dl, optimizer, epoch, writer)
-        val_loss = evaluate_one_epoch(model, val_dl, lr_scheduler, epoch, writer)
+        train_loss = 0.0
+        steps_taken = 0
+        for num_batch, batch in enumerate(train_dl):
+            # batch is a dict with keys for 'input_ids', 'attention_mask', 'image_hidden_states' (see custom_image_word_dataset)
+            input_ids, attention_mask, image_hidden_states = batch.values()
+
+            batch_size = input_ids.size(0)
+
+            input_ids = input_ids.to(device, non_blocking=True)  # shape (batch_size x seq_len)
+            attention_mask = attention_mask.to(device, non_blocking=True)  # shape (batch_size x seq_len)
+            image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
+
+            # model returns loss and language modeling logits (not needed here), if return_loss=True
+            loss, _ = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                image_hidden_states=image_hidden_states,
+                return_loss=True,
+            )
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            train_loss += loss.item() * batch_size
+            steps_taken += 1
+            overall_steps_taken += 1
+
+            # evaluate every k steps and at the end of an epoch
+            if (steps_taken + 1) >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
+                # normalize the train loss by steps_taken
+                train_loss /= steps_taken
+                val_loss = evaluate_model(model, val_dl)
+
+                # set the model back to training
+                model.train()
+
+                writer.add_scalar("training loss", train_loss, overall_steps_taken)
+                writer.add_scalar("validation loss", val_loss, overall_steps_taken)
+
+                # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
+                lr_scheduler.step(val_loss)
+
+                if val_loss < lowest_val_loss:
+                    num_evaluations_without_decrease_val_loss = 0
+                    lowest_val_loss = val_loss
+                    best_epoch = epoch
+                    best_model_save_path = os.path.join(weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth")
+                    best_model_state = deepcopy(model.state_dict())
+                else:
+                    num_evaluations_without_decrease_val_loss += 1
+
+                if num_evaluations_without_decrease_val_loss >= patience:
+                    # save the model with the overall lowest val loss
+                    torch.save(best_model_state, best_model_save_path)
+                    log.info(f"\nEarly stopping at epoch ({epoch}/{epochs})!")
+                    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
+                    return None
+
+                # reset values
+                train_loss = 0.0
+                steps_taken = 0
+
+        # log to console at the end of an epoch
         log_stats_to_console(train_loss, val_loss, epoch)
-
-        if val_loss < lowest_val_loss:
-            lowest_val_loss = val_loss
-            best_epoch = epoch
-            best_model_save_path = os.path.join(weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth")
-            best_model_state = deepcopy(model.state_dict())
-            num_epochs_without_decrease_val_loss = 0
-        else:
-            num_epochs_without_decrease_val_loss += 1
-
-        if num_epochs_without_decrease_val_loss >= patience:
-            # save the model with the overall lowest val loss
-            torch.save(best_model_state, best_model_save_path)
-            log.info(f"\nEarly stopping at epoch ({epoch}/{epochs})!")
-            log.info(f"Lowest overall val loss: {lowest_val_loss} at epoch {best_epoch}")
-            return None
 
         num_epochs_without_saving_best_model += 1
 
@@ -289,7 +278,8 @@ def get_tokenizer():
 
 
 def get_datasets_with_phrases(config_file_path):
-    # get the paths to the csv files containing the phrases
+    # path to the csv files specifying the train, val, test sets
+    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
     datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid"]}
 
     # only read in the phrases
@@ -310,8 +300,8 @@ def get_datasets_with_phrases(config_file_path):
     log.info(f"Val: {new_num_samples_val} phrases")
 
     with open(config_file_path, "a") as f:
-        f.write(f"\TRAIN NUM PHRASES: {new_num_samples_train}\n")
-        f.write(f"\VAL NUM PHRASES: {new_num_samples_val}\n")
+        f.write(f"\tTRAIN NUM PHRASES: {new_num_samples_train}\n")
+        f.write(f"\tVAL NUM PHRASES: {new_num_samples_val}\n")
 
     # limit the datasets to those new numbers
     datasets_as_dfs["train"] = datasets_as_dfs["train"][:new_num_samples_train]
@@ -353,6 +343,7 @@ def create_run_folder_with_config_file():
         "NUM_WORKERS": NUM_WORKERS,
         "EPOCHS": EPOCHS,
         "LR": LR,
+        "EVALUATE_EVERY_K_STEPS": EVALUATE_EVERY_K_STEPS,
         "PATIENCE": PATIENCE,
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER
     }
@@ -385,6 +376,8 @@ def main():
 
     model = DecoderModel()
     model.to(device, non_blocking=True)
+    model.train()
+
     opt = AdamW(model.parameters(), lr=LR)
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
@@ -398,6 +391,7 @@ def main():
         optimizer=opt,
         lr_scheduler=lr_scheduler,
         epochs=EPOCHS,
+        evaluate_every_k_steps=EVALUATE_EVERY_K_STEPS,
         patience=PATIENCE,
         weights_folder_path=weights_folder_path,
         writer=writer
