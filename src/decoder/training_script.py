@@ -214,7 +214,7 @@ def print_stats_to_console(
     print(f"\tVal loss: {val_loss:.3f}")
 
 
-def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience, run):
+def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -236,8 +236,6 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
     patience: int
         Number of epochs to wait for val loss to decrease.
         If patience is exceeded, then training is stopped early.
-    run: int
-        Number of current run.
 
     Returns
     -------
@@ -288,12 +286,12 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
 
 model_save_path_parent_dir = "/u/home/tanida/weights/decoder_model"
 
-EPOCHS = 30
+EPOCHS = 1
 LR = 1e-4
 PATIENCE = 7  # number of epochs to wait before early stopping
 PATIENCE_LR_SCHEDULER = 2  # number of epochs to wait for val loss to reduce before lr is reduced by 1e-1
 
-run = 1
+run = 11
 model_save_path = os.path.join(model_save_path_parent_dir, f"weights_run_{run}")
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
@@ -313,6 +311,5 @@ train_model(
     optimizer=opt,
     lr_scheduler=lr_scheduler,
     epochs=EPOCHS,
-    patience=PATIENCE,
-    run=run
+    patience=PATIENCE
 )

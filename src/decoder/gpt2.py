@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torchinfo import summary
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import GPT2LMHeadModel
 
 
 class Conv1DWithTrainedWeights(nn.Module):
@@ -129,6 +129,7 @@ class GPT2PseudoAttention(nn.Module):
         # add an addition dimension to the image_hidden_states
         image_hidden_states = image_hidden_states[:, None, :]  # shape (batch_size x 1 x hidden_dim)
 
+        # get the key and value matrices for the image hidden states
         k_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
         v_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
 
@@ -310,18 +311,8 @@ class DecoderModel(nn.Module):
             # the logits of the second token are "aligned" with the third token label, and so on...
             # since the previous token should predict the next token
 
-            # only exception is if seq_len == 1, since this means that all the sequences in the batch only consist
-            # of the eos token, meaning all of them were originally empty phrases (i.e. "")
-            # in this case, we don't shift the logits/labels, because the single logit should predict end of sentence
-            # (theoretically, it could be possible that the batch consists of batch_size sequences of exactly 1 eos or non-eos token,
-            # but this would be too improbable)
-
-            if seq_len == 1:
-                shift_logits = lm_logits  # shape (batch_size x 1 x vocab_size)
-                shift_labels = labels  # shape (batch_size x 1)
-            else:
-                shift_logits = lm_logits[:, :-1, :].contiguous()  # shape (batch_size x seq_len-1 x vocab_size)
-                shift_labels = labels[:, 1:].contiguous()  # shape (batch_size x seq_len-1)
+            shift_logits = lm_logits[:, :-1, :].contiguous()  # shape (batch_size x seq_len-1 x vocab_size)
+            shift_labels = labels[:, 1:].contiguous()  # shape (batch_size x seq_len-1)
 
             # flatten the tokens
             shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # shape (batch_size*seq_len-1 x vocab_size)
@@ -333,37 +324,24 @@ class DecoderModel(nn.Module):
         return (loss, lm_logits) if return_loss else lm_logits
 
 
-def print_model_summary(verbose):
-    checkpoint = "healx/gpt-2-pubmed-medium"
-    tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-    tokenizer.pad_token = tokenizer.eos_token
-
-    # use a batch of 3 phrases
-    raw_inputs = [
-        "I've been waiting for a HuggingFace course my whole life.",
-        "I hate this so much!",
-        ""]
-
-    inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-
-    # inputs
-
-    # add a batch of 3 image hidden states
-    inputs["image_hidden_states"] = torch.rand(3, 1024)
-
-    if verbose > 0:
-        print(inputs.keys())
-        print('input ids: ', inputs['input_ids'])
-        print('attention mask: ', inputs['attention_mask'])
-        print('image_hidden_states mask: ', inputs['image_hidden_states'])
-        print('shape: ', inputs['input_ids'].shape)
+def print_model_summary(batch_size, seq_len, verbose):
+    """
+    Choose between:
+        verbose = 0 (only model params)
+        verbose = 1 (model params and output shape of batch)
+        verbose = 2 (model params and output shape of batch, more detailed)
+    """
+    inputs = {}
+    inputs["input_ids"] = torch.randint(low=0, high=50257, size=(batch_size, seq_len))
+    inputs["attention_mask"] = torch.randint(low=0, high=2, size=(batch_size, seq_len))
+    inputs["image_hidden_states"] = torch.rand(batch_size, 1024)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = DecoderModel()
     model.to(device)
 
-    inputs = inputs.to(device)
+    inputs = {k: v.to(device) for k, v in inputs.items()}
 
     if verbose == 0:
         summary(model)
@@ -371,11 +349,9 @@ def print_model_summary(verbose):
         summary(model, input_data=dict(inputs), verbose=verbose)
 
 
-# choose between:
-# verbose = 0 (only model params)
-# verbose = 1 (model params and output shape of batch)
-# verbose = 2 (model params and output shape of batch, more detailed)
-print_model_summary(verbose=1)
+# batch_size = 32
+# seq_len = 60
+# print_model_summary(batch_size, seq_len, verbose=1)
 
 # TODO: Implement generate function for DecoderModel
 
