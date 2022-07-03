@@ -33,9 +33,11 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 0
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
+RUN = 1
+# PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
+# PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 5e-5
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
 BATCH_SIZE = 32
 NUM_WORKERS = 12
 EPOCHS = 30
@@ -172,17 +174,17 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
             steps_taken += 1
             overall_steps_taken += 1
 
-            # evaluate every k steps and at the end of an epoch
+            # evaluate every k steps and also at the end of an epoch
             if (steps_taken + 1) >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
                 val_loss = evaluate_model(model, val_dl)
 
-                # set the model back to training
-                model.train()
-
                 writer.add_scalar("training loss", train_loss, overall_steps_taken)
                 writer.add_scalar("validation loss", val_loss, overall_steps_taken)
+
+                # set the model back to training
+                model.train()
 
                 # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
                 lr_scheduler.step(val_loss)
@@ -203,12 +205,13 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
                     log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
                     return None
 
+                # log to console at the end of an epoch
+                if (num_batch + 1) == len(train_dl):
+                    log_stats_to_console(train_loss, val_loss, epoch)
+
                 # reset values
                 train_loss = 0.0
                 steps_taken = 0
-
-        # log to console at the end of an epoch
-        log_stats_to_console(train_loss, val_loss, epoch)
 
         num_epochs_without_saving_best_model += 1
 
@@ -399,7 +402,6 @@ def main():
         optimizer=opt,
         lr_scheduler=lr_scheduler,
         epochs=EPOCHS,
-        evaluate_every_k_steps=EVALUATE_EVERY_K_STEPS,
         patience=PATIENCE,
         weights_folder_path=weights_folder_path,
         writer=writer

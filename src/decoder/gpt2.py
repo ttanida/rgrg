@@ -331,7 +331,7 @@ class DecoderModel(nn.Module):
             shift_labels = shift_labels.view(-1)  # shape (batch_size * seq_len-1)
 
             # padding tokens are ignored for loss computation, and loss is averaged over non-ignored targets
-            loss_fct = CrossEntropyLoss(ignore_index=-100, size_average=True)
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits, shift_labels)
 
         return (loss, lm_logits) if return_loss else lm_logits
@@ -368,31 +368,31 @@ def print_model_summary(batch_size, seq_len, verbose):
 
 # TODO: Implement generate function for DecoderModel
 
-from transformers import GPT2Tokenizer
+# from transformers import GPT2Tokenizer
 
-checkpoint = "healx/gpt-2-pubmed-medium"
-tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-tokenizer.pad_token_id = tokenizer.eos_token_id
+# checkpoint = "healx/gpt-2-pubmed-medium"
+# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+# tokenizer.pad_token_id = tokenizer.eos_token_id
 
-# use a batch of 3 phrases
-raw_inputs = [
-    "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
-    "<|endoftext|>I hate this!<|endoftext|>",
-    "<|endoftext|><|endoftext|>"]
+# # use a batch of 3 phrases
+# raw_inputs = [
+#     "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
+#     "<|endoftext|>I like this!<|endoftext|>",
+#     "<|endoftext|><|endoftext|>"]
 
-inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-print(inputs)
+# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# print(inputs)
 
-# add a batch of 3 image hidden states
-inputs["image_hidden_states"] = torch.rand(3, 1024)
+# # add a batch of 3 image hidden states
+# inputs["image_hidden_states"] = torch.rand(3, 1024)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = DecoderModel()
-model.to(device)
-inputs = {k: v.to(device) for k, v in inputs.items()}
+# model = DecoderModel()
+# model.to(device)
+# inputs = {k: v.to(device) for k, v in inputs.items()}
 
-loss, lm_logits = model(**inputs, return_loss=True)
-print(loss)
-print(lm_logits)
-print(lm_logits.shape)
+# loss, lm_logits = model(**inputs, return_loss=True)
+# print(loss)
+# print(lm_logits)
+# print(lm_logits.shape)
