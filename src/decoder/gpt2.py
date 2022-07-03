@@ -242,15 +242,11 @@ class DecoderModel(nn.Module):
         input_ids = torch.full(size=(batch_size, 1), fill_value=bos_token_id, dtype=torch.int64, device=self.device)
         attention_mask = torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device)
 
-        if num_beam_groups == 1:
-            is_greedy_gen_mode = (num_beams == 1) and do_sample is False
-            is_sample_gen_mode = (num_beams == 1) and do_sample is True
-            is_beam_gen_mode = (num_beams > 1) and do_sample is False
-            is_beam_sample_gen_mode = (num_beams > 1) and do_sample is True
-        elif num_beam_groups > 1:
-            is_group_beam_gen_mode = (num_beams > 1)
-        else:
-            raise ValueError("num_beam_groups has to be >= 1")
+        is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False
+        is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True
+        is_beam_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is False
+        is_beam_sample_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is True
+        is_group_beam_gen_mode = (num_beams > 1) and (num_beam_groups > 1)
 
         if num_beam_groups > num_beams:
             raise ValueError("'num_beam_groups' has to be smaller or equal to 'num_beams'")
@@ -298,7 +294,7 @@ class DecoderModel(nn.Module):
         # keep track of which sequences are already finished
         # a 1 denotes that a sentence in a batch is unfinished, a 0 denotes that a sentences has finished
         # finished sentences are padded until all sentences in the batch are finished
-        unfinished_sequences = torch.ones(size=(batch_size,))
+        unfinished_sequences = torch.ones(size=(batch_size,), dtype=torch.int64, device=self.device)
         cur_len = seq_len
 
         while True:
@@ -315,6 +311,8 @@ class DecoderModel(nn.Module):
 
             # update variables for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            ones_column = torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device)
+            attention_mask = torch.cat([attention_mask, ones_column], dim=-1)
             cur_len += 1
 
             # if eos_token was found in one sentence, set sentence to finished (by converting 1 to 0 for that sentence)
@@ -518,18 +516,20 @@ checkpoint = "healx/gpt-2-pubmed-medium"
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
-model = GPT2LMHeadModel.from_pretrained(checkpoint)
+# model = GPT2LMHeadModel.from_pretrained(checkpoint)
+model = DecoderModel()
 model.to(device)
 
-raw_inputs = [
-    "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
-    "<|endoftext|>I like this!<|endoftext|>",
-    "<|endoftext|><|endoftext|>"]
-inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-input_ids = inputs["input_ids"].to(device)
-attention_mask = inputs["attention_mask"].to(device)
-print(input_ids)
+# raw_inputs = [
+#     "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
+#     "<|endoftext|>I like this!<|endoftext|>",
+#     "<|endoftext|><|endoftext|>"]
+# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# input_ids = inputs["input_ids"].to(device)
+# attention_mask = inputs["attention_mask"].to(device)
+# print(input_ids)
 
-greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
+# greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
+greedy_output = model.generate(image_hidden_states=torch.rand(3, 1024).to(device), max_length=30)
 print(greedy_output)
 print(tokenizer.decode(greedy_output[0], skip_special_tokens=False))
