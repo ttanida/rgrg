@@ -232,7 +232,8 @@ class DecoderModel(nn.Module):
         If return_loss is True, returns a tuple of the cross entropy loss and language modeling logits.
 
         To compute the loss, the input_ids are used as labels.
-        To prevent padding tokens from counting towards the loss, the inverted attention_mask (i.e.) is applied to the labels tensor to convert padding token ids to -100.
+        To prevent padding tokens from counting towards the loss, the attention_mask is transformed to a boolean mask and inverted.
+        Then this inverted boolean mask is used to set all padding token ids to -100.
         In the cross entropy loss, the ignore_index is set to -100, such that padding token ids are ignored as targets.
 
         Furthermore, the label at the first position of the sequence is discarded and the labels are shifted accordingly (i.e. one to the left),
