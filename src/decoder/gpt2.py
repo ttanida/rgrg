@@ -289,31 +289,40 @@ class DecoderModel(nn.Module):
                       ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
 
         # pad finished sentences in batch with padding token
+        # (these are then ignored when decoding, if skip_special_tokens=True is set)
         pad_token_id = self.eos_token_id
 
+        batch_size = input_ids.size(0)
+        seq_len = input_ids.size(1)
+
         # keep track of which sequences are already finished
-        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
-        cur_len = input_ids.shape[-1]
+        # a 1 denotes that a sentence in a batch is unfinished, a 0 denotes that a sentences has finished
+        # finished sentences are padded until all sentences in the batch are finished
+        unfinished_sequences = torch.ones(size=(batch_size,))
+        cur_len = seq_len
 
         while True:
             # forward pass to get next token
             lm_logits = self.forward(input_ids, attention_mask, image_hidden_states, return_loss=False)
 
-            next_token_logits = lm_logits[:, -1, :]  # of shape (batch_size x 1 x vocab_size)
+            next_token_logits = lm_logits[:, -1, :]  # of shape (batch_size x vocab_size)
 
             # no need to convert logits into probabilities first (via softmax), argmax can be directly applied to logits
-            next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape (batch_size x ...)
+            next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape (batch_size)
 
+            # convert next token to padding token if given sentence has already finished (denoted by a 0 in unfinished_sequences)
             next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # update variables for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             cur_len += 1
 
-            # if eos_token was found in one sentence, set sentence to finished
-            unfinished_sequences = unfinished_sequences.mul((next_tokens != self.eos_token_id).long())
+            # if eos_token was found in one sentence, set sentence to finished (by converting 1 to 0 for that sentence)
+            binary_mask = (next_tokens != self.eos_token_id).long()
+            unfinished_sequences = unfinished_sequences.mul(binary_mask)
 
-            # stop when each sentence is finished, or if we exceed the maximum length
+            # stop when all sentences are finished (i.e. all sentences have value 0 in unfinished_sequences),
+            # or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or cur_len >= max_length:
                 break
 
@@ -512,11 +521,15 @@ tokenizer.pad_token_id = tokenizer.eos_token_id
 model = GPT2LMHeadModel.from_pretrained(checkpoint)
 model.to(device)
 
-# <|endoftext|>
-input_ids = tokenizer.encode('The new trials have shown that', return_tensors='pt')
-input_ids = input_ids.to(device)
-# print(input_ids)
+raw_inputs = [
+    "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
+    "<|endoftext|>I like this!<|endoftext|>",
+    "<|endoftext|><|endoftext|>"]
+inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+input_ids = inputs["input_ids"].to(device)
+attention_mask = inputs["attention_mask"].to(device)
+print(input_ids)
 
-greedy_output = model.generate(inputs=None, pad_token_id=tokenizer.eos_token_id, max_length=100)
+greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
 print(greedy_output)
-print(tokenizer.decode(greedy_output[0], skip_special_tokens=True))
+print(tokenizer.decode(greedy_output[0], skip_special_tokens=False))
