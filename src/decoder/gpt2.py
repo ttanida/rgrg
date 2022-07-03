@@ -221,6 +221,73 @@ class DecoderModel(nn.Module):
         for i, GPT2PSA in enumerate(GPT2PSA_list):
             self.gpt_with_lm_head.transformer.h[i].attn = GPT2PSA
 
+    @torch.no_grad()
+    def generate(self,
+                 image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim)
+                 max_length: int = None,
+                 num_beams: int = 1,
+                 num_beam_groups: int = 1,
+                 do_sample: bool = False,
+                 num_return_sequences: int = 1
+                 ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
+        """
+        Generates output ids for a batch of image features.
+        These output ids can then be decoded by the tokenizer to get the generated sentences.
+        """
+        bos_token_id = 50256  # GPT2 Tokenizer uses bos_token_id = eos_token_id = 50256
+        batch_size = image_hidden_states.size(0)
+
+        # start with the bos_token_id for all image features in the batch.
+        input_ids = torch.full(size=(batch_size, 1), fill_value=bos_token_id, dtype=torch.int64, device=self.device)
+        attention_mask = torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device)
+
+        if num_beam_groups == 1:
+            is_greedy_gen_mode = (num_beams == 1) and do_sample is False
+            is_sample_gen_mode = (num_beams == 1) and do_sample is True
+            is_beam_gen_mode = (num_beams > 1) and do_sample is False
+            is_beam_sample_gen_mode = (num_beams > 1) and do_sample is True
+        elif num_beam_groups > 1:
+            is_group_beam_gen_mode = (num_beams > 1)
+        else:
+            raise ValueError("num_beam_groups has to be >= 1")
+
+        if num_beam_groups > num_beams:
+            raise ValueError("'num_beam_groups' has to be smaller or equal to 'num_beams'")
+        if is_group_beam_gen_mode and do_sample is True:
+            raise ValueError(
+                "Diverse beam search cannot be used in sampling mode. Make sure that 'do_sample' is set to 'False'."
+            )
+
+        # go into different generation modes
+        if is_greedy_gen_mode:
+            if num_return_sequences > 1:
+                raise ValueError(
+                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
+                )
+
+            return self.greedy_search(
+                input_ids,
+                attention_mask,
+                image_hidden_states,
+                max_length
+            )
+        elif is_sample_gen_mode:
+            pass
+        elif is_beam_gen_mode:
+            pass
+        elif is_beam_sample_gen_mode:
+            pass
+        elif is_group_beam_gen_mode:
+            pass
+
+    def greedy_search(self,
+                      input_ids,
+                      attention_mask,
+                      image_hidden_states,
+                      max_length
+                      ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
+        pass
+
     def forward(self,
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
@@ -272,7 +339,7 @@ class DecoderModel(nn.Module):
         # of the image hidden states (see forward method of GPT2PseudoAttention), we have to shift the attention mask "one to the right" and add a column of ones
         # to the left such that the attention weights corresponding to the image are not masked out
         attention_mask_size = attention_mask.size()
-        ones_column = torch.ones(attention_mask_size[:-1] + (1,), dtype=torch.int64).to(self.device)  # shape (batch_size, 1, 1, 1)
+        ones_column = torch.ones(attention_mask_size[:-1] + (1,), dtype=torch.int64, device=self.device)  # shape (batch_size, 1, 1, 1)
         attention_mask = torch.cat((ones_column, attention_mask), dim=-1)  # shape (batch_size, 1, 1, 1+seq_len)
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -397,3 +464,28 @@ def print_model_summary(batch_size, seq_len, verbose):
 # print(loss)
 # print(lm_logits)
 # print(lm_logits.shape)
+
+#############################################
+#############################################
+#############################################
+
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+checkpoint = "healx/gpt-2-pubmed-medium"
+
+tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+tokenizer.pad_token_id = tokenizer.eos_token_id
+
+model = GPT2LMHeadModel.from_pretrained(checkpoint)
+model.to(device)
+
+# <|endoftext|>
+input_ids = tokenizer.encode('The new trials have shown that', return_tensors='pt')
+input_ids = input_ids.to(device)
+# print(input_ids)
+
+greedy_output = model.generate(inputs=None, pad_token_id=tokenizer.eos_token_id, max_length=100)
+print(greedy_output)
+print(tokenizer.decode(greedy_output[0], skip_special_tokens=True))
