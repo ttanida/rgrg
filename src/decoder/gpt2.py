@@ -166,6 +166,7 @@ class DecoderModel(nn.Module):
         super().__init__()
         self.checkpoint = "healx/gpt-2-pubmed-medium"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.eos_token_id = 50256
 
         # use GPT2 model with language modeling head, since we want to generate phrases
         self.gpt_with_lm_head = GPT2LMHeadModel.from_pretrained(self.checkpoint)
@@ -234,7 +235,7 @@ class DecoderModel(nn.Module):
         Generates output ids for a batch of image features.
         These output ids can then be decoded by the tokenizer to get the generated sentences.
         """
-        bos_token_id = 50256  # GPT2 Tokenizer uses bos_token_id = eos_token_id = 50256
+        bos_token_id = self.eos_token_id  # GPT2 Tokenizer uses bos_token_id = eos_token_id = 50256
         batch_size = image_hidden_states.size(0)
 
         # start with the bos_token_id for all image features in the batch.
@@ -281,17 +282,47 @@ class DecoderModel(nn.Module):
             pass
 
     def greedy_search(self,
-                      input_ids,
-                      attention_mask,
-                      image_hidden_states,
+                      input_ids,  # shape (batch_size x seq_len)
+                      attention_mask,  # shape (batch_size x seq_len)
+                      image_hidden_states,  # shape (batch_size x image_hidden_dim)
                       max_length
                       ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
-        pass
+
+        # pad finished sentences in batch with padding token
+        pad_token_id = self.eos_token_id
+
+        # keep track of which sequences are already finished
+        unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
+        cur_len = input_ids.shape[-1]
+
+        while True:
+            # forward pass to get next token
+            lm_logits = self.forward(input_ids, attention_mask, image_hidden_states, return_loss=False)
+
+            next_token_logits = lm_logits[:, -1, :]  # of shape (batch_size x 1 x vocab_size)
+
+            # no need to convert logits into probabilities first (via softmax), argmax can be directly applied to logits
+            next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape (batch_size x ...)
+
+            next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+
+            # update variables for next step
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            cur_len += 1
+
+            # if eos_token was found in one sentence, set sentence to finished
+            unfinished_sequences = unfinished_sequences.mul((next_tokens != self.eos_token_id).long())
+
+            # stop when each sentence is finished, or if we exceed the maximum length
+            if unfinished_sequences.max() == 0 or cur_len >= max_length:
+                break
+
+        return input_ids
 
     def forward(self,
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
-                attention_mask: torch.FloatTensor,   # shape (batch_size x seq_len)
-                image_hidden_states: torch.FloatTensor,   # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
+                attention_mask: torch.FloatTensor,  # shape (batch_size x seq_len)
+                image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
                 return_loss: bool = False
                 ):
         """
