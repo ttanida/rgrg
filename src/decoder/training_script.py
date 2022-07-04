@@ -180,8 +180,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
                 train_loss /= steps_taken
                 val_loss = evaluate_model(model, val_dl)
 
-                writer.add_scalar("training loss", train_loss, overall_steps_taken)
-                writer.add_scalar("validation loss", val_loss, overall_steps_taken)
+                writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
 
                 # set the model back to training
                 model.train()
