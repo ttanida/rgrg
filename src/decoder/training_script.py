@@ -158,8 +158,8 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
             attention_mask = attention_mask.to(device, non_blocking=True)  # shape (batch_size x seq_len)
             image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
 
-            # model returns loss and language modeling logits (not needed here), if return_loss=True
-            loss, _ = model(
+            # model only returns loss, if return_loss=True
+            loss = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 image_hidden_states=image_hidden_states,

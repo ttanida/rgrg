@@ -1,3 +1,4 @@
 /.vscode
 /src.egg-info
 __pycache__/
+.idea/
