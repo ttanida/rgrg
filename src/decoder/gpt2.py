@@ -130,31 +130,39 @@ class GPT2PseudoAttention(nn.Module):
         # query, key, value matrices each have shape (batch_size x seq_len x hidden_dim)
         q_word, k_word, v_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
 
-        # add an addition dimension to the image_hidden_states
-        image_hidden_states = image_hidden_states[:, None, :]  # shape (batch_size x 1 x hidden_dim)
+        if layer_past is None:
+            # add an addition dimension to the image_hidden_states
+            image_hidden_states = image_hidden_states[:, None, :]  # shape (batch_size x 1 x hidden_dim)
 
-        # get the key and value matrices for the image hidden states
-        k_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
-        v_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
+            # get the key and value matrices for the image hidden states
+            k_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
+            v_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
 
-        k_image_word = torch.cat((k_image, k_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
-        v_image_word = torch.cat((v_image, v_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
+            k_image_word = torch.cat((k_image, k_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
+            v_image_word = torch.cat((v_image, v_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
 
-        q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x seq_len x head_dim)
-        k_image_word = self._split_heads(k_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
-        v_image_word = self._split_heads(v_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
+            q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x seq_len x head_dim)
+            k_image_word = self._split_heads(k_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
+            v_image_word = self._split_heads(v_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
 
-        if layer_past is not None:
-            past_key, past_value = layer_past
-            k_image_word = torch.cat((past_key, k_image_word), dim=-2)
-            v_image_word = torch.cat((past_value, v_image_word), dim=-2)
+            if use_cache is True:
+                present = (k_image_word, v_image_word)
+            else:
+                present = None
 
-        if use_cache is True:
-            present = (k_image_word, v_image_word)
+            attn_output = self._attn(q_word, k_image_word, v_image_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
         else:
-            present = None
+            q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
+            k_word = self._split_heads(k_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
+            v_word = self._split_heads(v_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
 
-        attn_output = self._attn(q_word, k_image_word, v_image_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
+            past_key, past_value = layer_past
+            k = torch.cat((past_key, k_word), dim=-2)
+            v = torch.cat((past_value, v_word), dim=-2)
+
+            present = (k, v)
+
+            attn_output = self._attn(q_word, k_word, v_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)  # shape (batch_size x seq_len x hidden_dim)
         attn_output = self.c_proj(attn_output)
@@ -589,22 +597,22 @@ checkpoint = "healx/gpt-2-pubmed-medium"
 tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
 tokenizer.pad_token_id = tokenizer.eos_token_id
 
-model = GPT2LMHeadModel.from_pretrained(checkpoint)
-# model = DecoderModel()
+# model = GPT2LMHeadModel.from_pretrained(checkpoint)
+model = DecoderModel()
 model.to(device)
 
 # raw_inputs = [
 #     "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
 #     "<|endoftext|>I like this!<|endoftext|>",
 #     "<|endoftext|><|endoftext|>"]
-raw_inputs = ["<|endoftext|>The new drugs are"]
-inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-input_ids = inputs["input_ids"].to(device)
-attention_mask = inputs["attention_mask"].to(device)
+# raw_inputs = ["<|endoftext|>The new drugs are"]
+# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# input_ids = inputs["input_ids"].to(device)
+# attention_mask = inputs["attention_mask"].to(device)
 # model(**inputs, image_hidden_states=image_hidden_states, return_loss=True)
 # print(input_ids)
 
-greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
-# greedy_output = model.generate(image_hidden_states=torch.rand(3, 1024).to(device), max_length=30)
+# greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
+greedy_output = model.generate(image_hidden_states=torch.rand(3, 1024).to(device), max_length=30)
 print(greedy_output)
 print(tokenizer.decode(greedy_output[0], skip_special_tokens=False))
