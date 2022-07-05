@@ -162,7 +162,7 @@ class GPT2PseudoAttention(nn.Module):
 
             present = (k, v)
 
-            attn_output = self._attn(q_word, k_word, v_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
+            attn_output = self._attn(q_word, k, v, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)  # shape (batch_size x seq_len x hidden_dim)
         attn_output = self.c_proj(attn_output)
