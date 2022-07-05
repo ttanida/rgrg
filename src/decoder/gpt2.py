@@ -180,7 +180,9 @@ class DecoderModel(nn.Module):
         super().__init__()
         self.checkpoint = "healx/gpt-2-pubmed-medium"
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.bos_token_id = 50256
         self.eos_token_id = 50256
+        self.pad_token_id = 50256
 
         # use GPT2 model with language modeling head, since we want to generate phrases
         self.gpt_with_lm_head = GPT2LMHeadModel.from_pretrained(self.checkpoint)
@@ -249,12 +251,12 @@ class DecoderModel(nn.Module):
         Generates output ids for a batch of image features.
         These output ids can then be decoded by the tokenizer to get the generated sentences.
         """
-        bos_token_id = self.eos_token_id  # GPT2 Tokenizer uses bos_token_id = eos_token_id = 50256
         batch_size = image_hidden_states.size(0)
 
         # start with the bos_token_id for all image features in the batch.
-        input_ids = torch.full(size=(batch_size, 1), fill_value=bos_token_id, dtype=torch.int64, device=self.device)
-        attention_mask = torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device)
+        input_ids = torch.full(size=(batch_size, 1), fill_value=self.bos_token_id, dtype=torch.int64, device=self.device)
+        model_kwargs = {"attention_mask": torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device),
+                        "use_cache": True}
 
         is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True
@@ -278,9 +280,9 @@ class DecoderModel(nn.Module):
 
             return self.greedy_search(
                 input_ids,
-                attention_mask,
                 image_hidden_states,
-                max_length
+                max_length,
+                **model_kwargs
             )
         elif is_sample_gen_mode:
             pass
@@ -291,29 +293,56 @@ class DecoderModel(nn.Module):
         elif is_group_beam_gen_mode:
             pass
 
+    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        # only use last token for inputs_ids if past is defined in kwargs
+        if past:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        else:
+            position_ids = None
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+        }
+
+    def _update_model_kwargs_for_generation(self, presents, model_kwargs):
+        model_kwargs["past"] = presents
+        attention_mask = model_kwargs["attention_mask"]
+        model_kwargs["attention_mask"] = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
+
+        return model_kwargs
+
     def greedy_search(self,
                       input_ids,  # shape (batch_size x seq_len)
-                      attention_mask,  # shape (batch_size x seq_len)
                       image_hidden_states,  # shape (batch_size x image_hidden_dim)
-                      max_length
+                      max_length,
+                      **model_kwargs
                       ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
-
-        # pad finished sentences in batch with padding token
-        # (these are then ignored when decoding, if skip_special_tokens=True is set)
-        pad_token_id = self.eos_token_id
-
         batch_size = input_ids.size(0)
         seq_len = input_ids.size(1)
 
         # keep track of which sequences are already finished
-        # a 1 denotes that a sentence in a batch is unfinished, a 0 denotes that a sentences has finished
+        # a 1 denotes that a sentence in a batch is unfinished, a 0 denotes that a sentence has finished
         # finished sentences are padded until all sentences in the batch are finished
         unfinished_sequences = torch.ones(size=(batch_size,), dtype=torch.int64, device=self.device)
         cur_len = seq_len
 
         while True:
-            # forward pass to get next token
-            lm_logits = self.forward(input_ids, attention_mask, image_hidden_states, return_loss=False)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            lm_logits, presents = self.forward(**model_inputs, image_hidden_states=image_hidden_states, return_loss=False)
 
             next_token_logits = lm_logits[:, -1, :]  # of shape (batch_size x vocab_size)
 
@@ -321,12 +350,12 @@ class DecoderModel(nn.Module):
             next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape (batch_size)
 
             # convert next token to padding token if given sentence has already finished (denoted by a 0 in unfinished_sequences)
-            next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+            # padding tokens are ignored when decoding, if skip_special_tokens=True is set
+            next_tokens = next_tokens * unfinished_sequences + self.pad_token_id * (1 - unfinished_sequences)
 
             # update variables for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            ones_column = torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device)
-            attention_mask = torch.cat([attention_mask, ones_column], dim=-1)
+            model_kwargs = self._update_model_kwargs_for_generation(presents, model_kwargs)
             cur_len += 1
 
             # if eos_token was found in one sentence, set sentence to finished (by converting 1 to 0 for that sentence)
@@ -564,19 +593,18 @@ model = GPT2LMHeadModel.from_pretrained(checkpoint)
 # model = DecoderModel()
 model.to(device)
 
-raw_inputs = [
-    "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
-    "<|endoftext|>I like this!<|endoftext|>",
-    "<|endoftext|><|endoftext|>"]
+# raw_inputs = [
+#     "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
+#     "<|endoftext|>I like this!<|endoftext|>",
+#     "<|endoftext|><|endoftext|>"]
+raw_inputs = ["<|endoftext|>The new drugs are"]
 inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-# input_ids = inputs["input_ids"].to(device)
-# attention_mask = inputs["attention_mask"].to(device)
+input_ids = inputs["input_ids"].to(device)
+attention_mask = inputs["attention_mask"].to(device)
+# model(**inputs, image_hidden_states=image_hidden_states, return_loss=True)
 # print(input_ids)
 
-output = model(**inputs)
-print(output)
-
-# greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
+greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
 # greedy_output = model.generate(image_hidden_states=torch.rand(3, 1024).to(device), max_length=30)
-# print(greedy_output)
-# print(tokenizer.decode(greedy_output[0], skip_special_tokens=False))
+print(greedy_output)
+print(tokenizer.decode(greedy_output[0], skip_special_tokens=False))
