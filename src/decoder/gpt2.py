@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from torchinfo import summary
 from transformers import GPT2LMHeadModel
+from transformers.generation_beam_search import BeamSearchScorer
 
 
 class Conv1DWithTrainedWeights(nn.Module):
@@ -246,6 +247,17 @@ class DecoderModel(nn.Module):
         for i, GPT2PSA in enumerate(GPT2PSA_list):
             self.gpt_with_lm_head.transformer.h[i].attn = GPT2PSA
 
+    def _expand_inputs_for_generation(self, input_ids, expand_size, attention_mask, **model_kwargs):
+        expanded_return_idx = (
+            torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
+        )
+        input_ids = input_ids.index_select(0, expanded_return_idx)
+
+        if attention_mask is not None:
+            model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
+
+        return input_ids, model_kwargs
+
     @torch.no_grad()
     def generate(self,
                  image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim)
@@ -253,7 +265,8 @@ class DecoderModel(nn.Module):
                  num_beams: int = 1,
                  num_beam_groups: int = 1,
                  do_sample: bool = False,
-                 num_return_sequences: int = 1
+                 num_return_sequences: int = 1,
+                 early_stopping: bool = True
                  ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
         """
         Generates output ids for a batch of image features.
@@ -295,11 +308,48 @@ class DecoderModel(nn.Module):
         elif is_sample_gen_mode:
             pass
         elif is_beam_gen_mode:
-            pass
+            if num_return_sequences > num_beams:
+                raise ValueError("'num_return_sequences' has to be smaller or equal to 'num_beams'.")
+
+            if max_length is None:
+                raise ValueError("max_length has to be set for beam generation.")
+
+            beam_scorer = BeamSearchScorer(
+                batch_size=batch_size,
+                num_beams=num_beams,
+                device=self.device,
+                length_penalty=1.0,
+                do_early_stopping=early_stopping,
+                num_beam_hyps_to_keep=num_return_sequences,
+            )
+
+            # interleave input_ids with 'num_beams' additional sequences per batch
+            input_ids, model_kwargs = self._expand_inputs_for_generation(input_ids, expand_size=num_beams, **model_kwargs)
+
+            return self.beam_search(
+                input_ids,
+                beam_scorer,
+                **model_kwargs,
+            )
         elif is_beam_sample_gen_mode:
             pass
         elif is_group_beam_gen_mode:
             pass
+
+    def beam_search(self,
+                    input_ids,
+                    beam_scorer,
+                    **model_kwargs):
+        batch_size = len(beam_scorer._beam_hyps)
+        num_beams = beam_scorer.num_beams
+
+        batch_beam_size, cur_len = input_ids.shape
+
+        if num_beams * batch_size != batch_beam_size:
+            raise ValueError(
+                f"Batch dimension of 'input_ids' should be {num_beams * batch_size}, but is {batch_beam_size}."
+            )
+        pass
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         # only use last token for inputs_ids if past is defined in kwargs
@@ -520,8 +570,6 @@ class DecoderModel(nn.Module):
 
         if use_cache:
             return lm_logits, presents
-        else:
-            return lm_logits
 
 
 def print_model_summary(batch_size, seq_len, verbose):
