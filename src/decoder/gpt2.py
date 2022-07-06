@@ -139,6 +139,12 @@ class GPT2PseudoAttention(nn.Module):
             k_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
             v_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
 
+            # if the batch_size is different, then we are in beam search generation mode (adjust k and v image matrices accordingly)
+            if k_image.size(0) != k_word.size(0):
+                num_beams = k_word.size(0) // k_image.size(0)
+                k_image = k_image.repeat_interleave(num_beams, dim=0)
+                v_image = v_image.repeat_interleave(num_beams, dim=0)
+
             k_image_word = torch.cat((k_image, k_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
             v_image_word = torch.cat((v_image, v_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
 
@@ -258,6 +264,12 @@ class DecoderModel(nn.Module):
 
         return input_ids, model_kwargs
 
+    def _reorder_cache(self, past, beam_idx):
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
+        )
+
     @torch.no_grad()
     def generate(self,
                  image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim)
@@ -328,6 +340,8 @@ class DecoderModel(nn.Module):
 
             return self.beam_search(
                 input_ids,
+                image_hidden_states,
+                max_length,
                 beam_scorer,
                 **model_kwargs,
             )
@@ -338,6 +352,8 @@ class DecoderModel(nn.Module):
 
     def beam_search(self,
                     input_ids,
+                    image_hidden_states,
+                    max_length,
                     beam_scorer,
                     **model_kwargs):
         batch_size = len(beam_scorer._beam_hyps)
@@ -349,7 +365,71 @@ class DecoderModel(nn.Module):
             raise ValueError(
                 f"Batch dimension of 'input_ids' should be {num_beams * batch_size}, but is {batch_beam_size}."
             )
-        pass
+
+        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
+        beam_scores[:, 1:] = -1e9
+        beam_scores = beam_scores.view((batch_size * num_beams,))
+
+        while True:
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            lm_logits, presents = self.forward(**model_inputs, image_hidden_states=image_hidden_states, return_loss=False)
+
+            next_token_logits = lm_logits[:, -1, :]
+
+            next_token_scores = nn.functional.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+
+            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
+
+            vocab_size = next_token_scores.shape[-1]
+            next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
+
+            next_token_scores, next_tokens = torch.topk(
+                next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
+            )
+
+            next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
+            next_tokens = next_tokens % vocab_size
+
+            beam_outputs = beam_scorer.process(
+                input_ids,
+                next_token_scores,
+                next_tokens,
+                next_indices,
+                pad_token_id=self.pad_token_id,
+                eos_token_id=self.eos_token_id,
+                beam_indices=None,
+            )
+
+            beam_scores = beam_outputs["next_beam_scores"]
+            beam_next_tokens = beam_outputs["next_beam_tokens"]
+            beam_idx = beam_outputs["next_beam_indices"]
+
+            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+
+            model_kwargs = self._update_model_kwargs_for_generation(presents, model_kwargs)
+
+            if model_kwargs["past"] is not None:
+                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+
+            # increase cur_len
+            cur_len += 1
+
+            if beam_scorer.is_done or (max_length and cur_len >= max_length):
+                break
+
+        sequence_outputs = beam_scorer.finalize(
+            input_ids,
+            beam_scores,
+            next_tokens,
+            next_indices,
+            pad_token_id=self.pad_token_id,
+            eos_token_id=self.eos_token_id,
+            max_length=max_length,
+            beam_indices=None,
+        )
+
+        return sequence_outputs["sequences"]
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         # only use last token for inputs_ids if past is defined in kwargs
@@ -422,7 +502,7 @@ class DecoderModel(nn.Module):
 
             # stop when all sentences are finished (i.e. all sentences have value 0 in unfinished_sequences),
             # or if we exceed the maximum length
-            if unfinished_sequences.max() == 0 or cur_len >= max_length:
+            if unfinished_sequences.max() == 0 or (max_length and cur_len >= max_length):
                 break
 
         return input_ids
@@ -654,13 +734,18 @@ model.to(device)
 #     "<|endoftext|>I like this!<|endoftext|>",
 #     "<|endoftext|><|endoftext|>"]
 # raw_inputs = ["<|endoftext|>The new drugs are"]
-# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-# input_ids = inputs["input_ids"].to(device)
-# attention_mask = inputs["attention_mask"].to(device)
+raw_inputs = [
+    "<|endoftext|>",
+    "<|endoftext|>"]
+
+inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+input_ids = inputs["input_ids"].to(device)
+attention_mask = inputs["attention_mask"].to(device)
 # model(**inputs, image_hidden_states=image_hidden_states, return_loss=True)
 # print(input_ids)
 
-# greedy_output = model.generate(inputs=input_ids, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id, max_length=30)
-greedy_output = model.generate(image_hidden_states=torch.rand(3, 1024).to(device), max_length=30)
+# greedy_output = model.generate(inputs=input_ids, pad_token_id=tokenizer.eos_token_id, max_length=30, num_beams=3, early_stopping=True)
+greedy_output = model.generate(image_hidden_states=torch.rand(2, 1024).to(device), max_length=30, num_beams=3, early_stopping=True, num_return_sequences=3)
 print(greedy_output)
-print(tokenizer.decode(greedy_output[0], skip_special_tokens=False))
+for output in greedy_output:
+    print(tokenizer.decode(output, skip_special_tokens=False))
