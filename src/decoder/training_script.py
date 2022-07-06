@@ -3,7 +3,7 @@ import logging
 import os
 import random
 
-# import evaluate
+import evaluate
 from datasets import Dataset
 import numpy as np
 import pandas as pd
@@ -50,7 +50,7 @@ PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduc
 # bertscore_metric = evaluate.load("bertscore")
 # bleu_metric = evaluate.load("bleu")
 
-def evaluate_model(model, val_dl):
+def get_val_loss(model, val_dl):
     """
     Evaluate model on val set.
 
@@ -61,7 +61,6 @@ def evaluate_model(model, val_dl):
     Returns:
         val_loss (float): Val loss for val set.
     """
-    # evaluating the model on the val set
     model.eval()
     val_loss = 0.0
 
@@ -75,8 +74,8 @@ def evaluate_model(model, val_dl):
             attention_mask = attention_mask.to(device, non_blocking=True)  # shape (batch_size x seq_len)
             image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
 
-            # model returns loss and language modeling logits (not needed here), if return_loss=True
-            loss, _ = model(
+            # model only returns loss if return_loss=True
+            loss = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 image_hidden_states=image_hidden_states,
@@ -178,9 +177,14 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
             if (steps_taken + 1) >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
-                val_loss = evaluate_model(model, val_dl)
+                val_loss = get_val_loss(model, val_dl)
 
                 writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
+
+                metrics_with_scores = evaluate_model_on_metrics(model, val_dl)
+
+                for metric_name, score in metrics_with_scores.items():
+                    writer.add_scalar(metric_name, score, overall_steps_taken)
 
                 # set the model back to training
                 model.train()

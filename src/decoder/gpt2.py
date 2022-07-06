@@ -1,5 +1,11 @@
 from typing import Optional, Tuple
 
+import os
+
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
+import evaluate
+
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
@@ -253,260 +259,6 @@ class DecoderModel(nn.Module):
         for i, GPT2PSA in enumerate(GPT2PSA_list):
             self.gpt_with_lm_head.transformer.h[i].attn = GPT2PSA
 
-    def _expand_inputs_for_generation(self, input_ids, expand_size, attention_mask, **model_kwargs):
-        expanded_return_idx = (
-            torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
-        )
-        input_ids = input_ids.index_select(0, expanded_return_idx)
-
-        if attention_mask is not None:
-            model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
-
-        return input_ids, model_kwargs
-
-    def _reorder_cache(self, past, beam_idx):
-        return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
-        )
-
-    @torch.no_grad()
-    def generate(self,
-                 image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim)
-                 max_length: int = None,
-                 num_beams: int = 1,
-                 num_beam_groups: int = 1,
-                 do_sample: bool = False,
-                 num_return_sequences: int = 1,
-                 early_stopping: bool = True
-                 ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
-        """
-        Generates output ids for a batch of image features.
-        These output ids can then be decoded by the tokenizer to get the generated sentences.
-        """
-        batch_size = image_hidden_states.size(0)
-
-        # start with the bos_token_id for all image features in the batch.
-        input_ids = torch.full(size=(batch_size, 1), fill_value=self.bos_token_id, dtype=torch.int64, device=self.device)
-        model_kwargs = {"attention_mask": torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device),
-                        "use_cache": True}
-
-        is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False
-        is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True
-        is_beam_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is False
-        is_beam_sample_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is True
-        is_group_beam_gen_mode = (num_beams > 1) and (num_beam_groups > 1)
-
-        if num_beam_groups > num_beams:
-            raise ValueError("'num_beam_groups' has to be smaller or equal to 'num_beams'")
-        if is_group_beam_gen_mode and do_sample is True:
-            raise ValueError(
-                "Diverse beam search cannot be used in sampling mode. Make sure that 'do_sample' is set to 'False'."
-            )
-
-        # go into different generation modes
-        if is_greedy_gen_mode:
-            if num_return_sequences > 1:
-                raise ValueError(
-                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
-                )
-
-            return self.greedy_search(
-                input_ids,
-                image_hidden_states,
-                max_length,
-                **model_kwargs
-            )
-        elif is_sample_gen_mode:
-            pass
-        elif is_beam_gen_mode:
-            if num_return_sequences > num_beams:
-                raise ValueError("'num_return_sequences' has to be smaller or equal to 'num_beams'.")
-
-            if max_length is None:
-                raise ValueError("max_length has to be set for beam generation.")
-
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=num_beams,
-                device=self.device,
-                length_penalty=1.0,
-                do_early_stopping=early_stopping,
-                num_beam_hyps_to_keep=num_return_sequences,
-            )
-
-            # interleave input_ids with 'num_beams' additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(input_ids, expand_size=num_beams, **model_kwargs)
-
-            return self.beam_search(
-                input_ids,
-                image_hidden_states,
-                max_length,
-                beam_scorer,
-                **model_kwargs,
-            )
-        elif is_beam_sample_gen_mode:
-            pass
-        elif is_group_beam_gen_mode:
-            pass
-
-    def beam_search(self,
-                    input_ids,
-                    image_hidden_states,
-                    max_length,
-                    beam_scorer,
-                    **model_kwargs):
-        batch_size = len(beam_scorer._beam_hyps)
-        num_beams = beam_scorer.num_beams
-
-        batch_beam_size, cur_len = input_ids.shape
-
-        if num_beams * batch_size != batch_beam_size:
-            raise ValueError(
-                f"Batch dimension of 'input_ids' should be {num_beams * batch_size}, but is {batch_beam_size}."
-            )
-
-        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-        beam_scores[:, 1:] = -1e9
-        beam_scores = beam_scores.view((batch_size * num_beams,))
-
-        while True:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            lm_logits, presents = self.forward(**model_inputs, image_hidden_states=image_hidden_states, return_loss=False)
-
-            next_token_logits = lm_logits[:, -1, :]
-
-            next_token_scores = nn.functional.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-
-            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
-
-            vocab_size = next_token_scores.shape[-1]
-            next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
-
-            next_token_scores, next_tokens = torch.topk(
-                next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
-            )
-
-            next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
-            next_tokens = next_tokens % vocab_size
-
-            beam_outputs = beam_scorer.process(
-                input_ids,
-                next_token_scores,
-                next_tokens,
-                next_indices,
-                pad_token_id=self.pad_token_id,
-                eos_token_id=self.eos_token_id,
-                beam_indices=None,
-            )
-
-            beam_scores = beam_outputs["next_beam_scores"]
-            beam_next_tokens = beam_outputs["next_beam_tokens"]
-            beam_idx = beam_outputs["next_beam_indices"]
-
-            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-
-            model_kwargs = self._update_model_kwargs_for_generation(presents, model_kwargs)
-
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
-
-            # increase cur_len
-            cur_len += 1
-
-            if beam_scorer.is_done or (max_length and cur_len >= max_length):
-                break
-
-        sequence_outputs = beam_scorer.finalize(
-            input_ids,
-            beam_scores,
-            next_tokens,
-            next_indices,
-            pad_token_id=self.pad_token_id,
-            eos_token_id=self.eos_token_id,
-            max_length=max_length,
-            beam_indices=None,
-        )
-
-        return sequence_outputs["sequences"]
-
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
-        # only use last token for inputs_ids if past is defined in kwargs
-        if past:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-
-        attention_mask = kwargs.get("attention_mask", None)
-        position_ids = kwargs.get("position_ids", None)
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-        }
-
-    def _update_model_kwargs_for_generation(self, presents, model_kwargs):
-        model_kwargs["past"] = presents
-        attention_mask = model_kwargs["attention_mask"]
-        model_kwargs["attention_mask"] = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
-
-        return model_kwargs
-
-    def greedy_search(self,
-                      input_ids,  # shape (batch_size x seq_len)
-                      image_hidden_states,  # shape (batch_size x image_hidden_dim)
-                      max_length,
-                      **model_kwargs
-                      ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
-        batch_size = input_ids.size(0)
-        seq_len = input_ids.size(1)
-
-        # keep track of which sequences are already finished
-        # a 1 denotes that a sentence in a batch is unfinished, a 0 denotes that a sentence has finished
-        # finished sentences are padded until all sentences in the batch are finished
-        unfinished_sequences = torch.ones(size=(batch_size,), dtype=torch.int64, device=self.device)
-        cur_len = seq_len
-
-        while True:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            lm_logits, presents = self.forward(**model_inputs, image_hidden_states=image_hidden_states, return_loss=False)
-
-            next_token_logits = lm_logits[:, -1, :]  # of shape (batch_size x vocab_size)
-
-            # no need to convert logits into probabilities first (via softmax), argmax can be directly applied to logits
-            next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape (batch_size)
-
-            # convert next token to padding token if given sentence has already finished (denoted by a 0 in unfinished_sequences)
-            # padding tokens are ignored when decoding, if skip_special_tokens=True is set
-            next_tokens = next_tokens * unfinished_sequences + self.pad_token_id * (1 - unfinished_sequences)
-
-            # update variables for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            model_kwargs = self._update_model_kwargs_for_generation(presents, model_kwargs)
-            cur_len += 1
-
-            # if eos_token was found in one sentence, set sentence to finished (by converting 1 to 0 for that sentence)
-            binary_mask = (next_tokens != self.eos_token_id).long()
-            unfinished_sequences = unfinished_sequences.mul(binary_mask)
-
-            # stop when all sentences are finished (i.e. all sentences have value 0 in unfinished_sequences),
-            # or if we exceed the maximum length
-            if unfinished_sequences.max() == 0 or (max_length and cur_len >= max_length):
-                break
-
-        return input_ids
-
     def forward(self,
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,  # shape (batch_size x seq_len)
@@ -651,6 +403,260 @@ class DecoderModel(nn.Module):
         if use_cache:
             return lm_logits, presents
 
+    @torch.no_grad()
+    def generate(self,
+                 image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim)
+                 max_length: int = None,
+                 num_beams: int = 1,
+                 num_beam_groups: int = 1,
+                 do_sample: bool = False,
+                 num_return_sequences: int = 1,
+                 early_stopping: bool = True
+                 ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
+        """
+        Generates output ids for a batch of image features.
+        These output ids can then be decoded by the tokenizer to get the generated sentences.
+        """
+        batch_size = image_hidden_states.size(0)
+
+        # start with the bos_token_id for all image features in the batch.
+        input_ids = torch.full(size=(batch_size, 1), fill_value=self.bos_token_id, dtype=torch.int64, device=self.device)
+        model_kwargs = {"attention_mask": torch.ones(size=(batch_size, 1), dtype=torch.int64, device=self.device),
+                        "use_cache": True}
+
+        is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False
+        is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True
+        is_beam_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is False
+        is_beam_sample_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is True
+        is_group_beam_gen_mode = (num_beams > 1) and (num_beam_groups > 1)
+
+        if num_beam_groups > num_beams:
+            raise ValueError("'num_beam_groups' has to be smaller or equal to 'num_beams'")
+        if is_group_beam_gen_mode and do_sample is True:
+            raise ValueError(
+                "Diverse beam search cannot be used in sampling mode. Make sure that 'do_sample' is set to 'False'."
+            )
+
+        # go into different generation modes
+        if is_greedy_gen_mode:
+            if num_return_sequences > 1:
+                raise ValueError(
+                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
+                )
+
+            return self.greedy_search(
+                input_ids,
+                image_hidden_states,
+                max_length,
+                **model_kwargs
+            )
+        elif is_sample_gen_mode:
+            raise NotImplementedError("Multinomial sampling is not implemented.")
+        elif is_beam_gen_mode:
+            if num_return_sequences > num_beams:
+                raise ValueError("'num_return_sequences' has to be smaller or equal to 'num_beams'.")
+
+            if max_length is None:
+                raise ValueError("max_length has to be set for beam generation.")
+
+            beam_scorer = BeamSearchScorer(
+                batch_size=batch_size,
+                num_beams=num_beams,
+                device=self.device,
+                length_penalty=1.0,  # length_penalty > 0.0 encourages the model to generate shorter sequences
+                do_early_stopping=early_stopping,
+                num_beam_hyps_to_keep=num_return_sequences,
+            )
+
+            # interleave input_ids with 'num_beams' additional sequences per batch
+            input_ids, model_kwargs = self._expand_inputs_for_generation(input_ids, expand_size=num_beams, **model_kwargs)
+
+            return self.beam_search(
+                input_ids,
+                image_hidden_states,
+                max_length,
+                beam_scorer,
+                **model_kwargs,
+            )
+        elif is_beam_sample_gen_mode:
+            raise NotImplementedError("Beam-search multinomial sampling is not implemented.")
+        elif is_group_beam_gen_mode:
+            raise NotImplementedError("Diverse beam-search decoding is not implemented.")
+
+    def _expand_inputs_for_generation(self, input_ids, expand_size, attention_mask, **model_kwargs):
+        expanded_return_idx = (
+            torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
+        )
+        input_ids = input_ids.index_select(0, expanded_return_idx)
+
+        if attention_mask is not None:
+            model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
+
+        return input_ids, model_kwargs
+
+    def _reorder_cache(self, past, beam_idx):
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
+        )
+
+    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        # only use last token for inputs_ids if past is defined in kwargs
+        if past:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        else:
+            position_ids = None
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+        }
+
+    def _update_model_kwargs_for_generation(self, presents, model_kwargs):
+        model_kwargs["past"] = presents
+        attention_mask = model_kwargs["attention_mask"]
+        model_kwargs["attention_mask"] = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1)
+
+        return model_kwargs
+
+    def beam_search(self,
+                    input_ids,
+                    image_hidden_states,
+                    max_length,
+                    beam_scorer,
+                    **model_kwargs):
+        batch_size = len(beam_scorer._beam_hyps)
+        num_beams = beam_scorer.num_beams
+
+        batch_beam_size, cur_len = input_ids.shape
+
+        if num_beams * batch_size != batch_beam_size:
+            raise ValueError(
+                f"Batch dimension of 'input_ids' should be {num_beams * batch_size}, but is {batch_beam_size}."
+            )
+
+        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
+        beam_scores[:, 1:] = -1e9
+        beam_scores = beam_scores.view((batch_size * num_beams,))
+
+        while True:
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            lm_logits, presents = self.forward(**model_inputs, image_hidden_states=image_hidden_states, return_loss=False)
+
+            next_token_logits = lm_logits[:, -1, :]
+
+            next_token_scores = nn.functional.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+
+            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
+
+            vocab_size = next_token_scores.shape[-1]
+            next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
+
+            next_token_scores, next_tokens = torch.topk(
+                next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
+            )
+
+            next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
+            next_tokens = next_tokens % vocab_size
+
+            beam_outputs = beam_scorer.process(
+                input_ids,
+                next_token_scores,
+                next_tokens,
+                next_indices,
+                pad_token_id=self.pad_token_id,
+                eos_token_id=self.eos_token_id,
+                beam_indices=None,
+            )
+
+            beam_scores = beam_outputs["next_beam_scores"]
+            beam_next_tokens = beam_outputs["next_beam_tokens"]
+            beam_idx = beam_outputs["next_beam_indices"]
+
+            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+
+            model_kwargs = self._update_model_kwargs_for_generation(presents, model_kwargs)
+
+            if model_kwargs["past"] is not None:
+                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+
+            # increase cur_len
+            cur_len += 1
+
+            if beam_scorer.is_done or (max_length and cur_len >= max_length):
+                break
+
+        sequence_outputs = beam_scorer.finalize(
+            input_ids,
+            beam_scores,
+            next_tokens,
+            next_indices,
+            pad_token_id=self.pad_token_id,
+            eos_token_id=self.eos_token_id,
+            max_length=max_length,
+            beam_indices=None,
+        )
+
+        return sequence_outputs["sequences"]
+
+    def greedy_search(self,
+                      input_ids,  # shape (batch_size x seq_len)
+                      image_hidden_states,  # shape (batch_size x image_hidden_dim)
+                      max_length,
+                      **model_kwargs
+                      ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
+        batch_size = input_ids.size(0)
+        seq_len = input_ids.size(1)
+
+        # keep track of which sequences are already finished
+        # a 1 denotes that a sentence in a batch is unfinished, a 0 denotes that a sentence has finished
+        # finished sentences are padded until all sentences in the batch are finished
+        unfinished_sequences = torch.ones(size=(batch_size,), dtype=torch.int64, device=self.device)
+        cur_len = seq_len
+
+        while True:
+            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+            lm_logits, presents = self.forward(**model_inputs, image_hidden_states=image_hidden_states, return_loss=False)
+
+            next_token_logits = lm_logits[:, -1, :]  # of shape (batch_size x vocab_size)
+
+            # no need to convert logits into probabilities first (via softmax), argmax can be directly applied to logits
+            next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape (batch_size)
+
+            # convert next token to padding token if given sentence has already finished (denoted by a 0 in unfinished_sequences)
+            # padding tokens are ignored when decoding, if skip_special_tokens=True is set
+            next_tokens = next_tokens * unfinished_sequences + self.pad_token_id * (1 - unfinished_sequences)
+
+            # update variables for next step
+            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            model_kwargs = self._update_model_kwargs_for_generation(presents, model_kwargs)
+            cur_len += 1
+
+            # if eos_token was found in one sentence, set sentence to finished (by converting 1 to 0 for that sentence)
+            binary_mask = (next_tokens != self.eos_token_id).long()
+            unfinished_sequences = unfinished_sequences.mul(binary_mask)
+
+            # stop when all sentences are finished (i.e. all sentences have value 0 in unfinished_sequences),
+            # or if we exceed the maximum length
+            if unfinished_sequences.max() == 0 or (max_length and cur_len >= max_length):
+                break
+
+        return input_ids
+
 
 def print_model_summary(batch_size, seq_len, verbose):
     """
@@ -716,36 +722,51 @@ def print_model_summary(batch_size, seq_len, verbose):
 #############################################
 #############################################
 
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-checkpoint = "healx/gpt-2-pubmed-medium"
-
-tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-tokenizer.pad_token_id = tokenizer.eos_token_id
-
-# model = GPT2LMHeadModel.from_pretrained(checkpoint)
-model = DecoderModel()
-model.to(device)
+# from transformers import GPT2Tokenizer, GPT2LMHeadModel
+#
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#
+# checkpoint = "healx/gpt-2-pubmed-medium"
+#
+# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+# tokenizer.pad_token_id = tokenizer.eos_token_id
+#
+# # model = GPT2LMHeadModel.from_pretrained(checkpoint)
+# model = DecoderModel()
+# model.to(device)
 
 # raw_inputs = [
 #     "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
 #     "<|endoftext|>I like this!<|endoftext|>",
 #     "<|endoftext|><|endoftext|>"]
 # raw_inputs = ["<|endoftext|>The new drugs are"]
-raw_inputs = [
-    "<|endoftext|>",
-    "<|endoftext|>"]
+# raw_inputs = [
+#     "<|endoftext|>",
+#     "<|endoftext|>"]
 
-inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-input_ids = inputs["input_ids"].to(device)
-attention_mask = inputs["attention_mask"].to(device)
+# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
+# input_ids = inputs["input_ids"].to(device)
+# attention_mask = inputs["attention_mask"].to(device)
 # model(**inputs, image_hidden_states=image_hidden_states, return_loss=True)
 # print(input_ids)
 
 # greedy_output = model.generate(inputs=input_ids, pad_token_id=tokenizer.eos_token_id, max_length=30, num_beams=3, early_stopping=True)
-greedy_output = model.generate(image_hidden_states=torch.rand(2, 1024).to(device), max_length=30, num_beams=3, early_stopping=True, num_return_sequences=3)
-print(greedy_output)
-for output in greedy_output:
-    print(tokenizer.decode(output, skip_special_tokens=False))
+# greedy_output = model.generate(image_hidden_states=torch.rand(2, 1024).to(device), max_length=30, num_beams=3, early_stopping=True)
+# decoded_output = tokenizer.batch_decode(greedy_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+#
+# for sent in decoded_output:
+#     print(len(sent), sent)
+
+
+bleu_score = evaluate.load("bleu")
+
+# predictions = [["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"]]
+# references = [[["hello there general yoda"], ["boo bar foobar"]], [["hello there yoda"], ["boo bar"]], [["hello yoda"], ["boo foobar"]]]
+predictions = [["hello there general kenobi"], ["hello there general kenobi"]]
+references = [[["hello there general yoda"]], [["hello there captain yoda"]]]
+
+for prediction, reference in zip(predictions, references):
+    bleu_score.add_batch(predictions=prediction, references=reference)
+
+print(bleu_score.compute(max_order=1))
+
