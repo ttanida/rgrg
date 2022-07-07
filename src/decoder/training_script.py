@@ -45,27 +45,63 @@ LR = 1e-4
 EVALUATE_EVERY_K_STEPS = 10000  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 15  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+NUM_BEAMS = 4
+MAX_NUM_TOKENS_GENERATE = 300
 
 
 # bertscore_metric = evaluate.load("bertscore")
 # bleu_metric = evaluate.load("bleu")
 
-def evaluate_model_on_metrics(model, val_dl):
-    metrics_with_scores = {
-        "bleu_1": 0.0,
-        "bleu_2": 0.0,
-        "bleu_3": 0.0,
-        "bleu_4": 0.0,
-        "bert_score": 0.0
-    }
 
-    return metrics_with_scores
+def evaluate_model_on_metrics(model, val_dl, tokenizer):
+    """
+    Args:
+        model (nn.Module): The input model to be evaluated.
+        val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
+        tokenizer (GPT2Tokenizer): Tokenizer used to decode generated ids.
+
+    Returns:
+        metrics_with_scores (dict): Dict that holds the BLEU_1 - BLEU_4 scores as well as BERTScore
+    """
+    metrics_with_scores = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+    metrics_with_scores["bert_score"] = evaluate.load("bertscore")
+
+    model.eval()
+    with torch.no_grad():
+        for batch in tqdm(val_dl):
+            # reference_phrases is a list of list of str
+            _, _, image_hidden_states, reference_phrases = batch.values()
+
+            image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
+
+            beam_search_output = model.generate(image_hidden_states, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+
+            # generated_sentences is a list of str
+            generated_sentences = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+            for score in metrics_with_scores.values():
+                score.add_batch(predictions=generated_sentences, references=reference_phrases)
+
+    metrics_with_final_scores = {}
+    for score_name, score in metrics_with_scores.items():
+        if score_name[:4] == "bleu":
+            result = score.compute(max_order=int(score_name[-1]))
+            metrics_with_final_scores[score_name] = result["bleu"]
+        else:  # bert_score
+            result = score.compute(lang="en", device=device)
+            avg_precision = np.array(result["precision"]).mean()
+            avg_recall = np.array(result["recall"]).mean()
+            avg_f1 = np.array(result["f1"]).mean()
+
+            metrics_with_final_scores["bertscore_precision"] = avg_precision
+            metrics_with_final_scores["bertscore_recall"] = avg_recall
+            metrics_with_final_scores["bertscore_f1"] = avg_f1
+
+    return metrics_with_final_scores
 
 
 def get_val_loss(model, val_dl):
     """
-    Evaluate model on val set.
-
     Args:
         model (nn.Module): The input model to be evaluated.
         val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
@@ -78,7 +114,7 @@ def get_val_loss(model, val_dl):
 
     with torch.no_grad():
         for batch in tqdm(val_dl):
-            input_ids, attention_mask, image_hidden_states = batch.values()
+            input_ids, attention_mask, image_hidden_states, _ = batch.values()
 
             batch_size = input_ids.size(0)
 
@@ -111,7 +147,9 @@ def log_stats_to_console(
     log.info(f"\tVal loss: {val_loss:.3f}")
 
 
-def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience, weights_folder_path, writer):
+def train_model(
+    model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience, weights_folder_path, writer, tokenizer
+):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -193,7 +231,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
 
                 writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
 
-                metrics_with_scores = evaluate_model_on_metrics(model, val_dl)
+                metrics_with_scores = evaluate_model_on_metrics(model, val_dl, tokenizer)
 
                 for metric_name, score in metrics_with_scores.items():
                     writer.add_scalar(metric_name, score, overall_steps_taken)
@@ -208,7 +246,9 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
                     num_evaluations_without_decrease_val_loss = 0
                     lowest_val_loss = val_loss
                     best_epoch = epoch
-                    best_model_save_path = os.path.join(weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth")
+                    best_model_save_path = os.path.join(
+                        weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth"
+                    )
                     best_model_state = deepcopy(model.state_dict())
                 else:
                     num_evaluations_without_decrease_val_loss += 1
@@ -307,7 +347,9 @@ def get_tokenizer():
 def get_datasets_with_phrases(config_file_path):
     # path to the csv files specifying the train, val, test sets
     path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
-    datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid"]}
+    datasets_as_dfs = {
+        dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid"]
+    }
 
     # only read in the phrases
     usecols = ["phrases"]
@@ -372,7 +414,9 @@ def create_run_folder_with_config_file():
         "LR": LR,
         "EVALUATE_EVERY_K_STEPS": EVALUATE_EVERY_K_STEPS,
         "PATIENCE": PATIENCE,
-        "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER
+        "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
+        "NUM_BEAMS": NUM_BEAMS,
+        "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
     }
 
     with open(config_file_path, "w") as f:
@@ -392,10 +436,15 @@ def main():
     tokenizer = get_tokenizer()
 
     # tokenize the raw datasets
-    tokenized_train_dataset, tokenized_val_dataset = get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset)
+    tokenized_train_dataset, tokenized_val_dataset = get_tokenized_datasets(
+        tokenizer, raw_train_dataset, raw_val_dataset
+    )
 
     # complete dataset will return a dict with keys "input_ids", "attention_mask", "image_hidden_states" when indexed,
     # with "image_hidden_states" mapping to a tensor of size 1024 that are the image features of the given bbox image
+
+    # validation dataset has an additional key called "phrase" that will return the corresponding ground-truth phrase
+    # this is required to compute the BLEU/BERT scores in evaluate_model_on_metrics
     train_dataset_complete = CustomImageWordDataset("train", tokenized_train_dataset)
     val_dataset_complete = CustomImageWordDataset("val", tokenized_val_dataset)
 
@@ -420,7 +469,8 @@ def main():
         epochs=EPOCHS,
         patience=PATIENCE,
         weights_folder_path=weights_folder_path,
-        writer=writer
+        writer=writer,
+        tokenizer=tokenizer,
     )
 
 

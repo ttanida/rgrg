@@ -32,7 +32,7 @@ class CustomImageWordDataset(Dataset):
                     "input_ids": self.tokenized_dataset[index]["input_ids"],
                     "attention_mask": self.tokenized_dataset[index]["attention_mask"],
                     "image_hidden_states": self.image_features[index],
-                    "phrase": self.tokenized_dataset[index]["phrases"]
+                    "reference_phrase": self.tokenized_dataset[index]["phrases"]
                 }
         except Exception:
             return None

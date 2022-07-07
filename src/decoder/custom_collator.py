@@ -25,7 +25,7 @@ class CustomCollatorWithPadding:
             # remove image_hidden_states vectors from batch and store them in dedicated image_hidden_states_batch tensor
             image_hidden_states_batch[i] = sample.pop("image_hidden_states")
             if self.is_val:
-                reference_phrases_batch.append(list(sample.pop("phrase")))
+                reference_phrases_batch.append([sample.pop("reference_phrase")])
 
         # batch now only contains samples with input_ids and attention_mask keys
         # the tokenizer will turn the batch variable into a single dict with input_ids and attention_mask keys,
@@ -37,6 +37,6 @@ class CustomCollatorWithPadding:
 
         # add the reference phrases to the dict for a validation batch
         if self.is_val:
-            batch["phrases"] = reference_phrases_batch
+            batch["reference_phrases"] = reference_phrases_batch
 
         return batch
