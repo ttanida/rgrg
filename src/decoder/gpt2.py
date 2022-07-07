@@ -406,7 +406,7 @@ class DecoderModel(nn.Module):
                  num_beam_groups: int = 1,
                  do_sample: bool = False,
                  num_return_sequences: int = 1,
-                 early_stopping: bool = True
+                 early_stopping: bool = False
                  ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
         """
         Generates output ids for a batch of image features.

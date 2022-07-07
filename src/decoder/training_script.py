@@ -33,7 +33,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 2
+RUN = 3
 # PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
 # PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 5e-5
@@ -98,7 +98,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
 
             image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
 
-            beam_search_output = model.generate(image_hidden_states, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+            beam_search_output = model.generate(image_hidden_states, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=False)
 
             # generated_sentences is a list of str
             generated_sentences = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -361,7 +361,10 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
         phrase = example["phrases"]
         bos_token = "<|endoftext|>"  # note: in the GPT2 tokenizer, bos_token = eos_token = "<|endoftext|>"
         eos_token = "<|endoftext|>"
-        phrase_with_special_tokens = bos_token + phrase + eos_token
+        if len(phrase) == 0:
+            phrase_with_special_tokens = bos_token + "#" + eos_token
+        else:
+            phrase_with_special_tokens = bos_token + phrase + eos_token
         return tokenizer(phrase_with_special_tokens, truncation=True, max_length=1024)
 
     # don't set batched=True, otherwise phrases that are empty will not be processed correctly

@@ -27,12 +27,13 @@ class CustomImageWordDataset(Dataset):
                     "image_hidden_states": self.image_features[index]
                 }
             else:
+                reference_phrase = self.tokenized_dataset[index]["phrases"]
                 # for the validation set, also return the corresponding ground-truth phrase to compute BLEU/BERTscore
                 sample = {
                     "input_ids": self.tokenized_dataset[index]["input_ids"],
                     "attention_mask": self.tokenized_dataset[index]["attention_mask"],
                     "image_hidden_states": self.image_features[index],
-                    "reference_phrase": self.tokenized_dataset[index]["phrases"]
+                    "reference_phrase": reference_phrase if len(reference_phrase) > 0 else "#"
                 }
         except Exception:
             return None
