@@ -668,9 +668,9 @@ def print_model_summary(batch_size, seq_len, verbose):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = DecoderModel()
-    model.to(device)
+    model.to(device, non_blocking=True)
 
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    inputs = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
 
     if verbose == 0:
         summary(model)
