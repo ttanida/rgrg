@@ -248,14 +248,15 @@ def get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete):
         np.random.seed(worker_seed)
         random.seed(worker_seed)
 
-    custom_collate_with_padding = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest")
+    custom_collate_train = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=False)
+    custom_collate_val = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=True)
 
     g = torch.Generator()
     g.manual_seed(seed_val)
 
     train_loader = DataLoader(
         train_dataset_complete,
-        collate_fn=custom_collate_with_padding,
+        collate_fn=custom_collate_train,
         batch_size=BATCH_SIZE,
         shuffle=True,
         num_workers=NUM_WORKERS,
@@ -265,7 +266,7 @@ def get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete):
     )
     val_loader = DataLoader(
         val_dataset_complete,
-        collate_fn=custom_collate_with_padding,
+        collate_fn=custom_collate_val,
         batch_size=BATCH_SIZE,
         shuffle=False,
         num_workers=NUM_WORKERS,
@@ -288,9 +289,9 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
-    # remove redundant "phrases" column
+    # remove redundant "phrases" column for the train set
+    # keep the "phrases" column for the val set, since we need the gt phrases to compute BLEU/BERT scores
     tokenized_train_dataset = tokenized_train_dataset.remove_columns(["phrases"])
-    tokenized_val_dataset = tokenized_val_dataset.remove_columns(["phrases"])
 
     return tokenized_train_dataset, tokenized_val_dataset
 
