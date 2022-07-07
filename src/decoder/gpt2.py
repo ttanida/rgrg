@@ -1,5 +1,5 @@
 from typing import Optional, Tuple
-
+from copy import deepcopy
 import os
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -756,17 +756,22 @@ def print_model_summary(batch_size, seq_len, verbose):
 #
 # for sent in decoded_output:
 #     print(len(sent), sent)
+#
+#
 
-
-bleu_score = evaluate.load("bleu")
+blue_scores = {f"bleu_score_{i}": evaluate.load("bleu") for i in range(1, 5)}
 
 # predictions = [["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"]]
 # references = [[["hello there general yoda"], ["boo bar foobar"]], [["hello there yoda"], ["boo bar"]], [["hello yoda"], ["boo foobar"]]]
-predictions = [["hello there general kenobi"], ["hello there general kenobi"]]
-references = [[["hello there general yoda"]], [["hello there captain yoda"]]]
+# predictions = [["hello there general kenobi"], ["hello there general kenobi"]]
+# references = [[["hello there general yoda"]], [["hello there captain yoda"]]]
+predictions = [["hello there general kenobi"]]
+references = [[["hello there general yoda"]]]
 
 for prediction, reference in zip(predictions, references):
-    bleu_score.add_batch(predictions=prediction, references=reference)
+    for blue_score in blue_scores.values():
+        blue_score.add_batch(predictions=prediction, references=reference)
 
-print(bleu_score.compute(max_order=1))
-
+for blue_score_name, blue_score in blue_scores.items():
+    result = blue_score.compute(max_order=int(blue_score_name[-1]))
+    print(f"{blue_score_name}: {result['bleu']}")

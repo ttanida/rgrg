@@ -50,6 +50,18 @@ PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduc
 # bertscore_metric = evaluate.load("bertscore")
 # bleu_metric = evaluate.load("bleu")
 
+def evaluate_model_on_metrics(model, val_dl):
+    metrics_with_scores = {
+        "bleu_1": 0.0,
+        "bleu_2": 0.0,
+        "bleu_3": 0.0,
+        "bleu_4": 0.0,
+        "bert_score": 0.0
+    }
+
+    return metrics_with_scores
+
+
 def get_val_loss(model, val_dl):
     """
     Evaluate model on val set.
