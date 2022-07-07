@@ -1,11 +1,6 @@
 from typing import Optional, Tuple
-from copy import deepcopy
-import os
-
-os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 import evaluate
-
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
