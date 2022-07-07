@@ -767,6 +767,6 @@ def print_model_summary(batch_size, seq_len, verbose):
 #     for blue_score in blue_scores.values():
 #         blue_score.add_batch(predictions=prediction, references=reference)
 
-for blue_score_name, blue_score in blue_scores.items():
-    result = blue_score.compute(max_order=int(blue_score_name[-1]))
-    print(f"{blue_score_name}: {result['bleu']}")
+# for blue_score_name, blue_score in blue_scores.items():
+#     result = blue_score.compute(max_order=int(blue_score_name[-1]))
+#     print(f"{blue_score_name}: {result['bleu']}")

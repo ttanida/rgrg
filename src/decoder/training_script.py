@@ -47,18 +47,37 @@ PATIENCE = 15  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 3  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 
 
-# bertscore_metric = evaluate.load("bertscore")
-# bleu_metric = evaluate.load("bleu")
+def write_sentences_to_file(
+        gen_and_ref_sentences_to_save_to_file,
+        generated_sentences_folder_path,
+        overall_steps_taken):
+    generated_sentences_txt_file = os.path.join(generated_sentences_folder_path, f"generated_sentences_step_{overall_steps_taken}")
+
+    # generated_sentences is a list of str
+    generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
+
+    # reference_sentences is a list of list of str
+    reference_sentences = gen_and_ref_sentences_to_save_to_file["reference_sentences"]
+
+    with open(generated_sentences_txt_file, "w") as f:
+        for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
+            f.write(f"Generated sentence: {gen_sent}\n")
+            f.write(f"Reference sentence: {ref_sent}\n\n")
 
 
-def evaluate_model_on_metrics(model, val_dl, tokenizer):
+def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken):
     """
+    Evaluate model on BLEU_1 - BLEU_4 and BERTScore, and also write a certain number of generated sentences with their ground-truth
+    references to a txt file for manual inspection.
+
     Args:
         model (nn.Module): The input model to be evaluated.
         val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
         tokenizer (GPT2Tokenizer): Tokenizer used to decode generated ids.
+        generated_sentences_folder_path (str): Folder that contains all txt files with generated sentences per evaluation.
 
     Returns:
         metrics_with_scores (dict): Dict that holds the BLEU_1 - BLEU_4 scores as well as BERTScore
@@ -66,11 +85,16 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
     metrics_with_scores = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
     metrics_with_scores["bert_score"] = evaluate.load("bertscore")
 
+    gen_and_ref_sentences_to_save_to_file = {
+        "generated_sentences": [],
+        "reference_sentences": []
+    }
+
     model.eval()
     with torch.no_grad():
-        for batch in tqdm(val_dl):
+        for num_batch, batch in tqdm(enumerate(val_dl)):
             # reference_phrases is a list of list of str
-            _, _, image_hidden_states, reference_phrases = batch.values()
+            _, _, image_hidden_states, reference_sentences = batch.values()
 
             image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
 
@@ -79,8 +103,14 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
             # generated_sentences is a list of str
             generated_sentences = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
+            if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
+                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences)
+                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences)
+
             for score in metrics_with_scores.values():
-                score.add_batch(predictions=generated_sentences, references=reference_phrases)
+                score.add_batch(predictions=generated_sentences, references=reference_sentences)
+
+    write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken)
 
     metrics_with_final_scores = {}
     for score_name, score in metrics_with_scores.items():
@@ -148,7 +178,17 @@ def log_stats_to_console(
 
 
 def train_model(
-    model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience, weights_folder_path, writer, tokenizer
+    model,
+    train_dl,
+    val_dl,
+    optimizer,
+    lr_scheduler,
+    epochs,
+    patience,
+    weights_folder_path,
+    writer,
+    tokenizer,
+    generated_sentences_folder_path
 ):
     """
     Train a model on train set and evaluate on validation set.
@@ -231,7 +271,7 @@ def train_model(
 
                 writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
 
-                metrics_with_scores = evaluate_model_on_metrics(model, val_dl, tokenizer)
+                metrics_with_scores = evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken)
 
                 for metric_name, score in metrics_with_scores.items():
                     writer.add_scalar(metric_name, score, overall_steps_taken)
@@ -382,7 +422,7 @@ def get_datasets_with_phrases(config_file_path):
     return raw_train_dataset, raw_val_dataset
 
 
-def create_run_folder_with_config_file():
+def create_run_folder():
     """
     Run folder will contain a folder for saving the trained weights, a folder for the tensorboard files
     as well as a config file that specifies the overall parameters used for training.
@@ -392,6 +432,7 @@ def create_run_folder_with_config_file():
     run_folder_path = os.path.join(run_folder_path_parent_dir, f"run_{RUN}")
     weights_folder_path = os.path.join(run_folder_path, "weights")
     tensorboard_folder_path = os.path.join(run_folder_path, "tensorboard")
+    generated_sentences_folder_path = os.path.join(run_folder_path, "generated_sentences")
 
     if os.path.exists(run_folder_path):
         log.error(f"Folder to save run {RUN} already exists at {run_folder_path}.")
@@ -401,6 +442,7 @@ def create_run_folder_with_config_file():
     os.mkdir(run_folder_path)
     os.mkdir(weights_folder_path)
     os.mkdir(tensorboard_folder_path)
+    os.mkdir(generated_sentences_folder_path)
 
     log.info(f"Run {RUN} folder created at {run_folder_path}.")
 
@@ -417,6 +459,7 @@ def create_run_folder_with_config_file():
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
+        "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE
     }
 
     with open(config_file_path, "w") as f:
@@ -424,11 +467,11 @@ def create_run_folder_with_config_file():
         for param_name, param_value in config_parameters.items():
             f.write(f"\t{param_name}: {param_value}\n")
 
-    return weights_folder_path, tensorboard_folder_path, config_file_path
+    return weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_folder_path
 
 
 def main():
-    weights_folder_path, tensorboard_folder_path, config_file_path = create_run_folder_with_config_file()
+    weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_folder_path = create_run_folder()
 
     # get the datasets with the raw phrases before tokenization
     raw_train_dataset, raw_val_dataset = get_datasets_with_phrases(config_file_path)
@@ -471,6 +514,7 @@ def main():
         weights_folder_path=weights_folder_path,
         writer=writer,
         tokenizer=tokenizer,
+        generated_sentences_folder_path=generated_sentences_folder_path
     )
 
 
