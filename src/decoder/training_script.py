@@ -65,7 +65,7 @@ def write_sentences_to_file(
     with open(generated_sentences_txt_file, "w") as f:
         for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
             f.write(f"Generated sentence: {gen_sent}\n")
-            f.write(f"Reference sentence: {ref_sent}\n\n")
+            f.write(f"Reference sentence: {ref_sent[0]}\n\n")
 
 
 def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken):
@@ -237,7 +237,7 @@ def train_model(
     for epoch in range(epochs):
         train_loss = 0.0
         steps_taken = 0
-        for num_batch, batch in enumerate(train_dl):
+        for num_batch, batch in tqdm(enumerate(train_dl)):
             # batch is a dict with keys for 'input_ids', 'attention_mask', 'image_hidden_states' (see custom_image_word_dataset)
             input_ids, attention_mask, image_hidden_states = batch.values()
 

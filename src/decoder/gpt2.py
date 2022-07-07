@@ -574,7 +574,7 @@ class DecoderModel(nn.Module):
                 next_indices,
                 pad_token_id=self.pad_token_id,
                 eos_token_id=self.eos_token_id,
-                beam_indices=None,
+                # beam_indices=None,
             )
 
             beam_scores = beam_outputs["next_beam_scores"]
@@ -602,7 +602,7 @@ class DecoderModel(nn.Module):
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
             max_length=max_length,
-            beam_indices=None,
+            # beam_indices=None,
         )
 
         return sequence_outputs["sequences"]
@@ -754,19 +754,19 @@ def print_model_summary(batch_size, seq_len, verbose):
 #
 #
 
-# blue_scores = {f"bleu_score_{i}": evaluate.load("bleu") for i in range(1, 5)}
+blue_scores = {f"bleu_score_{i}": evaluate.load("bleu") for i in range(1, 5)}
 
 # predictions = [["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"]]
 # references = [[["hello there general yoda"], ["boo bar foobar"]], [["hello there yoda"], ["boo bar"]], [["hello yoda"], ["boo foobar"]]]
 # predictions = [["hello there general kenobi"], ["hello there general kenobi"]]
 # references = [[["hello there general yoda"]], [["hello there captain yoda"]]]
-# predictions = [["hello there general kenobi"]]
-# references = [[["hello there general yoda"]]]
+predictions = [["hello there general kenobi"]]
+references = [[[""]]]
 
-# for prediction, reference in zip(predictions, references):
-#     for blue_score in blue_scores.values():
-#         blue_score.add_batch(predictions=prediction, references=reference)
+for prediction, reference in zip(predictions, references):
+    for blue_score in blue_scores.values():
+        blue_score.add_batch(predictions=prediction, references=reference)
 
-# for blue_score_name, blue_score in blue_scores.items():
-#     result = blue_score.compute(max_order=int(blue_score_name[-1]))
-#     print(f"{blue_score_name}: {result['bleu']}")
+for blue_score_name, blue_score in blue_scores.items():
+    result = blue_score.compute(max_order=int(blue_score_name[-1]))
+    print(f"{blue_score_name}: {result['bleu']}")
