@@ -34,11 +34,11 @@ torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
 RUN = 3
-# PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
-# PERCENTAGE_OF_VAL_SET_TO_USE = 0.5
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 5e-5
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
-BATCH_SIZE = 32
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
+# PERCENTAGE_OF_TRAIN_SET_TO_USE = 5e-5
+# PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
+BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 30
 LR = 1e-4
@@ -47,7 +47,8 @@ PATIENCE = 15  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 3  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+NUM_SENTENCES_TO_GENERATE = 3000
 
 
 def write_sentences_to_file(
@@ -90,15 +91,24 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
         "reference_sentences": []
     }
 
+    # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
+    # we only generate NUM_SENTENCES_TO_GENERATE sentences
+    num_batches_to_process = NUM_SENTENCES_TO_GENERATE // BATCH_SIZE
+
+    log.info(f"\nStarting to evaluate metrics at step {overall_steps_taken}!\n")
+
     model.eval()
     with torch.no_grad():
-        for num_batch, batch in tqdm(enumerate(val_dl)):
+        for num_batch, batch in tqdm(enumerate(val_dl), total=num_batches_to_process):
+            if num_batch >= num_batches_to_process:
+                break
+
             # reference_phrases is a list of list of str
             _, _, image_hidden_states, reference_sentences = batch.values()
 
             image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
 
-            beam_search_output = model.generate(image_hidden_states, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=False)
+            beam_search_output = model.generate(image_hidden_states, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
 
             # generated_sentences is a list of str
             generated_sentences = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -109,6 +119,8 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
 
             for score in metrics_with_scores.values():
                 score.add_batch(predictions=generated_sentences, references=reference_sentences)
+
+    log.info(f"\nSaving generated sentences at step {overall_steps_taken}!\n")
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken)
 
@@ -235,6 +247,8 @@ def train_model(
     overall_steps_taken = 0  # for logging to tensorboard
 
     for epoch in range(epochs):
+        log.info(f"\nTraining epoch {epoch}!\n")
+
         train_loss = 0.0
         steps_taken = 0
         for num_batch, batch in tqdm(enumerate(train_dl)):
@@ -264,17 +278,23 @@ def train_model(
             overall_steps_taken += 1
 
             # evaluate every k steps and also at the end of an epoch
-            if (steps_taken + 1) >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
+            if steps_taken >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
+                log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
+
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
                 val_loss = get_val_loss(model, val_dl)
 
                 writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
 
+                log.info(f"\nTrain and val loss evaluated at step {overall_steps_taken}!\n")
+
                 metrics_with_scores = evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken)
 
                 for metric_name, score in metrics_with_scores.items():
                     writer.add_scalar(metric_name, score, overall_steps_taken)
+
+                log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
                 # set the model back to training
                 model.train()
@@ -462,7 +482,8 @@ def create_run_folder():
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
-        "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE
+        "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
+        "NUM_SENTENCES_TO_GENERATE": NUM_SENTENCES_TO_GENERATE
     }
 
     with open(config_file_path, "w") as f:
