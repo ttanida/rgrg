@@ -11,7 +11,6 @@ class CustomImageWordDataset(Dataset):
 
         self.image_features = torch.load(path_to_image_feature_vectors, map_location=torch.device('cpu'))
         self.tokenized_dataset = tokenized_dataset
-        self.dataset_name = dataset_name
 
     def __len__(self):
         return len(self.tokenized_dataset)
@@ -20,21 +19,28 @@ class CustomImageWordDataset(Dataset):
         # if something in __get__item fails, then return None
         # collate_fn in dataloader filters out None values
         try:
-            if self.dataset_name == "train":
-                sample = {
-                    "input_ids": self.tokenized_dataset[index]["input_ids"],
-                    "attention_mask": self.tokenized_dataset[index]["attention_mask"],
-                    "image_hidden_states": self.image_features[index]
-                }
-            else:
-                reference_phrase = self.tokenized_dataset[index]["phrases"]
-                # for the validation set, also return the corresponding ground-truth phrase to compute BLEU/BERTscore
-                sample = {
-                    "input_ids": self.tokenized_dataset[index]["input_ids"],
-                    "attention_mask": self.tokenized_dataset[index]["attention_mask"],
-                    "image_hidden_states": self.image_features[index],
-                    "reference_phrase": reference_phrase if len(reference_phrase) > 0 else "#"
-                }
+            sample = {
+                "input_ids": self.tokenized_dataset[index]["input_ids"],
+                "attention_mask": self.tokenized_dataset[index]["attention_mask"],
+                "image_hidden_states": self.image_features[index]
+            }
+
+            # val set will have an additional column called "phrases", which are the reference phrases for the image regions
+            # these are necessary to compute the BLEU/BERTscore during evaluation
+            reference_phrase = self.tokenized_dataset[index].get("phrases")
+            if isinstance(reference_phrase, str):
+                # replace empty reference phrase with hash symbol
+                sample["reference_phrase"] = reference_phrase if len(reference_phrase) > 0 else "#"
+
+            # val set may have an additional column called "finding_exists", which is a boolean variable that indicates if
+            # a reference phrase describing a region states that there is a finding (e.g. "There is pneumothorax.")
+            # or not (e.g. "There is no pneumothorax.")
+            # this variable helps to compute BLEU/BERTscore for reference phrases that have findings and those that don't
+            # -> allows to draw comparisons between those 2 cases
+            finding_exists = self.tokenized_dataset[index].get("finding_exists")
+            if isinstance(finding_exists, bool):
+                sample["finding_exists"] = finding_exists
+
         except Exception:
             return None
 

@@ -98,7 +98,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
                 break
 
             # reference_phrases is a list of list of str
-            _, _, image_hidden_states, reference_sentences = batch.values()
+            _, _, image_hidden_states, reference_sentences, finding_exists_list = batch.values()
 
             image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
 
@@ -148,7 +148,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
 
 
 def get_data_loaders(tokenizer, val_dataset_complete):
-    custom_collate_val = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=True)
+    custom_collate_val = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=True, has_finding_exists_column=True)
 
     val_loader = DataLoader(
         val_dataset_complete,
@@ -174,7 +174,7 @@ def get_tokenized_datasets(tokenizer, raw_val_dataset):
         return tokenizer(phrase_with_special_tokens, truncation=True, max_length=1024)
 
     # don't set batched=True, otherwise phrases that are empty will not be processed correctly
-    # tokenized datasets will consist of the columns "phrases", "input_ids", "attention_mask"
+    # tokenized datasets will consist of the columns "phrases", "input_ids", "attention_mask", "finding_exists"
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
     return tokenized_val_dataset
@@ -188,13 +188,13 @@ def get_tokenizer():
     return tokenizer
 
 
-def get_datasets_with_phrases():
+def get_datasets_with_phrases_and_finding_exists():
     # path to the csv files specifying the train, val, test sets
-    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
+    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full-with-findings-column"
     datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["valid"]}
 
-    # only read in the phrases
-    usecols = ["phrases"]
+    # only read in the phrases and finding_exists boolean variable
+    usecols = ["phrases", "finding_exists"]
     datasets_as_dfs = {
         dataset: pd.read_csv(csv_file_path, usecols=usecols, keep_default_na=False)
         for dataset, csv_file_path in datasets_as_dfs.items()
@@ -219,12 +219,12 @@ def main():
     model.eval()
     model.to(device, non_blocking=True)
 
-    # get the dataset with the raw phrases before tokenization
-    raw_val_dataset = get_datasets_with_phrases()
+    # get the dataset with the raw phrases and finding_exists boolean before tokenization
+    raw_val_dataset = get_datasets_with_phrases_and_finding_exists()
 
     tokenizer = get_tokenizer()
 
-    # tokenize the raw dataset
+    # tokenized_val_dataset has the columns "phrases", "input_ids", "attention_mask", "finding_exists"
     tokenized_val_dataset = get_tokenized_datasets(tokenizer, raw_val_dataset)
 
     val_dataset_complete = CustomImageWordDataset("val", tokenized_val_dataset)

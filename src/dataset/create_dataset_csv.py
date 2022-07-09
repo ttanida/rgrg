@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full-with-findings-column"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -54,6 +54,9 @@ def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
         csv_writer = csv.writer(fp)
 
         header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
+
+        if CREATE_FINDINGS_COLUMN:
+            header.append("finding_exists")
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
@@ -391,6 +394,24 @@ def create_new_csv_files(csv_files_dict):
         create_new_csv_file(dataset, path_csv_file)
 
 
+def get_images_to_avoid():
+    path_to_images_to_avoid = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits", "images_to_avoid.csv")
+
+    image_ids_to_avoid = set()
+
+    with open(path_to_images_to_avoid) as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=",")
+
+        # skip the first line (i.e. the header line)
+        next(csv_reader)
+
+        for row in csv_reader:
+            image_id = row[2]
+            image_ids_to_avoid.add(image_id)
+
+    return image_ids_to_avoid
+
+
 def get_train_val_test_csv_files():
     """Return a dict with datasets as keys and paths to the corresponding csv files in the chest-imagenome dataset as values"""
     path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
@@ -399,6 +420,12 @@ def get_train_val_test_csv_files():
 
 def main():
     csv_files_dict = get_train_val_test_csv_files()
+
+    # the "splits" directory of chest-imagenome contains a csv file called "images_to_avoid.csv",
+    # which contains image IDs for images in the gold standard dataset, which should all be excluded
+    # from model training and validation
+    # image_ids_to_avoid = get_images_to_avoid()
+
     create_new_csv_files(csv_files_dict)
 
 
