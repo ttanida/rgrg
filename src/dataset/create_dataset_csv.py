@@ -426,6 +426,8 @@ def main():
     # from model training and validation
     # image_ids_to_avoid = get_images_to_avoid()
 
+    # TODO: add image_ids_to_avoid to get_rows
+    # create_new_csv_files(csv_files_dict, image_ids_to_avoid)
     create_new_csv_files(csv_files_dict)
 
 
