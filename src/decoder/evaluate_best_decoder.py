@@ -100,8 +100,6 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
     return metrics_with_final_scores
 
 
-
-
 def get_data_loaders(tokenizer, val_dataset_complete):
     custom_collate_val = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=True)
 
