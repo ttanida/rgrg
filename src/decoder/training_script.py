@@ -241,9 +241,6 @@ def train_model(
     # parameter to determine early stopping
     num_evaluations_without_decrease_val_loss = 0
 
-    num_epochs_without_saving_best_model = 0  # parameter to determine if model should be saved
-    save_model_every_k_epochs = 3  # intermittently save the best current model
-
     overall_steps_taken = 0  # for logging to tensorboard
 
     for epoch in range(epochs):
@@ -328,11 +325,8 @@ def train_model(
                 train_loss = 0.0
                 steps_taken = 0
 
-        num_epochs_without_saving_best_model += 1
-
-        if num_epochs_without_saving_best_model >= save_model_every_k_epochs:
-            torch.save(best_model_state, best_model_save_path)
-            num_epochs_without_saving_best_model = 0
+        # save the current best model weights at the end of each epoch
+        torch.save(best_model_state, best_model_save_path)
 
     # save the model with the overall lowest val loss
     torch.save(best_model_state, best_model_save_path)
