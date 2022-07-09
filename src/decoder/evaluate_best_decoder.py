@@ -44,6 +44,34 @@ def write_sentences_to_file(
             f.write(f"Reference sentence: {ref_sent[0]}\n\n")
 
 
+def remove_empty_reference_sentences(generated_sentences, reference_sentences):
+    filtered_generated_sentences = []
+    filtered_reference_sentences = []
+
+    for gen_sentence, ref_sentence in zip(generated_sentences, reference_sentences):
+        # only append non-empty reference sentences (and corresponding generated sentences)
+        if ref_sentence[0] != "#":
+            filtered_generated_sentences.append(gen_sentence)
+            filtered_reference_sentences.append(ref_sentence)
+
+    return filtered_generated_sentences, filtered_reference_sentences
+
+
+def compute_scores_for_sentence_generation(tp, fp, fn, tn, generated_sentences, reference_sentences):
+    for gen_sentence, ref_sentence in zip(generated_sentences, reference_sentences):
+        ref_sentence = ref_sentence[0]  # since it's originally a list of str
+        if ref_sentence != "#" and gen_sentence != "#":
+            tp += 1
+        elif ref_sentence == "#" and gen_sentence != "#":
+            fp += 1
+        elif ref_sentence != "#" and gen_sentence == "#":
+            fn += 1
+        elif ref_sentence == "#" and gen_sentence == "#":
+            tn += 1
+
+    return tp, fp, fn, tn
+
+
 def evaluate_model_on_metrics(model, val_dl, tokenizer):
     metrics_with_scores = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
     metrics_with_scores["bert_score"] = evaluate.load("bertscore")
@@ -56,6 +84,12 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
     # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
     # we only generate NUM_SENTENCES_TO_GENERATE sentences
     num_batches_to_process = NUM_SENTENCES_TO_GENERATE // BATCH_SIZE
+
+    # to compute f1 / precision / recall score for if sentence was generated if there was a reference sentence
+    tp = 0  # there was a reference, and also a sentence generated
+    fp = 0  # there was no reference, but a sentence generated
+    fn = 0  # there was a reference, but no sentence was generated
+    tn = 0  # there was no reference, and also no generated sentence was generated
 
     model.eval()
     with torch.no_grad():
@@ -73,18 +107,23 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
             # generated_sentences is a list of str
             generated_sentences = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
+            tp, fp, fn, tn = compute_scores_for_sentence_generation(tp, fp, fn, tn, generated_sentences, reference_sentences)
+
+            # remove all empty reference sentences (and corresponding generated sentences)
+            filtered_generated_sentences, filtered_reference_sentences = remove_empty_reference_sentences(generated_sentences, reference_sentences)
+
             if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
-                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences)
-                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences)
+                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(filtered_generated_sentences)
+                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(filtered_reference_sentences)
 
             for score in metrics_with_scores.values():
-                score.add_batch(predictions=generated_sentences, references=reference_sentences)
+                score.add_batch(predictions=filtered_generated_sentences, references=filtered_reference_sentences)
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path)
 
     metrics_with_final_scores = {}
     for score_name, score in metrics_with_scores.items():
-        if score_name[:4] == "bleu":
+        if score_name.startswith("bleu"):
             result = score.compute(max_order=int(score_name[-1]))
             metrics_with_final_scores[score_name] = result["bleu"]
         else:  # bert_score
@@ -96,6 +135,14 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
             metrics_with_final_scores["bertscore_precision"] = avg_precision
             metrics_with_final_scores["bertscore_recall"] = avg_recall
             metrics_with_final_scores["bertscore_f1"] = avg_f1
+
+    precision_sent_generation = tp / (tp + fp)
+    recall_sentence_generation = tp / (tp + fn)
+    f1_sent_generation = 2 * (precision_sent_generation * recall_sentence_generation) / (precision_sent_generation + recall_sentence_generation)
+
+    metrics_with_final_scores["precision_sent_generation"] = precision_sent_generation
+    metrics_with_final_scores["recall_sentence_generation"] = recall_sentence_generation
+    metrics_with_final_scores["f1_sent_generation"] = f1_sent_generation
 
     return metrics_with_final_scores
 

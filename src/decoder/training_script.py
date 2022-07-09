@@ -126,7 +126,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
 
     metrics_with_final_scores = {}
     for score_name, score in metrics_with_scores.items():
-        if score_name[:4] == "bleu":
+        if score_name.startswith("bleu"):
             result = score.compute(max_order=int(score_name[-1]))
             metrics_with_final_scores[score_name] = result["bleu"]
         else:  # bert_score

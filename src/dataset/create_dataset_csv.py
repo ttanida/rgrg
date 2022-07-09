@@ -39,6 +39,10 @@ log = logging.getLogger(__name__)
 # if constant is None, then all possible rows are created
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
+# boolean variable to determine if customized csv files should have an additional column that specifies if a phrase describing
+# a region/bbox states that there is a finding (e.g. “There is pneumothorax.”) or no finding (e.g. “There is no pleural effusion.”)
+CREATE_FINDINGS_COLUMN = True
+
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
@@ -93,6 +97,25 @@ def coordinates_faulty(height, width, x1, y1, x2, y2) -> bool:
     exceeds_limits = x1 >= width or y1 >= height
 
     return area_of_bbox_is_zero or smaller_than_zero or exceeds_limits
+
+
+def determine_if_finding_exist(attributes_list: list[list]) -> bool:
+    """
+    attributes_list is a list of lists that contains attributes corresponding to the phrases describing a specific bbox.
+
+    E.g. the phrases: ['Right lung is clear without pneumothorax.', 'No pneumothorax identified.'] have the attributes_list
+    [['anatomicalfinding|no|lung opacity', 'anatomicalfinding|no|pneumothorax', 'nlp|yes|normal'], ['anatomicalfinding|no|pneumothorax']],
+    where the 1st inner list contains the attributes pertaining to the 1st phrase, and the 2nd inner list contains attributes for the 2nd phrase respectively.
+
+    Phrases where a finding is specified as existing have the attribute 'anatomicalfinding|yes'.
+    """
+    for attributes in attributes_list:
+        for attribute in attributes:
+            if attribute.startswith("anatomicalfinding|yes"):
+                return True
+
+    # there was no finding
+    return False
 
 
 def determine_if_abnormal(attributes_list: list[list]) -> bool:
@@ -224,6 +247,10 @@ def get_attributes_dict(image_scene_graph: dict) -> dict[list]:
 
         attributes_dict[bbox_name] = [phrases, is_abnormal]
 
+        if CREATE_FINDINGS_COLUMN:
+            finding_exist = determine_if_finding_exist(attribute["attributes"])
+            attributes_dict[bbox_name].append(finding_exist)
+
     return attributes_dict
 
 
@@ -322,7 +349,14 @@ def get_rows(path_csv_file: str) -> list[list]:
 
                 # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
                 # if there is no phrase, then the region inside bbox is normal and the new_row is extended with "" for phrases (empty phrase) and False for is_abnormal
-                new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False]))
+
+                # if CREATE_FINDINGS_COLUMN == True, then also add finding_exist boolean variable (indicating if phrase describing region specifies that a finding was found or not)
+                # if there is no phrase, then set finding_exist variable to False
+                if not CREATE_FINDINGS_COLUMN:
+                    new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False]))
+                else:
+                    new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False, False]))
+
                 new_rows.append(new_row)
 
                 index += 1
