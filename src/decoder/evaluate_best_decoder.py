@@ -27,6 +27,30 @@ MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5
 
 
+def write_metrics_to_file(metrics_sentence_generation, metrics_with_scores_dict):
+    metrics_txt_file = os.path.join(generated_sentences_folder_path, "metrics")
+    with open(metrics_txt_file, "w") as f:
+        f.write("Sentence generation:\n")
+        for metric, score in metrics_sentence_generation.items():
+            f.write(f"\t{metric}: {score}\n")
+
+        for reference_phrase_subset, metrics_with_scores in metrics_with_scores_dict.items():
+            f.write(f"\n{reference_phrase_subset}:\n")
+            for metric_name, score in metrics_with_scores.items():
+                f.write(f"\t{metric_name}: {score}\n")
+
+
+def print_out_metrics(metrics_sentence_generation, metrics_with_scores_dict):
+    print("\nSentence generation:")
+    for metric, score in metrics_sentence_generation.items():
+        print(f"\t{metric}: {score}")
+
+    for reference_phrase_subset, metrics_with_scores in metrics_with_scores_dict.items():
+        print(f"\n{reference_phrase_subset}:")
+        for metric_name, score in metrics_with_scores.items():
+            print(f"\t{metric_name}: {score}")
+
+
 def write_sentences_to_file(
         gen_and_ref_sentences_to_save_to_file,
         generated_sentences_folder_path):
@@ -44,22 +68,25 @@ def write_sentences_to_file(
             f.write(f"Reference sentence: {ref_sent[0]}\n\n")
 
 
-def remove_empty_reference_sentences(generated_sentences, reference_sentences):
+def remove_empty_reference_sentences(generated_sentences, reference_sentences, finding_exists_list):
     filtered_generated_sentences = []
     filtered_reference_sentences = []
+    filtered_finding_exists_list = []
 
-    for gen_sentence, ref_sentence in zip(generated_sentences, reference_sentences):
-        # only append non-empty reference sentences (and corresponding generated sentences)
+    for gen_sentence, ref_sentence, finding_exists in zip(generated_sentences, reference_sentences, finding_exists_list):
+        # only append non-empty reference sentences (and corresponding generated sentences and finding_exists boolean variable)
         if ref_sentence[0] != "#":
             filtered_generated_sentences.append(gen_sentence)
             filtered_reference_sentences.append(ref_sentence)
+            filtered_finding_exists_list.append(finding_exists)
 
-    return filtered_generated_sentences, filtered_reference_sentences
+    return filtered_generated_sentences, filtered_reference_sentences, filtered_finding_exists_list
 
 
 def compute_scores_for_sentence_generation(tp, fp, fn, tn, generated_sentences, reference_sentences):
     for gen_sentence, ref_sentence in zip(generated_sentences, reference_sentences):
         ref_sentence = ref_sentence[0]  # since it's originally a list of str
+        # if a sentence == "#", it means it is empty
         if ref_sentence != "#" and gen_sentence != "#":
             tp += 1
         elif ref_sentence == "#" and gen_sentence != "#":
@@ -73,8 +100,17 @@ def compute_scores_for_sentence_generation(tp, fp, fn, tn, generated_sentences, 
 
 
 def evaluate_model_on_metrics(model, val_dl, tokenizer):
-    metrics_with_scores = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
-    metrics_with_scores["bert_score"] = evaluate.load("bertscore")
+    # compute metrics for all non-empty reference sentencens
+    metrics_with_scores_all = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+    metrics_with_scores_all["bert_score"] = evaluate.load("bertscore")
+
+    # compute metrics for all non-empty reference sentences with findings (e.g. “There is pneumothorax.”)
+    metrics_with_scores_with_findings = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+    metrics_with_scores_with_findings["bert_score"] = evaluate.load("bertscore")
+
+    # compute metrics for all non-empty reference sentences without findings (e.g. “There is no pneumothorax.”)
+    metrics_with_scores_without_findings = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+    metrics_with_scores_without_findings["bert_score"] = evaluate.load("bertscore")
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],
@@ -109,42 +145,70 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
 
             tp, fp, fn, tn = compute_scores_for_sentence_generation(tp, fp, fn, tn, generated_sentences, reference_sentences)
 
-            # remove all empty reference sentences (and corresponding generated sentences)
-            filtered_generated_sentences, filtered_reference_sentences = remove_empty_reference_sentences(generated_sentences, reference_sentences)
+            # remove all empty reference sentences (and corresponding generated sentences and also remove corresponding boolean values in finding_exists_list)
+            filt_generated_sentences, filt_reference_sentences, filt_finding_exists_list = remove_empty_reference_sentences(generated_sentences, reference_sentences, finding_exists_list)
 
             if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
-                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(filtered_generated_sentences)
-                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(filtered_reference_sentences)
+                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(filt_generated_sentences)
+                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(filt_reference_sentences)
 
-            for score in metrics_with_scores.values():
-                score.add_batch(predictions=filtered_generated_sentences, references=filtered_reference_sentences)
+            # compute metrics for all non-empty reference sentences
+            for score in metrics_with_scores_all.values():
+                score.add_batch(predictions=filt_generated_sentences, references=filt_reference_sentences)
+
+            # compute metrics for all non-empty reference sentences with findings and without findings
+            gen_sentences_with_findings = []
+            ref_sentences_with_findings = []
+            gen_sentences_without_findings = []
+            ref_sentences_without_findings = []
+
+            for gen_sent, ref_sent, finding_exists in zip(filt_generated_sentences, filt_reference_sentences, filt_finding_exists_list):
+                if finding_exists:
+                    gen_sentences_with_findings.append(gen_sent)
+                    ref_sentences_with_findings.append(ref_sent)
+                else:
+                    gen_sentences_without_findings.append(gen_sent)
+                    ref_sentences_without_findings.append(ref_sent)
+
+            for score in metrics_with_scores_with_findings.values():
+                score.add_batch(predictions=gen_sentences_with_findings, references=ref_sentences_with_findings)
+
+            for score in metrics_with_scores_without_findings.values():
+                score.add_batch(predictions=gen_sentences_without_findings, references=ref_sentences_without_findings)
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path)
 
-    metrics_with_final_scores = {}
-    for score_name, score in metrics_with_scores.items():
-        if score_name.startswith("bleu"):
-            result = score.compute(max_order=int(score_name[-1]))
-            metrics_with_final_scores[score_name] = result["bleu"]
-        else:  # bert_score
-            result = score.compute(lang="en", device=device)
-            avg_precision = np.array(result["precision"]).mean()
-            avg_recall = np.array(result["recall"]).mean()
-            avg_f1 = np.array(result["f1"]).mean()
-
-            metrics_with_final_scores["bertscore_precision"] = avg_precision
-            metrics_with_final_scores["bertscore_recall"] = avg_recall
-            metrics_with_final_scores["bertscore_f1"] = avg_f1
-
+    # compute final scores for sentence generation
     precision_sent_generation = tp / (tp + fp)
     recall_sentence_generation = tp / (tp + fn)
     f1_sent_generation = 2 * (precision_sent_generation * recall_sentence_generation) / (precision_sent_generation + recall_sentence_generation)
 
-    metrics_with_final_scores["precision_sent_generation"] = precision_sent_generation
-    metrics_with_final_scores["recall_sentence_generation"] = recall_sentence_generation
-    metrics_with_final_scores["f1_sent_generation"] = f1_sent_generation
+    metrics_sentence_generation = {}
+    metrics_sentence_generation["precision_sent_generation"] = precision_sent_generation
+    metrics_sentence_generation["recall_sentence_generation"] = recall_sentence_generation
+    metrics_sentence_generation["f1_sent_generation"] = f1_sent_generation
 
-    return metrics_with_final_scores
+    # collect metrics_with_scores dicts in 1 dict
+    metrics_with_scores_dict = {"all": metrics_with_scores_all, "with_findings": metrics_with_scores_with_findings, "without_findings": metrics_with_scores_without_findings}
+    for key, metrics_with_scores in metrics_with_scores_dict.items():
+        temp = {}
+        for score_name, score in metrics_with_scores.items():
+            if score_name.startswith("bleu"):
+                result = score.compute(max_order=int(score_name[-1]))
+                temp[f"{score_name}"] = result["bleu"]
+            else:  # bert_score
+                result = score.compute(lang="en", device=device)
+                avg_precision = np.array(result["precision"]).mean()
+                avg_recall = np.array(result["recall"]).mean()
+                avg_f1 = np.array(result["f1"]).mean()
+
+                temp["bertscore_precision"] = avg_precision
+                temp["bertscore_recall"] = avg_recall
+                temp["bertscore_f1"] = avg_f1
+
+        metrics_with_scores_dict[key] = temp
+
+    return metrics_sentence_generation, metrics_with_scores_dict
 
 
 def get_data_loaders(tokenizer, val_dataset_complete):
@@ -231,7 +295,10 @@ def main():
 
     val_loader = get_data_loaders(tokenizer, val_dataset_complete)
 
-    metrics = evaluate_model_on_metrics(model, val_loader, tokenizer)
+    metrics_sentence_generation, metrics_with_scores_dict = evaluate_model_on_metrics(model, val_loader, tokenizer)
+
+    print_out_metrics(metrics_sentence_generation, metrics_with_scores_dict)
+    write_metrics_to_file(metrics_sentence_generation, metrics_with_scores_dict)
 
 
 if __name__ == "__main__":
