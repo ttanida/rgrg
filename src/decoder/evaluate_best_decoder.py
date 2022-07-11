@@ -32,23 +32,23 @@ def write_metrics_to_file(metrics_sentence_generation, metrics_with_scores_dict)
     with open(metrics_txt_file, "w") as f:
         f.write("Sentence generation:\n")
         for metric, score in metrics_sentence_generation.items():
-            f.write(f"\t{metric}: {score}\n")
+            f.write(f"\t{metric}: {score:.5f}\n")
 
         for reference_phrase_subset, metrics_with_scores in metrics_with_scores_dict.items():
             f.write(f"\n{reference_phrase_subset}:\n")
             for metric_name, score in metrics_with_scores.items():
-                f.write(f"\t{metric_name}: {score}\n")
+                f.write(f"\t{metric_name}: {score:.5f}\n")
 
 
 def print_out_metrics(metrics_sentence_generation, metrics_with_scores_dict):
     print("\nSentence generation:")
     for metric, score in metrics_sentence_generation.items():
-        print(f"\t{metric}: {score}")
+        print(f"\t{metric}: {score:.5f}")
 
     for reference_phrase_subset, metrics_with_scores in metrics_with_scores_dict.items():
         print(f"\n{reference_phrase_subset}:")
         for metric_name, score in metrics_with_scores.items():
-            print(f"\t{metric_name}: {score}")
+            print(f"\t{metric_name}: {score:.5f}")
 
 
 def write_sentences_to_file(

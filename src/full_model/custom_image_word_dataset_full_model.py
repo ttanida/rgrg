@@ -33,7 +33,7 @@ class CustomImageWordDatasetFullModel(Dataset):
         # albumentations transforms return a dict, which is why key "image" has to be selected
         cropped_image_tensor = self.transforms(image=cropped_image)["image"]
 
-        return cropped_image_tensor
+        return cropped_image_tensor  # of shape [1, 224, 224]
 
     def __getitem__(self, index):
         # if something in __get__item fails, then return None

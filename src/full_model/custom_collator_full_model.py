@@ -13,10 +13,10 @@ class CustomCollatorWithPadding:
         # otherwise, whole training loop would stop
         batch = list(filter(lambda x: x is not None, batch))  # filter out samples that are None
 
-        image_hidden_dim = batch[0]["image_hidden_states"].size(0)
+        image_shape = batch[0]["image"].size()
 
-        # allocate an empty image_hidden_states_batch tensor that will store all image_hidden_states of the batch
-        image_hidden_states_batch = torch.empty(size=(len(batch), image_hidden_dim))
+        # allocate an empty images_batch tensor that will store all images of the batch
+        images_batch = torch.empty(size=(len(batch), image_shape))
 
         if self.is_val:
             # for a validation batch, create a list of list of str that hold the reference phrases to compute BLEU/BERTscores
@@ -28,8 +28,8 @@ class CustomCollatorWithPadding:
             is_abnormal_list = []
 
         for i, sample in enumerate(batch):
-            # remove image_hidden_states vectors from batch and store them in dedicated image_hidden_states_batch tensor
-            image_hidden_states_batch[i] = sample.pop("image_hidden_states")
+            # remove image tensors from batch and store them in dedicated images_batch tensor
+            images_batch[i] = sample.pop("image")
 
             if self.is_val:
                 reference_phrases_batch.append([sample.pop("reference_phrase")])
@@ -41,8 +41,8 @@ class CustomCollatorWithPadding:
         # that map to tensors of shape [batch_size x (longest) seq_len (in batch)] respectively
         batch = self.tokenizer.pad(batch, padding=self.padding, return_tensors="pt")
 
-        # add the image_hidden_states_batch tensor to the dict
-        batch["image_hidden_states"] = image_hidden_states_batch
+        # add the images_batch to the dict
+        batch["images"] = images_batch
 
         # add the reference phrases to the dict for a validation batch
         if self.is_val:
