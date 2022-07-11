@@ -32,15 +32,6 @@ class CustomImageWordDataset(Dataset):
                 # replace empty reference phrase with hash symbol
                 sample["reference_phrase"] = reference_phrase if len(reference_phrase) > 0 else "#"
 
-            # val set may have an additional column called "finding_exists", which is a boolean variable that indicates if
-            # a reference phrase describing a region states that there is a finding (e.g. "There is pneumothorax.")
-            # or not (e.g. "There is no pneumothorax.")
-            # this variable helps to compute BLEU/BERTscore for reference phrases that have findings and those that don't
-            # -> allows to draw comparisons between those 2 cases
-            finding_exists = self.tokenized_dataset[index].get("finding_exists")
-            if isinstance(finding_exists, bool):
-                sample["finding_exists"] = finding_exists
-
         except Exception:
             return None
 

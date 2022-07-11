@@ -22,20 +22,12 @@ class CustomCollatorWithPadding:
             # for a validation batch, create a list of list of str that hold the reference phrases to compute BLEU/BERTscores
             reference_phrases_batch = []
 
-        # it's possible that the validation set has an additional column called "finding_exists", that contains boolean variables
-        # that indicate if a reference phrase describing a region states that there is a finding (e.g. "There is pneumothorax.")
-        # or not (e.g. "There is no pneumothorax.")
-        if self.has_finding_exists_column:
-            finding_exists_list = []
-
         for i, sample in enumerate(batch):
             # remove image_hidden_states vectors from batch and store them in dedicated image_hidden_states_batch tensor
             image_hidden_states_batch[i] = sample.pop("image_hidden_states")
 
             if self.is_val:
                 reference_phrases_batch.append([sample.pop("reference_phrase")])
-            if self.has_finding_exists_column:
-                finding_exists_list.append(sample.pop("finding_exists"))
 
         # batch now only contains samples with input_ids and attention_mask keys
         # the tokenizer will turn the batch variable into a single dict with input_ids and attention_mask keys,
@@ -48,9 +40,5 @@ class CustomCollatorWithPadding:
         # add the reference phrases to the dict for a validation batch
         if self.is_val:
             batch["reference_phrases"] = reference_phrases_batch
-
-        # add the list with the boolean variables to the validation batch
-        if self.has_finding_exists_column:
-            batch["finding_exists_list"] = finding_exists_list
 
         return batch
