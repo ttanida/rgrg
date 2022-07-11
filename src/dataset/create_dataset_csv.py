@@ -267,7 +267,7 @@ def get_total_num_rows(path_csv_file: str) -> int:
         return sum(1 for row in csv_reader)
 
 
-def get_rows(path_csv_file: str) -> list[list]:
+def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
     """
     Args:
         path_csv_file (str): path to one of the csv files in the folder silver_dataset/splits of the chest-imagenome-dataset
@@ -302,7 +302,9 @@ def get_rows(path_csv_file: str) -> list[list]:
 
             # all images in set IMAGE_IDS_TO_IGNORE seem to be failed x-rays and thus have to be discarded
             # (they also don't have corresponding scene graph json files anyway)
-            if image_id in IMAGE_IDS_TO_IGNORE:
+            # all images in set image_ids_to_avoid are image IDs for images in the gold standard dataset, 
+            # which should all be excluded from model training and validation
+            if image_id in IMAGE_IDS_TO_IGNORE or image_id in image_ids_to_avoid:
                 continue
 
             # image_file_path is of the form "files/p10/p10000980/s50985099/6ad03ed1-97ee17ee-9cf8b320-f7011003-cd93b42d.dcm"
@@ -323,6 +325,8 @@ def get_rows(path_csv_file: str) -> list[list]:
             # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
             # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
+            # if CREATE_FINDINGS_COLUMN == True, then the list has another element:
+            # 3. finding_exist, a boolean that is True if a phrase describing a bbox region states that there is a finding
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
             width, height = imagesize.get(mimic_image_file_path)
@@ -370,12 +374,12 @@ def get_rows(path_csv_file: str) -> list[list]:
     return new_rows
 
 
-def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
+def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> None:
     log.info(f"Creating new {dataset}.csv file...")
 
     # get rows to create new csv_file
     # new_rows is a list of lists, where an inner list specifies all information about a single bbox of a single image
-    new_rows = get_rows(path_csv_file)
+    new_rows = get_rows(path_csv_file, image_ids_to_avoid)
 
     # write those rows into a new csv file
     write_rows_in_new_csv_file(dataset, new_rows)
@@ -383,7 +387,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str) -> None:
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
-def create_new_csv_files(csv_files_dict):
+def create_new_csv_files(csv_files_dict, image_ids_to_avoid):
     if os.path.exists(path_to_chest_imagenome_customized):
         log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
         log.error("Delete dataset folder before running script to create new folder!")
@@ -391,7 +395,7 @@ def create_new_csv_files(csv_files_dict):
 
     os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
-        create_new_csv_file(dataset, path_csv_file)
+        create_new_csv_file(dataset, path_csv_file, image_ids_to_avoid)
 
 
 def get_images_to_avoid():
@@ -424,11 +428,9 @@ def main():
     # the "splits" directory of chest-imagenome contains a csv file called "images_to_avoid.csv",
     # which contains image IDs for images in the gold standard dataset, which should all be excluded
     # from model training and validation
-    # image_ids_to_avoid = get_images_to_avoid()
+    image_ids_to_avoid = get_images_to_avoid()
 
-    # TODO: add image_ids_to_avoid to get_rows
-    # create_new_csv_files(csv_files_dict, image_ids_to_avoid)
-    create_new_csv_files(csv_files_dict)
+    create_new_csv_files(csv_files_dict, image_ids_to_avoid)
 
 
 if __name__ == "__main__":
