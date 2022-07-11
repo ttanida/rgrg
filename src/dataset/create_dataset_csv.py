@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases-with-findings-column"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -38,10 +38,6 @@ log = logging.getLogger(__name__)
 # constant specifies how many rows to create in the customized csv files
 # if constant is None, then all possible rows are created
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
-
-# boolean variable to determine if customized csv files should have an additional column that specifies if a phrase describing
-# a region/bbox states that there is a finding (e.g. “There is pneumothorax.”) or no finding (e.g. “There is no pleural effusion.”)
-CREATE_FINDINGS_COLUMN = True
 
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
@@ -54,9 +50,6 @@ def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
         csv_writer = csv.writer(fp)
 
         header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
-
-        if CREATE_FINDINGS_COLUMN:
-            header.append("finding_exists")
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
@@ -100,25 +93,6 @@ def coordinates_faulty(height, width, x1, y1, x2, y2) -> bool:
     exceeds_limits = x1 >= width or y1 >= height
 
     return area_of_bbox_is_zero or smaller_than_zero or exceeds_limits
-
-
-def determine_if_finding_exist(attributes_list: list[list]) -> bool:
-    """
-    attributes_list is a list of lists that contains attributes corresponding to the phrases describing a specific bbox.
-
-    E.g. the phrases: ['Right lung is clear without pneumothorax.', 'No pneumothorax identified.'] have the attributes_list
-    [['anatomicalfinding|no|lung opacity', 'anatomicalfinding|no|pneumothorax', 'nlp|yes|normal'], ['anatomicalfinding|no|pneumothorax']],
-    where the 1st inner list contains the attributes pertaining to the 1st phrase, and the 2nd inner list contains attributes for the 2nd phrase respectively.
-
-    Phrases where a finding is specified as existing have the attribute 'anatomicalfinding|yes'.
-    """
-    for attributes in attributes_list:
-        for attribute in attributes:
-            if attribute.startswith("anatomicalfinding|yes"):
-                return True
-
-    # there was no finding
-    return False
 
 
 def determine_if_abnormal(attributes_list: list[list]) -> bool:
@@ -250,10 +224,6 @@ def get_attributes_dict(image_scene_graph: dict) -> dict[list]:
 
         attributes_dict[bbox_name] = [phrases, is_abnormal]
 
-        if CREATE_FINDINGS_COLUMN:
-            finding_exist = determine_if_finding_exist(attribute["attributes"])
-            attributes_dict[bbox_name].append(finding_exist)
-
     return attributes_dict
 
 
@@ -329,8 +299,6 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
             # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
-            # if CREATE_FINDINGS_COLUMN == True, then the list has another element:
-            # 3. finding_exist, a boolean that is True if a phrase describing a bbox region states that there is a finding
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
             width, height = imagesize.get(mimic_image_file_path)
@@ -338,6 +306,11 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
+
+                # filter out regions with empty sentences
+                if not anatomical_region_attributes.get(bbox_name, False):
+                    continue
+
                 x1 = anatomical_region["original_x1"]
                 y1 = anatomical_region["original_y1"]
                 x2 = anatomical_region["original_x2"]
@@ -360,13 +333,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
                 # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
                 # if there is no phrase, then the region inside bbox is normal and the new_row is extended with "" for phrases (empty phrase) and False for is_abnormal
-
-                # if CREATE_FINDINGS_COLUMN == True, then also add finding_exist boolean variable (indicating if phrase describing region specifies that a finding was found or not)
-                # if there is no phrase, then set finding_exist variable to False
-                if not CREATE_FINDINGS_COLUMN:
-                    new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False]))
-                else:
-                    new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False, False]))
+                new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False]))
 
                 new_rows.append(new_row)
 
