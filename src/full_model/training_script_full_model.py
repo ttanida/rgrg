@@ -413,7 +413,7 @@ def get_tokenizer():
     return tokenizer
 
 
-def get_datasets_with_phrases(config_file_path):
+def get_datasets(config_file_path):
     # path to the csv files specifying the train, val, test sets
     path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
     datasets_as_dfs = {
@@ -456,7 +456,7 @@ def create_run_folder():
     Run folder will contain a folder for saving the trained weights, a folder for the tensorboard files
     as well as a config file that specifies the overall parameters used for training.
     """
-    run_folder_path_parent_dir = "/u/home/tanida/runs/decoder_model"
+    run_folder_path_parent_dir = "/u/home/tanida/runs/full_model_with_classification_encoder"
 
     run_folder_path = os.path.join(run_folder_path_parent_dir, f"run_{RUN}")
     weights_folder_path = os.path.join(run_folder_path, "weights")
@@ -504,7 +504,7 @@ def main():
     weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_folder_path = create_run_folder()
 
     # get the datasets with the raw phrases before tokenization
-    raw_train_dataset, raw_val_dataset = get_datasets_with_phrases(config_file_path)
+    raw_train_dataset, raw_val_dataset = get_datasets(config_file_path)
 
     tokenizer = get_tokenizer()
 

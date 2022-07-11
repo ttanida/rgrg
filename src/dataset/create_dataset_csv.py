@@ -302,7 +302,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
             # all images in set IMAGE_IDS_TO_IGNORE seem to be failed x-rays and thus have to be discarded
             # (they also don't have corresponding scene graph json files anyway)
-            # all images in set image_ids_to_avoid are image IDs for images in the gold standard dataset, 
+            # all images in set image_ids_to_avoid are image IDs for images in the gold standard dataset,
             # which should all be excluded from model training and validation
             if image_id in IMAGE_IDS_TO_IGNORE or image_id in image_ids_to_avoid:
                 continue
@@ -312,6 +312,10 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             # since we have the MIMIC-CXR-JPG dataset, we need to replace .dcm by .jpg
             image_file_path = row[4].replace(".dcm", ".jpg")
             mimic_image_file_path = os.path.join(path_to_mimic_cxr, image_file_path)
+
+            if not os.path.exists(mimic_image_file_path):
+                # print("Does not exist: ", image_file_path)
+                continue
 
             chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
