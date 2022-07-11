@@ -3,10 +3,14 @@ import logging
 import os
 import random
 
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import cv2
 import evaluate
 from datasets import Dataset
 import numpy as np
 import pandas as pd
+from sklearn.metrics import f1_score, precision_score, recall_score
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -15,9 +19,12 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
-from custom_collator import CustomCollatorWithPadding
-from custom_image_word_dataset import CustomImageWordDataset
-from gpt2 import DecoderModel
+from src.dataset.constants import ANATOMICAL_REGIONS
+
+from src.encoder.custom_image_dataset import CustomImageDataset
+
+from src.decoder.custom_collator import CustomCollatorWithPadding
+from src.decoder.custom_image_word_dataset import CustomImageWordDataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -33,7 +40,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 3
+RUN = 0
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
 # PERCENTAGE_OF_TRAIN_SET_TO_USE = 5e-5
@@ -50,6 +57,11 @@ MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_SENTENCES_TO_GENERATE = 3000
 
+
+#########
+#########
+#########
+#########
 
 def write_sentences_to_file(
         gen_and_ref_sentences_to_save_to_file,

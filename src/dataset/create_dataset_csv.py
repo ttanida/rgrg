@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-20%-with-findings-column"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases-with-findings-column"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
 # if constant is None, then all possible rows are created
-NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 1189741
+NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
 # boolean variable to determine if customized csv files should have an additional column that specifies if a phrase describing
 # a region/bbox states that there is a finding (e.g. “There is pneumothorax.”) or no finding (e.g. “There is no pleural effusion.”)
