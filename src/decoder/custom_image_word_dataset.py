@@ -32,6 +32,14 @@ class CustomImageWordDataset(Dataset):
                 # replace empty reference phrase with hash symbol
                 sample["reference_phrase"] = reference_phrase if len(reference_phrase) > 0 else "#"
 
+            # val set may have an additional column called "is_abnormal", which is a boolean variable that indicates if
+            # a region is described as abnormal or not by a reference phrase (e.g. "There is pneumothorax.") or not (e.g. "There is no pneumothorax.")
+            # this variable helps to compute BLEU/BERTscore for reference phrases that have abnormal findings and those that don't
+            # -> allows to draw comparisons between those 2 cases
+            is_abnormal = self.tokenized_dataset[index].get("is_abnormal")
+            if isinstance(is_abnormal, bool):
+                sample["is_abnormal"] = is_abnormal
+
         except Exception:
             return None
 

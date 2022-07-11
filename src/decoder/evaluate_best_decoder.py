@@ -68,19 +68,19 @@ def write_sentences_to_file(
             f.write(f"Reference sentence: {ref_sent[0]}\n\n")
 
 
-def remove_empty_reference_sentences(generated_sentences, reference_sentences, finding_exists_list):
+def remove_empty_reference_sentences(generated_sentences, reference_sentences, is_abnormal_list):
     filtered_generated_sentences = []
     filtered_reference_sentences = []
-    filtered_finding_exists_list = []
+    filtered_is_abnormal_list = []
 
-    for gen_sentence, ref_sentence, finding_exists in zip(generated_sentences, reference_sentences, finding_exists_list):
-        # only append non-empty reference sentences (and corresponding generated sentences and finding_exists boolean variable)
+    for gen_sentence, ref_sentence, is_abnormal in zip(generated_sentences, reference_sentences, is_abnormal_list):
+        # only append non-empty reference sentences (and corresponding generated sentences and is_abnormal boolean variable)
         if ref_sentence[0] != "#":
             filtered_generated_sentences.append(gen_sentence)
             filtered_reference_sentences.append(ref_sentence)
-            filtered_finding_exists_list.append(finding_exists)
+            filtered_is_abnormal_list.append(is_abnormal)
 
-    return filtered_generated_sentences, filtered_reference_sentences, filtered_finding_exists_list
+    return filtered_generated_sentences, filtered_reference_sentences, filtered_is_abnormal_list
 
 
 def compute_scores_for_sentence_generation(tp, fp, fn, tn, generated_sentences, reference_sentences):
@@ -134,7 +134,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
                 break
 
             # reference_phrases is a list of list of str
-            _, _, image_hidden_states, reference_sentences, finding_exists_list = batch.values()
+            _, _, image_hidden_states, reference_sentences, is_abnormal_list = batch.values()
 
             image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
 
@@ -145,8 +145,8 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
 
             tp, fp, fn, tn = compute_scores_for_sentence_generation(tp, fp, fn, tn, generated_sentences, reference_sentences)
 
-            # remove all empty reference sentences (and corresponding generated sentences and also remove corresponding boolean values in finding_exists_list)
-            filt_generated_sentences, filt_reference_sentences, filt_finding_exists_list = remove_empty_reference_sentences(generated_sentences, reference_sentences, finding_exists_list)
+            # remove all empty reference sentences (and corresponding generated sentences and also remove corresponding boolean values in is_abnormal_list)
+            filt_generated_sentences, filt_reference_sentences, filt_is_abnormal_list = remove_empty_reference_sentences(generated_sentences, reference_sentences, is_abnormal_list)
 
             if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
                 gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(filt_generated_sentences)
@@ -156,25 +156,27 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
             for score in metrics_with_scores_all.values():
                 score.add_batch(predictions=filt_generated_sentences, references=filt_reference_sentences)
 
-            # compute metrics for all non-empty reference sentences with findings and without findings
+            # compute metrics for all non-empty reference sentences with abnormal findings and without abnormal findings
             gen_sentences_with_findings = []
             ref_sentences_with_findings = []
             gen_sentences_without_findings = []
             ref_sentences_without_findings = []
 
-            for gen_sent, ref_sent, finding_exists in zip(filt_generated_sentences, filt_reference_sentences, filt_finding_exists_list):
-                if finding_exists:
+            for gen_sent, ref_sent, is_abnormal in zip(filt_generated_sentences, filt_reference_sentences, filt_is_abnormal_list):
+                if is_abnormal:
                     gen_sentences_with_findings.append(gen_sent)
                     ref_sentences_with_findings.append(ref_sent)
                 else:
                     gen_sentences_without_findings.append(gen_sent)
                     ref_sentences_without_findings.append(ref_sent)
 
-            for score in metrics_with_scores_with_findings.values():
-                score.add_batch(predictions=gen_sentences_with_findings, references=ref_sentences_with_findings)
+            if len(ref_sentences_with_findings) != 0:
+                for score in metrics_with_scores_with_findings.values():
+                    score.add_batch(predictions=gen_sentences_with_findings, references=ref_sentences_with_findings)
 
-            for score in metrics_with_scores_without_findings.values():
-                score.add_batch(predictions=gen_sentences_without_findings, references=ref_sentences_without_findings)
+            if len(ref_sentences_without_findings) != 0:
+                for score in metrics_with_scores_without_findings.values():
+                    score.add_batch(predictions=gen_sentences_without_findings, references=ref_sentences_without_findings)
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path)
 
@@ -190,6 +192,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
 
     # collect metrics_with_scores dicts in 1 dict
     metrics_with_scores_dict = {"all": metrics_with_scores_all, "with_findings": metrics_with_scores_with_findings, "without_findings": metrics_with_scores_without_findings}
+
     for key, metrics_with_scores in metrics_with_scores_dict.items():
         temp = {}
         for score_name, score in metrics_with_scores.items():
@@ -212,7 +215,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer):
 
 
 def get_data_loaders(tokenizer, val_dataset_complete):
-    custom_collate_val = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=True, has_finding_exists_column=True)
+    custom_collate_val = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=True, has_is_abnormal_column=True)
 
     val_loader = DataLoader(
         val_dataset_complete,
@@ -238,7 +241,7 @@ def get_tokenized_datasets(tokenizer, raw_val_dataset):
         return tokenizer(phrase_with_special_tokens, truncation=True, max_length=1024)
 
     # don't set batched=True, otherwise phrases that are empty will not be processed correctly
-    # tokenized datasets will consist of the columns "phrases", "input_ids", "attention_mask", "finding_exists"
+    # tokenized datasets will consist of the columns "phrases", "input_ids", "attention_mask", "is_abnormal"
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
     return tokenized_val_dataset
@@ -252,13 +255,13 @@ def get_tokenizer():
     return tokenizer
 
 
-def get_datasets_with_phrases_and_finding_exists():
-    # path to the csv files specifying the train, val, test sets
-    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full-with-findings-column"
+def get_datasets_with_phrases_and_is_abnormal():
+    # path to the csv files specifying the val set
+    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
     datasets_as_dfs = {dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["valid"]}
 
-    # only read in the phrases and finding_exists boolean variable
-    usecols = ["phrases", "finding_exists"]
+    # only read in the phrases and is_abnormal boolean variable
+    usecols = ["phrases", "is_abnormal"]
     datasets_as_dfs = {
         dataset: pd.read_csv(csv_file_path, usecols=usecols, keep_default_na=False)
         for dataset, csv_file_path in datasets_as_dfs.items()
@@ -283,12 +286,12 @@ def main():
     model.eval()
     model.to(device, non_blocking=True)
 
-    # get the dataset with the raw phrases and finding_exists boolean before tokenization
-    raw_val_dataset = get_datasets_with_phrases_and_finding_exists()
+    # get the dataset with the raw phrases and is_abnormal boolean variable
+    raw_val_dataset = get_datasets_with_phrases_and_is_abnormal()
 
     tokenizer = get_tokenizer()
 
-    # tokenized_val_dataset has the columns "phrases", "input_ids", "attention_mask", "finding_exists"
+    # tokenized_val_dataset has the columns "phrases", "input_ids", "attention_mask", "is_abnormal"
     tokenized_val_dataset = get_tokenized_datasets(tokenizer, raw_val_dataset)
 
     val_dataset_complete = CustomImageWordDataset("val", tokenized_val_dataset)
