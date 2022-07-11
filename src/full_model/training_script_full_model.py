@@ -594,7 +594,7 @@ def main():
 
     # complete train dataset will return a dict with keys "image", "input_ids", "attention_mask" when indexed
 
-    # validation dataset has additional keys "reference_phrase" and "is_abnormal", that will return the corresponding 
+    # validation dataset has additional keys "reference_phrase" and "is_abnormal", that will return the corresponding
     # ground-truth phrases and is_abnormal boolean that are required to compute the BLEU/BERT scores
     train_dataset_complete = CustomImageWordDatasetFullModel(tokenized_train_dataset, train_transforms)
     val_dataset_complete = CustomImageWordDatasetFullModel(tokenized_val_dataset, val_transforms)
