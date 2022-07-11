@@ -10,7 +10,6 @@ import evaluate
 from datasets import Dataset
 import numpy as np
 import pandas as pd
-from sklearn.metrics import f1_score, precision_score, recall_score
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -19,12 +18,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
-from src.dataset.constants import ANATOMICAL_REGIONS
-
-from src.encoder.custom_image_dataset import CustomImageDataset
-
-from src.decoder.custom_collator import CustomCollatorWithPadding
-from src.decoder.custom_image_word_dataset import CustomImageWordDataset
+from custom_image_word_dataset_full_model import CustomImageWordDatasetFullModel
+from custom_collator_full_model import CustomCollatorWithPaddingFullModel
+from report_generation_model import ReportGenerationModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -41,10 +37,10 @@ torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
 RUN = 0
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
-# PERCENTAGE_OF_TRAIN_SET_TO_USE = 5e-5
-# PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
+# PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
+# PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.0001
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
 BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 30
@@ -57,11 +53,6 @@ MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_SENTENCES_TO_GENERATE = 3000
 
-
-#########
-#########
-#########
-#########
 
 def write_sentences_to_file(
         gen_and_ref_sentences_to_save_to_file,
@@ -95,8 +86,17 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
     Returns:
         metrics_with_scores (dict): Dict that holds the BLEU_1 - BLEU_4 scores as well as BERTScore
     """
-    metrics_with_scores = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
-    metrics_with_scores["bert_score"] = evaluate.load("bertscore")
+    # compute metrics for all reference sentencens
+    metrics_with_scores_all = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+    metrics_with_scores_all["bert_score"] = evaluate.load("bertscore")
+
+    # compute metrics for all reference sentences with findings (e.g. “There is pneumothorax.”)
+    metrics_with_scores_with_findings = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+    metrics_with_scores_with_findings["bert_score"] = evaluate.load("bertscore")
+
+    # compute metrics for all reference sentences without findings (e.g. “There is no pneumothorax.”)
+    metrics_with_scores_without_findings = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+    metrics_with_scores_without_findings["bert_score"] = evaluate.load("bertscore")
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],
@@ -116,11 +116,11 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
                 break
 
             # reference_phrases is a list of list of str
-            _, _, image_hidden_states, reference_sentences = batch.values()
+            _, _, images, reference_sentences, is_abnormal_list = batch.values()
 
-            image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
 
-            beam_search_output = model.generate(image_hidden_states, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+            beam_search_output = model.generate(images, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
 
             # generated_sentences is a list of str
             generated_sentences = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -129,29 +129,58 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
                 gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences)
                 gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences)
 
-            for score in metrics_with_scores.values():
+            # compute metrics for all reference sentences
+            for score in metrics_with_scores_all.values():
                 score.add_batch(predictions=generated_sentences, references=reference_sentences)
+
+            # compute metrics for all reference sentences with abnormal findings and without abnormal findings
+            gen_sentences_with_findings = []
+            ref_sentences_with_findings = []
+            gen_sentences_without_findings = []
+            ref_sentences_without_findings = []
+
+            for gen_sent, ref_sent, is_abnormal in zip(generated_sentences, reference_sentences, is_abnormal_list):
+                if is_abnormal:
+                    gen_sentences_with_findings.append(gen_sent)
+                    ref_sentences_with_findings.append(ref_sent)
+                else:
+                    gen_sentences_without_findings.append(gen_sent)
+                    ref_sentences_without_findings.append(ref_sent)
+
+            if len(ref_sentences_with_findings) != 0:
+                for score in metrics_with_scores_with_findings.values():
+                    score.add_batch(predictions=gen_sentences_with_findings, references=ref_sentences_with_findings)
+
+            if len(ref_sentences_without_findings) != 0:
+                for score in metrics_with_scores_without_findings.values():
+                    score.add_batch(predictions=gen_sentences_without_findings, references=ref_sentences_without_findings)
 
     log.info(f"\nSaving generated sentences at step {overall_steps_taken}!\n")
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken)
 
-    metrics_with_final_scores = {}
-    for score_name, score in metrics_with_scores.items():
-        if score_name.startswith("bleu"):
-            result = score.compute(max_order=int(score_name[-1]))
-            metrics_with_final_scores[score_name] = result["bleu"]
-        else:  # bert_score
-            result = score.compute(lang="en", device=device)
-            avg_precision = np.array(result["precision"]).mean()
-            avg_recall = np.array(result["recall"]).mean()
-            avg_f1 = np.array(result["f1"]).mean()
+    # collect metrics_with_scores dicts in 1 dict
+    metrics_with_scores_dict = {"all": metrics_with_scores_all, "with_findings": metrics_with_scores_with_findings, "without_findings": metrics_with_scores_without_findings}
 
-            metrics_with_final_scores["bertscore_precision"] = avg_precision
-            metrics_with_final_scores["bertscore_recall"] = avg_recall
-            metrics_with_final_scores["bertscore_f1"] = avg_f1
+    for key, metrics_with_scores in metrics_with_scores_dict.items():
+        temp = {}
+        for score_name, score in metrics_with_scores.items():
+            if score_name.startswith("bleu"):
+                result = score.compute(max_order=int(score_name[-1]))
+                temp[f"{score_name}"] = result["bleu"]
+            else:  # bert_score
+                result = score.compute(lang="en", device=device)
+                avg_precision = np.array(result["precision"]).mean()
+                avg_recall = np.array(result["recall"]).mean()
+                avg_f1 = np.array(result["f1"]).mean()
 
-    return metrics_with_final_scores
+                temp["bertscore_precision"] = avg_precision
+                temp["bertscore_recall"] = avg_recall
+                temp["bertscore_f1"] = avg_f1
+
+        metrics_with_scores_dict[key] = temp
+
+    return metrics_with_scores_dict
 
 
 def get_val_loss(model, val_dl):
@@ -168,19 +197,19 @@ def get_val_loss(model, val_dl):
 
     with torch.no_grad():
         for batch in tqdm(val_dl):
-            input_ids, attention_mask, image_hidden_states, _ = batch.values()
+            input_ids, attention_mask, images, _, _ = batch.values()
 
             batch_size = input_ids.size(0)
 
             input_ids = input_ids.to(device, non_blocking=True)  # shape (batch_size x seq_len)
             attention_mask = attention_mask.to(device, non_blocking=True)  # shape (batch_size x seq_len)
-            image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
 
             # model only returns loss if return_loss=True
             loss = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                image_hidden_states=image_hidden_states,
+                images=images,
                 return_loss=True,
             )
 
@@ -261,20 +290,20 @@ def train_model(
         train_loss = 0.0
         steps_taken = 0
         for num_batch, batch in tqdm(enumerate(train_dl)):
-            # batch is a dict with keys for 'input_ids', 'attention_mask', 'image_hidden_states' (see custom_image_word_dataset)
-            input_ids, attention_mask, image_hidden_states = batch.values()
+            # batch is a dict with keys for 'input_ids', 'attention_mask', 'images'
+            input_ids, attention_mask, images = batch.values()
 
             batch_size = input_ids.size(0)
 
             input_ids = input_ids.to(device, non_blocking=True)  # shape (batch_size x seq_len)
             attention_mask = attention_mask.to(device, non_blocking=True)  # shape (batch_size x seq_len)
-            image_hidden_states = image_hidden_states.to(device, non_blocking=True)  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024)
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
 
             # model only returns loss, if return_loss=True
             loss = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                image_hidden_states=image_hidden_states,
+                images=images,
                 return_loss=True,
             )
 
@@ -298,10 +327,12 @@ def train_model(
 
                 log.info(f"\nTrain and val loss evaluated at step {overall_steps_taken}!\n")
 
-                metrics_with_scores = evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken)
+                metrics_with_scores_dict = evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken)
 
-                for metric_name, score in metrics_with_scores.items():
-                    writer.add_scalar(metric_name, score, overall_steps_taken)
+                # subset_name is "all", "with_findings", "without_findings"
+                for subset_name, metrics_with_scores in metrics_with_scores_dict.items():
+                    for metric_name, score in metrics_with_scores.items():
+                        writer.add_scalar(f"{subset_name}_{metric_name}", score, overall_steps_taken)
 
                 log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
@@ -354,8 +385,8 @@ def get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete):
         np.random.seed(worker_seed)
         random.seed(worker_seed)
 
-    custom_collate_train = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=False)
-    custom_collate_val = CustomCollatorWithPadding(tokenizer=tokenizer, padding="longest", is_val=True)
+    custom_collate_train = CustomCollatorWithPaddingFullModel(tokenizer=tokenizer, padding="longest", is_val=False)
+    custom_collate_val = CustomCollatorWithPaddingFullModel(tokenizer=tokenizer, padding="longest", is_val=True, has_is_abnormal_column=True)
 
     g = torch.Generator()
     g.manual_seed(seed_val)
@@ -382,6 +413,49 @@ def get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete):
     return train_loader, val_loader
 
 
+def get_transforms(dataset: str):
+    # see compute_mean_std_dataset.py in src/dataset
+    mean = 0.471
+    std = 0.302
+
+    # pre-trained DenseNet121 model expects images to be of size 224x224
+    IMAGE_INPUT_SIZE = 224
+
+    # note: transforms are applied to the already cropped images (see __getitem__ method of CustomImageDataset class)!
+
+    # use albumentations for Compose and transforms
+    train_transforms = A.Compose([
+        # we want the long edge of the image to be resized to IMAGE_INPUT_SIZE, and the short edge of the image to be padded to IMAGE_INPUT_SIZE on both sides,
+        # such that the aspect ratio of the images are kept (i.e. a resized image of a lung is not distorted),
+        # while getting images of uniform size (IMAGE_INPUT_SIZE x IMAGE_INPUT_SIZE)
+        A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),  # resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio (INTER_AREA works best for shrinking images)
+        # A.RandomBrightnessContrast(),  # randomly (by default prob=0.5) change brightness and contrast (by a default factor of 0.2)
+        # randomly (by default prob=0.5) translate and rotate image
+        # mode and cval specify that black pixels are used to fill in newly created pixels
+        # translate between -2% and 2% of the image height/width, rotate between -2 and 2 degrees
+        # A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
+        # A.GaussianBlur(),  # randomly (by default prob=0.5) blur the image
+        A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),  # pads both sides of the shorter edge with 0's (black pixels)
+        A.Normalize(mean=mean, std=std),
+        ToTensorV2()
+    ])
+
+    # don't apply data augmentations to val and test set
+    val_test_transforms = A.Compose(
+        [
+            A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
+            A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+        ]
+    )
+
+    if dataset == "train":
+        return train_transforms
+    else:
+        return val_test_transforms
+
+
 def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     def tokenize_function(example):
         phrase = example["phrases"]
@@ -398,9 +472,9 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
-    # remove redundant "phrases" column for the train set
-    # keep the "phrases" column for the val set, since we need the gt phrases to compute BLEU/BERT scores
-    tokenized_train_dataset = tokenized_train_dataset.remove_columns(["phrases"])
+    # remove redundant "phrases" and "is_abnormal" columns for the train set
+    # keep the "phrases" and "is_abnormal" columns for the val set, since we need them to compute BLEU/BERT scores
+    tokenized_train_dataset = tokenized_train_dataset.remove_columns(["phrases", "is_abnormal"])
 
     return tokenized_train_dataset, tokenized_val_dataset
 
@@ -414,16 +488,19 @@ def get_tokenizer():
 
 
 def get_datasets(config_file_path):
-    # path to the csv files specifying the train, val, test sets
-    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-full"
+    # path to the csv files specifying the train, val sets
+    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases"
+
     datasets_as_dfs = {
         dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid"]
     }
 
-    # only read in the phrases
-    usecols = ["phrases"]
+    # reduce memory usage by only using necessary columns and selecting appropriate datatypes
+    usecols = ["mimic_image_file_path", "phrases", "x1", "y1", "x2", "y2", "is_abnormal"]
+    dtype = {"x1": "int16", "x2": "int16", "y1": "int16", "y2": "int16", "is_abnormal": "bool"}
+
     datasets_as_dfs = {
-        dataset: pd.read_csv(csv_file_path, usecols=usecols, keep_default_na=False)
+        dataset: pd.read_csv(csv_file_path, usecols=usecols, keep_default_na=False, dtype=dtype)
         for dataset, csv_file_path in datasets_as_dfs.items()
     }
 
@@ -508,22 +585,23 @@ def main():
 
     tokenizer = get_tokenizer()
 
-    # tokenize the raw datasets
-    tokenized_train_dataset, tokenized_val_dataset = get_tokenized_datasets(
-        tokenizer, raw_train_dataset, raw_val_dataset
-    )
+    # tokenized datasets have the columns:
+    # "mimic_image_file_path", "phrases", "x1", "y1", "x2", "y2", "is_abnormal", "input_ids", "attention_mask"
+    tokenized_train_dataset, tokenized_val_dataset = get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset)
 
-    # complete dataset will return a dict with keys "input_ids", "attention_mask", "image_hidden_states" when indexed,
-    # with "image_hidden_states" mapping to a tensor of size 1024 that are the image features of the given bbox image
+    train_transforms = get_transforms("train")
+    val_transforms = get_transforms("val")
 
-    # validation dataset has an additional key called "phrase" that will return the corresponding ground-truth phrase
-    # this is required to compute the BLEU/BERT scores in evaluate_model_on_metrics
-    train_dataset_complete = CustomImageWordDataset("train", tokenized_train_dataset)
-    val_dataset_complete = CustomImageWordDataset("val", tokenized_val_dataset)
+    # complete train dataset will return a dict with keys "image", "input_ids", "attention_mask" when indexed
+
+    # validation dataset has additional keys "reference_phrase" and "is_abnormal", that will return the corresponding 
+    # ground-truth phrases and is_abnormal boolean that are required to compute the BLEU/BERT scores
+    train_dataset_complete = CustomImageWordDatasetFullModel(tokenized_train_dataset, train_transforms)
+    val_dataset_complete = CustomImageWordDatasetFullModel(tokenized_val_dataset, val_transforms)
 
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    model = DecoderModel()
+    model = ReportGenerationModel()
     model.to(device, non_blocking=True)
     model.train()
 

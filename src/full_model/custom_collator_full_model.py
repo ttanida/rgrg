@@ -1,7 +1,7 @@
 import torch
 
 
-class CustomCollatorWithPadding:
+class CustomCollatorWithPaddingFullModel:
     def __init__(self, tokenizer, padding, is_val, has_is_abnormal_column=False):
         self.tokenizer = tokenizer
         self.padding = padding
