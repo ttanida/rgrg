@@ -14,6 +14,8 @@ class ReportGenerationModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.encoder = ClassificationModel(return_feature_vectors=True)
+        path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_2/val_loss_53.536_epoch_11.pth"
+        self.encoder.load_state_dict(torch.load(path_to_best_weights))
         self.decoder = DecoderModel()
 
     def forward(self,
