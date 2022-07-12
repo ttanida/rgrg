@@ -16,7 +16,7 @@ class CustomCollatorWithPaddingFullModel:
         image_shape = batch[0]["image"].size()
 
         # allocate an empty images_batch tensor that will store all images of the batch
-        images_batch = torch.empty(size=(len(batch), image_shape))
+        images_batch = torch.empty(size=(len(batch), *image_shape))
 
         if self.is_val:
             # for a validation batch, create a list of list of str that hold the reference phrases to compute BLEU/BERTscores

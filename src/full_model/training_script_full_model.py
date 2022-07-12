@@ -39,8 +39,8 @@ torch.cuda.manual_seed_all(seed_val)
 RUN = 0
 # PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
 # PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.0001
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.0001
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.01
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.01
 BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 30
@@ -51,7 +51,7 @@ PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduc
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
-NUM_SENTENCES_TO_GENERATE = 3000
+NUM_SENTENCES_TO_GENERATE = 500
 
 
 def write_sentences_to_file(
@@ -327,12 +327,15 @@ def train_model(
 
                 log.info(f"\nTrain and val loss evaluated at step {overall_steps_taken}!\n")
 
-                metrics_with_scores_dict = evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken)
+                try:
+                    metrics_with_scores_dict = evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_folder_path, overall_steps_taken)
 
-                # subset_name is "all", "with_findings", "without_findings"
-                for subset_name, metrics_with_scores in metrics_with_scores_dict.items():
-                    for metric_name, score in metrics_with_scores.items():
-                        writer.add_scalar(f"{subset_name}_{metric_name}", score, overall_steps_taken)
+                    # subset_name is "all", "with_findings", "without_findings"
+                    for subset_name, metrics_with_scores in metrics_with_scores_dict.items():
+                        for metric_name, score in metrics_with_scores.items():
+                            writer.add_scalar(f"{subset_name}_{metric_name}", score, overall_steps_taken)
+                except Exception:
+                    log.info(f"There was an error computing the metrics at step {overall_steps_taken}.")
 
                 log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
