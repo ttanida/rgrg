@@ -36,22 +36,20 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 0
-# PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.2
-# PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.01
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.01
+RUN = 3
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 1
+PERCENTAGE_OF_VAL_SET_TO_USE = 1
 BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 30
-LR = 1e-3
-EVALUATE_EVERY_K_STEPS = 10000  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE = 15  # number of evaluations to wait before early stopping
-PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+LR = 1e-2
+EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
+PATIENCE = 10  # number of evaluations to wait before early stopping
+PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
-NUM_SENTENCES_TO_GENERATE = 500
+NUM_SENTENCES_TO_GENERATE = 300
 
 
 def write_sentences_to_file(
@@ -492,10 +490,15 @@ def get_tokenizer():
 
 def get_datasets(config_file_path):
     # path to the csv files specifying the train, val sets
-    path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases"
+    # path_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases"
+
+    # datasets_as_dfs = {
+    #     dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid"]
+    # }
 
     datasets_as_dfs = {
-        dataset: os.path.join(path_chest_imagenome_customized, dataset) + ".csv" for dataset in ["train", "valid"]
+        "train": "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases/train.csv",
+        "valid": "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases/valid.csv"
     }
 
     # reduce memory usage by only using necessary columns and selecting appropriate datatypes
