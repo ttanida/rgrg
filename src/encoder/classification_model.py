@@ -13,19 +13,21 @@ class ClassificationModel(nn.Module):
         super().__init__()
         self.pretrained_model = xrv.models.DenseNet(weights="densenet121-res224-all")
 
-        # pretrained model's high level structure (i.e. children):
-        # (0) feature extractor: outputs tensor of shape [batch_size, 1024, 7, 7]
-        # (1) linear layer (from 1024 -> 18)
-        # (2) upsample (size=(224, 224), mode=bilinear)
+        # pretrained model's high level structure (i.e. name of children):
+        # (0) features: feature extractor that outputs tensor of shape [batch_size, 1024, 7, 7]
+        # (1) classifier: linear layer (from 1024 -> 18)
+        # (2) upsample: upsampling layer (size=(224, 224), mode=bilinear)
         #
         # -> only use feature extractor
 
-        self.feature_extractor = nn.Sequential(*list(self.pretrained_model.children())[0])
+        # self.feature_extractor = nn.Sequential(*list(self.pretrained_model.children())[0])
+        self.feature_extractor = self.pretrained_model.features
 
         # AdaptiveAvgPool2d to get from [batch_size, 1024, 7, 7] -> [batch_size, 1024, 1, 1]
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
 
         # linear layers for classification
+        # 37 classes = 36 classes for 36 anatomical regions + 1 class for binary normal/abnormal classification of image region
         self.classifier = nn.Sequential(
             nn.Linear(in_features=1024, out_features=512),
             nn.BatchNorm1d(num_features=512),
