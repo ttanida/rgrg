@@ -1,4 +1,3 @@
-from numpy import size
 import torch.nn as nn
 import torchvision
 from torchvision.models.detection import FasterRCNN
@@ -20,11 +19,19 @@ class ObjectDetector(nn.Module):
         # for densenet121, it's 1024 (with feature maps of size 7x7)
         self.backbone.out_channels = 1024
 
-        # let's make the RPN generate 5 x 3 anchors per spatial location
-        # (5 different sizes and 3 different aspect ratios)
+        # since we have 36 anatomical regions of varying sizes and aspect ratios,
+        # we have to define a custom anchor generator that generates anchors that suit
+        # e.g. the spine (aspect ratio ~= 8.0) or the abdomen (aspect ratio ~= 0.6)
+
+        # TODO: run anchor optimization to find suitable hyperparameters for anchor generator
+        # https://www.mathworks.com/help/vision/ug/estimate-anchor-boxes-from-training-data.html
+        # https://github.com/martinzlocha/anchor-optimization
+        # https://towardsdatascience.com/anchor-boxes-the-key-to-quality-object-detection-ddf9d612d4f9
+
+        # since the input image size is 224 x 224, we choose the sizes accordingly
         self.anchor_generator = AnchorGenerator(
-            sizes=((32, 64, 128, 256, 512),),
-            aspect_ratios=((0.5, 1.0, 2.0),)
+            sizes=((10, 20, 30, 40, 50, 60, 70, 80, 90, 150),),
+            aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 8.0),)
         )
 
         # let's define the roi pooling layer
@@ -45,7 +52,5 @@ class ObjectDetector(nn.Module):
         )
 
 
-backbone = xrv.models.DenseNet(weights="densenet121-res224-all").features
-backbone.out_channels = 1024
-print(backbone.out_channels)
-# summary(model.features, input_size=(64, 1, 224, 224))
+model = ObjectDetector()
+summary(model.features, input_size=(64, 1, 224, 224))
