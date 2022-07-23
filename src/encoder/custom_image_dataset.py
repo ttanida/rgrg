@@ -2,7 +2,7 @@ import cv2
 import torch
 from torch.utils.data import Dataset
 
-from src.dataset.constants import ANATOMICAL_REGIONS
+from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
 
 
 class CustomImageDataset(Dataset):
