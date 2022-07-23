@@ -76,7 +76,7 @@ def get_image_paths_mimic() -> list:
     for root, _, files in tqdm(os.walk(path_to_mimic_cxr_images)):
         for file_name in files:
             image_path = os.path.join(root, file_name)
-            if image_path[-4:] == ".jpg":
+            if image_path.endswith(".jpg"):
                 image_paths.append(image_path)
 
     return image_paths
