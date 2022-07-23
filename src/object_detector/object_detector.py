@@ -1,3 +1,6 @@
+from typing import Optional
+
+import torch
 import torch.nn as nn
 import torchvision
 from torchvision.models.detection import FasterRCNN
@@ -51,6 +54,12 @@ class ObjectDetector(nn.Module):
             box_roi_pool=self.roi_pooler
         )
 
+    def forward(self,
+                images: list[torch.Tensor],  # single image is of shape (1 x 224 x 224) (gray-scale images of size 224 x 224)
+                targets: Optional[list[dict[str, torch.Tensor]]] = None):  # single target is a dict containing "boxes" and "labels" keys
+        return self.model.forward(images, targets)
+
 
 model = ObjectDetector()
-summary(model.features, input_size=(64, 1, 224, 224))
+print(model)
+# summary(model, input_size=(64, 1, 224, 224))
