@@ -138,7 +138,7 @@ def get_num_rows(path_csv_file: str) -> int:
         return sum(1 for row in csv_reader)
 
 
-def compute_stats_for_csv_file(dataset: str, path_csv_file: str) -> dict:
+def compute_stats_for_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> dict:
     stats = {stat: 0 for stat in ["num_images", "num_ignored_images", "num_bboxes", "num_normal_bboxes", "num_abnormal_bboxes", "num_bboxes_with_phrases", "num_outlier_bboxes"]}
     stats["bbox_with_phrases_counter_dict"] = defaultdict(int)
     stats["outlier_bbox_counter_dict"] = defaultdict(int)
@@ -159,6 +159,11 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str) -> dict:
             # (they also don't have corresponding scene graph json files anyway)
             if image_id in IMAGE_IDS_TO_IGNORE:
                 stats["num_ignored_images"] += 1
+                continue
+
+            # all images in set image_ids_to_avoid are image IDs for images in the gold standard dataset,
+            # which should all be excluded from model training and validation
+            if image_id in image_ids_to_avoid:
                 continue
 
             chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
@@ -186,7 +191,7 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str) -> dict:
     return stats
 
 
-def compute_and_print_stats_for_csv_files(csv_files_dict):
+def compute_and_print_stats_for_csv_files(csv_files_dict, image_ids_to_avoid):
     """
     total_num_ignored_images: images that are ignored because of failed x-rays
     total_num_outlier_bboxes: bboxes that have bbox names (like 'left breast' etc.) that are not in the 36 anatomical regions are considered outliers
@@ -198,7 +203,7 @@ def compute_and_print_stats_for_csv_files(csv_files_dict):
     total_stats["total_outlier_bbox_counter_dict"] = defaultdict(int)
 
     for dataset, path_csv_file in csv_files_dict.items():
-        stats = compute_stats_for_csv_file(dataset, path_csv_file)
+        stats = compute_stats_for_csv_file(dataset, path_csv_file, image_ids_to_avoid)
 
         for key, value in stats.items():
             if key not in ["bbox_with_phrases_counter_dict", "outlier_bbox_counter_dict"]:
@@ -210,6 +215,24 @@ def compute_and_print_stats_for_csv_files(csv_files_dict):
     print_stats(dataset="Total", stats=total_stats)
 
 
+def get_images_to_avoid():
+    path_to_images_to_avoid = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits", "images_to_avoid.csv")
+
+    image_ids_to_avoid = set()
+
+    with open(path_to_images_to_avoid) as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=",")
+
+        # skip the first line (i.e. the header line)
+        next(csv_reader)
+
+        for row in csv_reader:
+            image_id = row[2]
+            image_ids_to_avoid.add(image_id)
+
+    return image_ids_to_avoid
+
+
 def get_train_val_test_csv_files():
     path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
     return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
@@ -217,7 +240,13 @@ def get_train_val_test_csv_files():
 
 def main():
     csv_files_dict = get_train_val_test_csv_files()
-    compute_and_print_stats_for_csv_files(csv_files_dict)
+
+    # the "splits" directory of chest-imagenome contains a csv file called "images_to_avoid.csv",
+    # which contains image IDs for images in the gold standard dataset, which should all be excluded
+    # from model training and validation
+    image_ids_to_avoid = get_images_to_avoid()
+
+    compute_and_print_stats_for_csv_files(csv_files_dict, image_ids_to_avoid)
 
 
 if __name__ == "__main__":
