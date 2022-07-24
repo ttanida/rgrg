@@ -1,5 +1,6 @@
 from ast import literal_eval
 import os
+from typing import List, Dict
 
 import logging
 import random
@@ -37,6 +38,32 @@ LR = 1e-2
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 10  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+
+
+def collate_fn(batch: List[Dict[str]]):
+    # each dict in batch is for a single image and has the keys "image", "boxes", "labels"
+
+    # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. returned None)
+    # otherwise, whole training loop will stop (even if only 1 image fails to open)
+    batch = list(filter(lambda x: x is not None, batch))
+
+    image_shape = batch[0]["image"].size()
+    # allocate an empty images_batch tensor that will store all images of the batch
+    images_batch = torch.empty(size=(len(batch), *image_shape))
+
+    for i, sample in enumerate(batch):
+        # remove image tensors from batch and store them in dedicated images_batch tensor
+        images_batch[i] = sample.pop("image")
+
+    # since batch now only contains dicts with keys "boxes" and "labels", rename it as targets
+    targets = batch
+
+    # create a new batch variable to store images_batch and targets
+    batch_new = {}
+    batch_new["images"] = images_batch
+    batch_new["targets"] = targets
+
+    return batch_new
 
 
 def get_transforms(dataset: str):
@@ -155,10 +182,8 @@ def main():
     train_dataset = CustomImageDataset(datasets_as_dfs["train"], train_transforms)
     val_dataset = CustomImageDataset(datasets_as_dfs["valid"], val_transforms)
 
-    print(train_dataset[0])
-    print(train_dataset[0]["image"].shape)
-    print()
-    print(train_dataset[0]["boxes"].shape)
+
+
 
 if __name__ == "__main__":
     main()

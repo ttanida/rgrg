@@ -175,7 +175,7 @@ class ObjectDetector(nn.Module):
         """
         Args:
             images (Tensor): images to be processed of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
-            targets (List[Dict[str, Tensor]]): list of dicts, where a single dict contains the fields:
+            targets (List[Dict[str, Tensor]]): list of batch_size dicts, where a single dict contains the fields:
                 - boxes (FloatTensor[N, 4]): the ground-truth boxes in [x1, y1, x2, y2] format
                 - labels (Int64Tensor[N]): the class label for each ground-truth box
 

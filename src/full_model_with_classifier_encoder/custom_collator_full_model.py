@@ -1,3 +1,5 @@
+from typing import List, Dict
+
 import torch
 
 
@@ -8,7 +10,7 @@ class CustomCollatorWithPaddingFullModel:
         self.is_val = is_val
         self.has_is_abnormal_column = has_is_abnormal_column
 
-    def __call__(self, batch: list[dict[str]]):
+    def __call__(self, batch: List[Dict[str]]):
         # discard samples from batch where __getitem__ from custom_image_word_dataset failed (i.e. returned None)
         # otherwise, whole training loop would stop
         batch = list(filter(lambda x: x is not None, batch))  # filter out samples that are None
