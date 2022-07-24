@@ -202,10 +202,11 @@ class ObjectDetector(nn.Module):
         proposals, proposal_losses = self.rpn(images, features, targets)
         detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
 
+        losses = {}
+        losses.update(detector_losses)
+        losses.update(proposal_losses)
+
         if self.training:
-            losses = {}
-            losses.update(detector_losses)
-            losses.update(proposal_losses)
             return losses
         else:
             return losses, detections
