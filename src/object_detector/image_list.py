@@ -11,7 +11,7 @@ class ImageList:
     """
 
     def __init__(self, images_tensor: Tensor) -> None:
-        self.images_tensor = images_tensor
+        self.tensors = images_tensor
 
         # all tensors have the same shape (most likely [batch_size, 1, 224, 224])
         batch_size = images_tensor.shape[0]
@@ -20,5 +20,5 @@ class ImageList:
         self.image_sizes = [tuple(image_sizes) for _ in range(batch_size)]
 
     def to(self, device: torch.device) -> "ImageList":
-        cast_tensor = self.images_tensor.to(device)
+        cast_tensor = self.tensors.to(device)
         return ImageList(cast_tensor, self.image_sizes)

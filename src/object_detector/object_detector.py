@@ -66,11 +66,13 @@ class ObjectDetector(nn.Module):
 
         # since the input image size is 224 x 224, we choose the sizes accordingly
         anchor_generator = AnchorGenerator(
-            sizes=((10, 20, 30, 40, 50, 60, 70, 80, 90, 150),),
-            aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 8.0),),
+            # sizes=((10, 20, 30, 40, 50, 60, 70, 80, 90, 150),),
+            # aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 8.0),),
+            sizes=((32, 64, 128, 256, 512),),
+            aspect_ratios=((0.5, 1.0, 2.0),),
         )
 
-        rpn_head = RPNHead(self.backbone.out_channels, anchor_generator.num_anchors_per_location())
+        rpn_head = RPNHead(self.backbone.out_channels, anchor_generator.num_anchors_per_location()[0])
 
         # use default values for the RPN
         rpn = RegionProposalNetwork(
@@ -169,9 +171,7 @@ class ObjectDetector(nn.Module):
 
         return images, features
 
-    def forward(self,
-                images: Tensor,
-                targets: Optional[List[Dict[str, Tensor]]] = None):
+    def forward(self, images: Tensor, targets: Optional[List[Dict[str, Tensor]]] = None):
         """
         Args:
             images (Tensor): images to be processed of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
@@ -202,7 +202,6 @@ class ObjectDetector(nn.Module):
             losses = {}
             losses.update(detector_losses)
             losses.update(proposal_losses)
-
             return losses
         else:
             return detections
@@ -210,7 +209,26 @@ class ObjectDetector(nn.Module):
 
 device = torch.device("cpu")
 model = ObjectDetector()
+model.eval()
 model.to(device)
-# print(model)
-input_data = [torch.rand(1, 300, 400).to(device), torch.rand(1, 500, 400).to(device)]
-summary(model, input_data=[input_data], device=device)
+
+images = torch.rand(3, 1, 224, 224)
+targets = [
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+]
+
+# summary(model, input_data=(images, targets))
+detections = model(images)
+print(len(detections))
+print(detections)
