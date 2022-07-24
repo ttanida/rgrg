@@ -207,28 +207,29 @@ class ObjectDetector(nn.Module):
             return detections
 
 
-device = torch.device("cpu")
-model = ObjectDetector()
-model.eval()
-model.to(device)
+# device = torch.device("cpu")
+# model = ObjectDetector()
+# model.train()
+# model.to(device)
 
-images = torch.rand(3, 1, 224, 224)
-targets = [
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-]
+# images = torch.rand(3, 1, 224, 224)
+# targets = [
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+# ]
 
-# summary(model, input_data=(images, targets))
-detections = model(images)
-print(len(detections))
-print(detections)
+# # summary(model, input_data=(images, targets))
+# loss = model(images, targets)
+# print(len(loss))
+# print(loss)
+# print(sum(loss for loss in loss.values()))

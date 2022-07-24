@@ -1,9 +1,9 @@
 from ast import literal_eval
-import os
-from typing import List, Dict
-
+from copy import deepcopy
 import logging
+import os
 import random
+from typing import List, Dict
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -11,8 +11,14 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
+from src.object_detector.object_detector import ObjectDetector
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -38,6 +44,182 @@ LR = 1e-2
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 10  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+
+
+def get_val_loss(model, val_dl):
+    """
+    Args:
+        model (nn.Module): The input model to be evaluated.
+        val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
+
+    Returns:
+        val_loss (float): Val loss for val set.
+    """
+    model.eval()
+    val_loss = 0.0
+
+    with torch.no_grad():
+        for batch in tqdm(val_dl):
+            images, targets = batch.values()
+
+            batch_size = images.size(0)
+
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
+            targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
+
+            loss_dict = model(images, targets)
+
+            # sum up all 4 losses
+            loss = sum(loss for loss in loss_dict.values())
+
+            val_loss += loss.item() * batch_size
+
+    val_loss /= len(val_dl)
+
+    return val_loss
+
+
+def log_stats_to_console(
+    train_loss,
+    val_loss,
+    epoch,
+):
+    log.info(f"Epoch: {epoch}:")
+    log.info(f"\tTrain loss: {train_loss:.3f}")
+    log.info(f"\tVal loss: {val_loss:.3f}")
+
+
+def train_model(
+    model,
+    train_dl,
+    val_dl,
+    optimizer,
+    lr_scheduler,
+    epochs,
+    patience,
+    weights_folder_path,
+    writer
+):
+    """
+    Train a model on train set and evaluate on validation set.
+    Saves best model w.r.t. val loss.
+
+    Parameters
+    ----------
+    model: nn.Module
+        The input model to be trained.
+    train_dl: torch.utils.data.Dataloder
+        The train dataloader to train on.
+    val_dl: torch.utils.data.Dataloder
+        The val dataloader to validate on.
+    optimizer: Optimizer
+        The model's optimizer.
+    lr_scheduler: torch.optim.lr_scheduler
+        The learning rate scheduler to use.
+    epochs: int
+        Number of epochs to train for.
+    patience: int
+        Number of epochs to wait for val loss to decrease.
+        If patience is exceeded, then training is stopped early.
+    weights_folder_path: str
+        Path to folder where best weights will be saved.
+    writer: torch.utils.tensorboard.SummaryWriter
+        Writer for logging values to tensorboard.
+
+    Returns
+    -------
+    None, but saves model with the lowest val loss over all epochs.
+    """
+
+    lowest_val_loss = np.inf
+
+    # the best_model_state is the one where the val loss is the lowest over all evaluations
+    best_model_state = None
+
+    # parameter to determine early stopping
+    num_evaluations_without_decrease_val_loss = 0
+
+    overall_steps_taken = 0  # for logging to tensorboard
+
+    for epoch in range(epochs):
+        log.info(f"\nTraining epoch {epoch}!\n")
+
+        train_loss = 0.0
+        steps_taken = 0
+        for num_batch, batch in tqdm(enumerate(train_dl)):
+            # batch is a dict with keys for 'images' and 'targets'
+            images, targets = batch.values()
+
+            batch_size = images.size(0)
+
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
+            targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
+
+            loss_dict = model(images, targets)
+
+            # sum up all 4 losses
+            loss = sum(loss for loss in loss_dict.values())
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            train_loss += loss.item() * batch_size
+            steps_taken += 1
+            overall_steps_taken += 1
+
+            # evaluate every k steps and also at the end of an epoch
+            if steps_taken >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
+                log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
+
+                # normalize the train loss by steps_taken
+                train_loss /= steps_taken
+                val_loss = get_val_loss(model, val_dl)
+
+                writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
+
+                log.info(f"\nTrain and val loss evaluated at step {overall_steps_taken}!\n")
+
+                # set the model back to training
+                model.train()
+
+                # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
+                lr_scheduler.step(val_loss)
+
+                if val_loss < lowest_val_loss:
+                    num_evaluations_without_decrease_val_loss = 0
+                    lowest_val_loss = val_loss
+                    best_epoch = epoch
+                    best_model_save_path = os.path.join(
+                        weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth"
+                    )
+                    best_model_state = deepcopy(model.state_dict())
+                else:
+                    num_evaluations_without_decrease_val_loss += 1
+
+                if num_evaluations_without_decrease_val_loss >= patience:
+                    # save the model with the overall lowest val loss
+                    torch.save(best_model_state, best_model_save_path)
+                    log.info(f"\nEarly stopping at epoch ({epoch}/{epochs})!")
+                    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
+                    return None
+
+                # log to console at the end of an epoch
+                if (num_batch + 1) == len(train_dl):
+                    log_stats_to_console(train_loss, val_loss, epoch)
+
+                # reset values
+                train_loss = 0.0
+                steps_taken = 0
+
+        # save the current best model weights at the end of each epoch
+        torch.save(best_model_state, best_model_save_path)
+
+    # save the model with the overall lowest val loss
+    torch.save(best_model_state, best_model_save_path)
+    log.info("\nFinished training!")
+    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
+    return None
 
 
 def collate_fn(batch: List[Dict[str]]):
@@ -182,7 +364,30 @@ def main():
     train_dataset = CustomImageDataset(datasets_as_dfs["train"], train_transforms)
     val_dataset = CustomImageDataset(datasets_as_dfs["valid"], val_transforms)
 
+    train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 
+    model = ObjectDetector()
+    model.to(device, non_blocking=True)
+    model.train()
+
+    opt = AdamW(model.parameters(), lr=LR)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
+    writer = SummaryWriter(log_dir=tensorboard_folder_path)
+
+    log.info("\nStarting training!\n")
+
+    train_model(
+        model=model,
+        train_dl=train_loader,
+        val_dl=val_loader,
+        optimizer=opt,
+        lr_scheduler=lr_scheduler,
+        epochs=EPOCHS,
+        patience=PATIENCE,
+        weights_folder_path=weights_folder_path,
+        writer=writer
+    )
 
 
 if __name__ == "__main__":
