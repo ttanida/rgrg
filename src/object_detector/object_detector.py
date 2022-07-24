@@ -202,14 +202,15 @@ class ObjectDetector(nn.Module):
         proposals, proposal_losses = self.rpn(images, features, targets)
         detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
 
-        losses = {}
-        losses.update(detector_losses)
-        losses.update(proposal_losses)
-
+        # in train mode, roi_heads will return an empty list for detections, which is why we only return the losses
         if self.training:
+            losses = {}
+            losses.update(detector_losses)
+            losses.update(proposal_losses)
             return losses
         else:
-            return losses, detections
+            # in eval mode, roi_heads will return an empty dict for detector_losses, which is why we only return the detections
+            return detections
 
 
 # device = torch.device("cpu")

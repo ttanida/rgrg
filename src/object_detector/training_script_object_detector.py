@@ -20,7 +20,8 @@ from tqdm import tqdm
 from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
 from src.object_detector.object_detector import ObjectDetector
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
@@ -55,7 +56,8 @@ def get_val_loss(model, val_dl):
     Returns:
         val_loss (float): Val loss for val set.
     """
-    model.eval()
+    # we set model to train on purpose, since model does not return loss_dict in eval mode
+    model.train()
     val_loss = 0.0
 
     with torch.no_grad():
@@ -67,8 +69,7 @@ def get_val_loss(model, val_dl):
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
-            # in eval mode, the model returns the losses and detections
-            loss_dict, _ = model(images, targets)
+            loss_dict = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
