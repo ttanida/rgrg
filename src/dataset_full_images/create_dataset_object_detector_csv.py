@@ -178,8 +178,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 bbox_coordinates.append(bbox_coords)
                 labels.append(class_label)
 
-            # store the lists as strings (excel cannot handle lists)
-            new_image_row.extend([str(bbox_coordinates), str(labels)])
+            new_image_row.extend([bbox_coordinates, labels])
 
             new_rows.append(new_image_row)
             index += 1
