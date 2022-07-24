@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
@@ -150,8 +152,13 @@ def main():
     train_transforms = get_transforms("train")
     val_transforms = get_transforms("val")
 
-    train_dataset = pass
-    val_dataset = pass
+    train_dataset = CustomImageDataset(datasets_as_dfs["train"], train_transforms)
+    val_dataset = CustomImageDataset(datasets_as_dfs["valid"], val_transforms)
+
+    print(train_dataset[0])
+    print(train_dataset[0]["image"].shape)
+    print()
+    print(train_dataset[0]["boxes"].shape)
 
 if __name__ == "__main__":
     main()
