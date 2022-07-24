@@ -8,7 +8,7 @@ import torchvision
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.roi_heads import RoIHeads
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead, RegionProposalNetwork
-# from torchinfo import summary
+from torchinfo import summary
 import torchxrayvision as xrv
 
 from image_list import ImageList
@@ -184,8 +184,7 @@ class ObjectDetector(nn.Module):
                 losses (Dict[Tensor]), which contains the 4 losses
 
             during inference:
-                losses (same as training) + detections (List[Dict[str, Tensor]]),
-                which are the predictions for each input image.
+                detections (List[Dict[str, Tensor]]), which are the predictions for each input image.
 
                 The fields of a single dict (for a single image) are:
                     - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
@@ -213,28 +212,46 @@ class ObjectDetector(nn.Module):
             return detections
 
 
-# device = torch.device("cpu")
 # model = ObjectDetector()
-# model.train()
-# model.to(device)
+# print(model)
 
-# images = torch.rand(3, 1, 224, 224)
-# targets = [
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-# ]
+device = torch.device("cpu")
+model = ObjectDetector()
+model.train()
+model.to(device)
 
-# # summary(model, input_data=(images, targets))
+images = torch.rand(3, 1, 224, 224)
+targets = [
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+]
+
+for name, module in model.named_modules():
+    if hasattr(module, 'training'):
+        print(f"{name} is training {module.training}")
+
+for module in model.modules():
+    if isinstance(module, nn.BatchNorm2d):
+        module.eval()
+
+model.train()
+
+for name, module in model.named_modules():
+    if hasattr(module, 'training'):
+        print(f"{name} is training {module.training}")
+
+# summary(model, input_data=(images, targets))
+
 # loss = model(images, targets)
 # print(len(loss))
 # print(loss)

@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch import Tensor
+import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -56,7 +57,15 @@ def get_val_loss(model, val_dl):
         val_loss (float): Val loss for val set.
     """
     # we set model to train on purpose, since model does not return loss_dict in eval mode
+    # see https://stackoverflow.com/questions/60339336/validation-loss-for-pytorch-faster-rcnn/65347721#65347721
     model.train()
+
+    # but we can still set the individual BatchNorm2d modules in the backbone to eval
+    # (since behaviour differs between train and eval mode)
+    for module in model.modules():
+        if isinstance(module, nn.BatchNorm2d):
+            module.eval()
+
     val_loss = 0.0
 
     with torch.no_grad():
@@ -254,7 +263,7 @@ def get_transforms(dataset: str):
     mean = 0.471
     std = 0.302
 
-    # note: transforms are applied to the already resized (to 224x224) and padded images 
+    # note: transforms are applied to the already resized (to 224x224) and padded images
     # (see __getitem__ method of custom dataset class)!
 
     # use albumentations for Compose and transforms
@@ -283,7 +292,7 @@ def get_datasets_as_dfs(config_file_path):
 
     usecols = ["mimic_image_file_path", "bbox_coordinates", "labels"]
 
-    # since bbox_coordinates and labels are stored as strings in the csv_file, we have to apply 
+    # since bbox_coordinates and labels are stored as strings in the csv_file, we have to apply
     # the literal_eval func to convert them to python lists
     converters = {"bbox_coordinates": literal_eval, "labels": literal_eval}
 
