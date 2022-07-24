@@ -20,8 +20,7 @@ from tqdm import tqdm
 from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
 from src.object_detector.object_detector import ObjectDetector
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
@@ -35,13 +34,13 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 0
+RUN = 1
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1
 PERCENTAGE_OF_VAL_SET_TO_USE = 1
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 NUM_WORKERS = 12
 EPOCHS = 30
-LR = 1e-2
+LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 10  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
@@ -302,8 +301,8 @@ def get_datasets_as_dfs(config_file_path):
     log.info(f"Val: {new_num_samples_val} phrases")
 
     with open(config_file_path, "a") as f:
-        f.write(f"\tTRAIN NUM PHRASES: {new_num_samples_train}\n")
-        f.write(f"\tVAL NUM PHRASES: {new_num_samples_val}\n")
+        f.write(f"\tTRAIN NUM IMAGES: {new_num_samples_train}\n")
+        f.write(f"\tVAL NUM IMAGES: {new_num_samples_val}\n")
 
     # limit the datasets to those new numbers
     datasets_as_dfs["train"] = datasets_as_dfs["train"][:new_num_samples_train]
