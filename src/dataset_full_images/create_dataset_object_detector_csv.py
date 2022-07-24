@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
 # if constant is None, then all possible rows are created
-NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
+NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 50
 
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
@@ -153,7 +153,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
                 # use the coordinates for a padded and resized 224x224 CXR image (e.g. "x1" instead of "original_x1")
                 x1 = anatomical_region["x1"]
-                y1 = anatomical_region["y2"]
+                y1 = anatomical_region["y1"]
                 x2 = anatomical_region["x2"]
                 y2 = anatomical_region["y2"]
 
@@ -178,8 +178,10 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 bbox_coordinates.append(bbox_coords)
                 labels.append(class_label)
 
-            new_image_row.extend([bbox_coordinates, labels])
+            # store the lists as strings (excel cannot handle lists)
+            new_image_row.extend([str(bbox_coordinates), str(labels)])
 
+            new_rows.append(new_image_row)
             index += 1
 
             if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
@@ -201,7 +203,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
-def create_new_csv_files(csv_files_dict, image_ids_to_avoid):
+def create_new_dataframes(csv_files_dict, image_ids_to_avoid):
     if os.path.exists(path_to_object_detector_dataset):
         log.error(f"Customized chest imagenome dataset folder already exists at {path_to_object_detector_dataset}.")
         log.error("Delete dataset folder before running script to create new folder!")
@@ -244,7 +246,7 @@ def main():
     # from model training and validation
     image_ids_to_avoid = get_images_to_avoid()
 
-    create_new_csv_files(csv_files_dict, image_ids_to_avoid)
+    create_new_dataframes(csv_files_dict, image_ids_to_avoid)
 
 
 if __name__ == "__main__":
