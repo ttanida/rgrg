@@ -7,10 +7,10 @@ from typing import List, Dict
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-import cv2
 import numpy as np
 import pandas as pd
 import torch
+from torch import Tensor
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -67,7 +67,8 @@ def get_val_loss(model, val_dl):
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
-            loss_dict = model(images, targets)
+            # in eval mode, the model returns the losses and detections
+            loss_dict, _ = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
@@ -222,7 +223,7 @@ def train_model(
     return None
 
 
-def collate_fn(batch: List[Dict[str]]):
+def collate_fn(batch: List[Dict[str, Tensor]]):
     # each dict in batch is for a single image and has the keys "image", "boxes", "labels"
 
     # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. returned None)

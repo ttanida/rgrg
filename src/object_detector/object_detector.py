@@ -8,7 +8,7 @@ import torchvision
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.roi_heads import RoIHeads
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead, RegionProposalNetwork
-from torchinfo import summary
+# from torchinfo import summary
 import torchxrayvision as xrv
 
 from image_list import ImageList
@@ -180,13 +180,17 @@ class ObjectDetector(nn.Module):
                 - labels (Int64Tensor[N]): the class label for each ground-truth box
 
         Returns:
-            during training: losses (Dict[Tensor]), which contains the 4 losses
+            during training:
+                losses (Dict[Tensor]), which contains the 4 losses
 
-            during inference: detections (List[Dict[str, Tensor]]), the predictions for each input image.
-            The fields of a single dict are:
-                - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
-                - labels (Int64Tensor[N]): the predicted labels for each image
-                - scores (Tensor[N]): the scores or each prediction
+            during inference:
+                losses (same as training) + detections (List[Dict[str, Tensor]]),
+                which are the predictions for each input image.
+
+                The fields of a single dict (for a single image) are:
+                    - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
+                    - labels (Int64Tensor[N]): the predicted labels for each image
+                    - scores (Tensor[N]): the scores or each prediction
         """
         if self.training:
             self._check_targets(targets)
@@ -204,7 +208,7 @@ class ObjectDetector(nn.Module):
             losses.update(proposal_losses)
             return losses
         else:
-            return detections
+            return losses, detections
 
 
 # device = torch.device("cpu")
