@@ -51,11 +51,12 @@ class CustomRoIHeads(RoIHeads):
 
     def forward(
         self,
-        features,  # type: Dict[str, Tensor]
-        proposals,  # type: List[Tensor]
-        image_shapes,  # type: List[Tuple[int, int]]
-        targets=None,  # type: Optional[List[Dict[str, Tensor]]]
-    ):  # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
+        features: Dict[str, Tensor],
+        proposals: List[Tensor],
+        image_shapes: List[Tuple[int, int]],
+        targets: Optional[List[Dict[str, Tensor]]] = None,
+        return_feature_vectors=False
+    ):  # -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         if targets is not None:
             for t in targets:
                 floating_point_types = (torch.float, torch.double, torch.half)
@@ -74,17 +75,17 @@ class CustomRoIHeads(RoIHeads):
         box_features = self.box_head(box_features)
         class_logits, box_regression = self.box_predictor(box_features)
 
-        result: List[Dict[str, torch.Tensor]] = []
-        losses = {}
+        detections: List[Dict[str, torch.Tensor]] = []
+        detector_losses = {}
 
         if labels and regression_targets:
             loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, labels, regression_targets)
-            losses = {"loss_classifier": loss_classifier, "loss_box_reg": loss_box_reg}
+            detector_losses = {"loss_classifier": loss_classifier, "loss_box_reg": loss_box_reg}
 
         boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
         num_images = len(boxes)
         for i in range(num_images):
-            result.append(
+            detections.append(
                 {
                     "boxes": boxes[i],
                     "labels": labels[i],
@@ -92,4 +93,11 @@ class CustomRoIHeads(RoIHeads):
                 }
             )
 
-        return result, losses
+        roi_heads_output = {}
+        roi_heads_output["detections"] = detections
+        roi_heads_output["detector_losses"] = detector_losses
+
+        if return_feature_vectors:
+            roi_heads_output["box_features"] = box_features
+
+        return roi_heads_output

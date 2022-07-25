@@ -43,8 +43,11 @@ class ObjectDetector(nn.Module):
         - scores (Tensor[N]): the scores or each prediction
     """
 
-    def __init__(self):
+    def __init__(self, return_feature_vectors=False):
         super().__init__()
+        # boolean to specify if feature vectors should be returned after TwoMLPHead (i.e. linear layers) inside RoIHeads
+        self.return_feature_vectors = return_feature_vectors
+
         # 36 classes for 36 anatomical regions + background (defined as class 0)
         self.num_classes = 37
 
@@ -192,7 +195,7 @@ class ObjectDetector(nn.Module):
                     - labels (Int64Tensor[N]): the predicted labels for each image
                     - scores (Tensor[N]): the scores or each prediction
         """
-        if self.training:
+        if targets is not None:
             self._check_targets(targets)
 
         features = self.backbone(images)
@@ -200,13 +203,22 @@ class ObjectDetector(nn.Module):
         images, features = self._transform_inputs_for_rpn_and_roi(images, features)
 
         proposals, proposal_losses = self.rpn(images, features, targets)
-        detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
+        roi_heads_output = self.roi_heads(features, proposals, images.image_sizes, targets, self.return_feature_vectors)
+
+        detections = roi_heads_output["detections"]
+        detector_losses = roi_heads_output["detector_losses"]
+
+        if self.return_feature_vectors:
+            box_features = roi_heads_output["box_features"]
 
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
 
-        return losses, detections
+        if self.return_feature_vectors:
+            return losses, detections, box_features
+        else:
+            return losses, detections
 
 
 model = ObjectDetector()

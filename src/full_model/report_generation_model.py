@@ -3,20 +3,23 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 
-from src.encoder.classification_model import ClassificationModel
+from src.object_detector.object_detector import ObjectDetector
 from src.decoder.gpt2 import DecoderModel
 
 
 class ReportGenerationModel(nn.Module):
     """
-    Full model consisting of classifier encoder and decoder.
+    Full model consisting of object detector encoder and language model decoder.
     """
     def __init__(self):
         super().__init__()
-        self.encoder = ClassificationModel(return_feature_vectors=True)
-        path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_2/val_loss_53.536_epoch_11.pth"
-        self.encoder.load_state_dict(torch.load(path_to_best_weights))
+        self.encoder = ObjectDetector()
+        path_to_best_object_detector_weights = "..."
+        self.encoder.load_state_dict(torch.load(path_to_best_object_detector_weights))
+
         self.decoder = DecoderModel()
+        path_to_best_detector_weights = "..."
+        self.encoder.load_state_dict(torch.load(path_to_best_detector_weights))
 
     def forward(self,
                 images: torch.FloatTensor,  # images is of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
