@@ -208,47 +208,47 @@ class ObjectDetector(nn.Module):
             losses.update(proposal_losses)
             return losses
         else:
-            # in eval mode, roi_heads will return an empty dict for detector_losses, which is why we only return the detections
+            # in eval mode, rpn and roi_heads will return an empty dict for the losses, which is why we only return the detections
             return detections
 
 
 # model = ObjectDetector()
 # print(model)
 
-device = torch.device("cpu")
-model = ObjectDetector()
-model.train()
-model.to(device)
+# device = torch.device("cpu")
+# model = ObjectDetector()
+# model.train()
+# model.to(device)
 
-images = torch.rand(3, 1, 224, 224)
-targets = [
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-]
+# images = torch.rand(3, 1, 224, 224)
+# targets = [
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+# ]
 
-for name, module in model.named_modules():
-    if hasattr(module, 'training'):
-        print(f"{name} is training {module.training}")
+# for name, module in model.named_modules():
+#     if hasattr(module, 'training'):
+#         print(f"{name} is training {module.training}")
 
-for module in model.modules():
-    if isinstance(module, nn.BatchNorm2d):
-        module.eval()
+# for module in model.modules():
+#     if isinstance(module, nn.BatchNorm2d):
+#         module.eval()
 
-model.train()
+# model.train()
 
-for name, module in model.named_modules():
-    if hasattr(module, 'training'):
-        print(f"{name} is training {module.training}")
+# for name, module in model.named_modules():
+#     if hasattr(module, 'training'):
+#         print(f"{name} is training {module.training}")
 
 # summary(model, input_data=(images, targets))
 
