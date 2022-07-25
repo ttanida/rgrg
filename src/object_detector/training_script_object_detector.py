@@ -77,7 +77,7 @@ def get_val_loss(model, val_dl):
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
-            loss_dict = model(images, targets)
+            loss_dict, _ = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
@@ -165,7 +165,7 @@ def train_model(
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
-            loss_dict = model(images, targets)
+            loss_dict, _ = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
