@@ -118,7 +118,7 @@ class ObjectDetector(nn.Module):
             bbox_reg_weights=None,
             score_thresh=0.05,
             nms_thresh=0.5,
-            detections_per_img=100,
+            detections_per_img=100,  # TODO: set detections_per_img to 36 for 36 anatomical regions?
         )
 
         return roi_heads
@@ -213,7 +213,7 @@ model = ObjectDetector()
 
 device = torch.device("cpu")
 model = ObjectDetector()
-model.eval()
+model.train()
 model.to(device)
 
 images = torch.rand(3, 1, 224, 224)
@@ -234,6 +234,6 @@ targets = [
 
 # summary(model, input_data=(images, targets))
 
-loss, detections = model(images)
+loss, detections = model(images, targets)
 print(loss)
 print(detections)
