@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from custom_image_word_dataset_full_model import CustomImageWordDatasetFullModel
 from custom_collator_full_model import CustomCollatorWithPaddingFullModel
-from report_generation_model import ReportGenerationModel
+from full_model_with_classifier_encoder import ReportGenerationModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

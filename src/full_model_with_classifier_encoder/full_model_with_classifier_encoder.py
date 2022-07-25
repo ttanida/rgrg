@@ -9,7 +9,7 @@ from src.decoder.gpt2 import DecoderModel
 
 class ReportGenerationModel(nn.Module):
     """
-    Full model consisting of encoder and decoder.
+    Full model consisting of classifier encoder and decoder.
     """
     def __init__(self):
         super().__init__()
