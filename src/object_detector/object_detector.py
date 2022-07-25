@@ -6,11 +6,12 @@ from torch import Tensor
 import torch.nn as nn
 import torchvision
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
-from torchvision.models.detection.roi_heads import RoIHeads
-from torchvision.models.detection.rpn import AnchorGenerator, RPNHead, RegionProposalNetwork
+from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
 from torchinfo import summary
 import torchxrayvision as xrv
 
+from custom_roi_heads import CustomRoIHeads
+from custom_rpn import CustomRegionProposalNetwork
 from image_list import ImageList
 
 
@@ -30,10 +31,13 @@ class ObjectDetector(nn.Module):
         - boxes (FloatTensor[N, 4]): the gt boxes in [x1, y1, x2, y2] format, with 0 <= x1 < x2 <= W and 0 <= y1 < y2 <= H
         - labels (Int64Tensor[N]): the class label for each ground-truth box
 
-    The model returns a Dict[Tensor] during training, containing the classification and regression losses for both the RPN and the R-CNN.
+    The PyTorch implementation returns a Dict[Tensor] containing the 4 losses in train mode, and a List[Dict[Tensor]] containing
+    the detections for each image in eval mode.
 
-    During inference, the model requires only the input tensors, and returns the post-processed predictions as a List[Dict[Tensor]],
-    one for each input image. The fields of the Dict are as follows:
+    My implementation returns both the losses and the detections regardless of if the model is in train or eval mode.
+    Note that if targets == None in the forward method, then losses will be an empty dict.
+
+    A single detection dict for a single image contains the following fields:
         - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
         - labels (Int64Tensor[N]): the predicted labels for each image
         - scores (Tensor[N]): the scores or each prediction
@@ -75,7 +79,7 @@ class ObjectDetector(nn.Module):
         rpn_head = RPNHead(self.backbone.out_channels, anchor_generator.num_anchors_per_location()[0])
 
         # use default values for the RPN
-        rpn = RegionProposalNetwork(
+        rpn = CustomRegionProposalNetwork(
             anchor_generator=anchor_generator,
             head=rpn_head,
             fg_iou_thresh=0.7,
@@ -103,7 +107,7 @@ class ObjectDetector(nn.Module):
         box_predictor = FastRCNNPredictor(representation_size, self.num_classes)
 
         # use default values for RoI heads
-        roi_heads = RoIHeads(
+        roi_heads = CustomRoIHeads(
             box_roi_pool=roi_pooler,
             box_head=box_head,
             box_predictor=box_predictor,
@@ -180,11 +184,8 @@ class ObjectDetector(nn.Module):
                 - labels (Int64Tensor[N]): the class label for each ground-truth box
 
         Returns:
-            during training:
-                losses (Dict[Tensor]), which contains the 4 losses
-
-            during inference:
-                detections (List[Dict[str, Tensor]]), which are the predictions for each input image.
+            losses (Dict[Tensor]), which contains the 4 losses. If targets == None, then losses will be an empty dict.
+            detections (List[Dict[str, Tensor]]), which are the predictions for each input image.
 
                 The fields of a single dict (for a single image) are:
                     - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
@@ -201,58 +202,38 @@ class ObjectDetector(nn.Module):
         proposals, proposal_losses = self.rpn(images, features, targets)
         detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes, targets)
 
-        # in train mode, roi_heads will return an empty list for detections, which is why we only return the losses
-        if self.training:
-            losses = {}
-            losses.update(detector_losses)
-            losses.update(proposal_losses)
-            return losses
-        else:
-            # in eval mode, rpn and roi_heads will return an empty dict for the losses, which is why we only return the detections
-            return detections
+        losses = {}
+        losses.update(detector_losses)
+        losses.update(proposal_losses)
+
+        return losses, detections
 
 
-# model = ObjectDetector()
-# print(model)
+model = ObjectDetector()
 
-# device = torch.device("cpu")
-# model = ObjectDetector()
-# model.train()
-# model.to(device)
+device = torch.device("cpu")
+model = ObjectDetector()
+model.eval()
+model.to(device)
 
-# images = torch.rand(3, 1, 224, 224)
-# targets = [
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-# ]
-
-# for name, module in model.named_modules():
-#     if hasattr(module, 'training'):
-#         print(f"{name} is training {module.training}")
-
-# for module in model.modules():
-#     if isinstance(module, nn.BatchNorm2d):
-#         module.eval()
-
-# model.train()
-
-# for name, module in model.named_modules():
-#     if hasattr(module, 'training'):
-#         print(f"{name} is training {module.training}")
+images = torch.rand(3, 1, 224, 224)
+targets = [
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+    {
+        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+    },
+]
 
 # summary(model, input_data=(images, targets))
 
-# loss = model(images, targets)
-# print(len(loss))
-# print(loss)
-# print(sum(loss for loss in loss.values()))
+loss, detections = model(images)
+print(loss)
+print(detections)
