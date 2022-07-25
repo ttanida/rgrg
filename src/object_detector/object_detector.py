@@ -44,7 +44,7 @@ class ObjectDetector(nn.Module):
         # 36 classes for 36 anatomical regions + background (defined as class 0)
         self.num_classes = 37
 
-        # use only the feature extractor of the pre-trained classifcation model
+        # use only the feature extractor of the pre-trained classification model
         self.backbone = xrv.models.DenseNet(weights="densenet121-res224-all").features
 
         # FasterRCNN needs to know the number of output channels of the backbone
@@ -66,10 +66,10 @@ class ObjectDetector(nn.Module):
 
         # since the input image size is 224 x 224, we choose the sizes accordingly
         anchor_generator = AnchorGenerator(
-            # sizes=((10, 20, 30, 40, 50, 60, 70, 80, 90, 150),),
-            # aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 8.0),),
-            sizes=((32, 64, 128, 256, 512),),
-            aspect_ratios=((0.5, 1.0, 2.0),),
+            sizes=((10, 20, 30, 40, 50, 60, 70, 80, 90, 150),),
+            aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 8.0),),
+            # sizes=((32, 64, 128, 256, 512),),
+            # aspect_ratios=((0.5, 1.0, 2.0),),
         )
 
         rpn_head = RPNHead(self.backbone.out_channels, anchor_generator.num_anchors_per_location()[0])
