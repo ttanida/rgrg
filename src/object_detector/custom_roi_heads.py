@@ -8,6 +8,7 @@ from torchvision.models.detection.roi_heads import RoIHeads, fastrcnn_loss
 class CustomRoIHeads(RoIHeads):
     def __init__(
         self,
+        return_feature_vectors,
         box_roi_pool,
         box_head,
         box_predictor,
@@ -48,14 +49,14 @@ class CustomRoIHeads(RoIHeads):
             keypoint_head,
             keypoint_predictor,
         )
+        self.return_feature_vectors = return_feature_vectors
 
     def forward(
         self,
         features: Dict[str, Tensor],
         proposals: List[Tensor],
         image_shapes: List[Tuple[int, int]],
-        targets: Optional[List[Dict[str, Tensor]]] = None,
-        return_feature_vectors=False
+        targets: Optional[List[Dict[str, Tensor]]] = None
     ):  # -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         if targets is not None:
             for t in targets:
@@ -97,7 +98,7 @@ class CustomRoIHeads(RoIHeads):
         roi_heads_output["detections"] = detections
         roi_heads_output["detector_losses"] = detector_losses
 
-        if return_feature_vectors:
+        if self.return_feature_vectors:
             roi_heads_output["box_features"] = box_features
 
         return roi_heads_output

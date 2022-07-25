@@ -111,6 +111,7 @@ class ObjectDetector(nn.Module):
 
         # use default values for RoI heads
         roi_heads = CustomRoIHeads(
+            return_feature_vectors=self.return_feature_vectors,
             box_roi_pool=roi_pooler,
             box_head=box_head,
             box_predictor=box_predictor,
@@ -203,7 +204,7 @@ class ObjectDetector(nn.Module):
         images, features = self._transform_inputs_for_rpn_and_roi(images, features)
 
         proposals, proposal_losses = self.rpn(images, features, targets)
-        roi_heads_output = self.roi_heads(features, proposals, images.image_sizes, targets, self.return_feature_vectors)
+        roi_heads_output = self.roi_heads(features, proposals, images.image_sizes, targets)
 
         detections = roi_heads_output["detections"]
         detector_losses = roi_heads_output["detector_losses"]
@@ -224,7 +225,7 @@ class ObjectDetector(nn.Module):
 model = ObjectDetector()
 
 device = torch.device("cpu")
-model = ObjectDetector()
+model = ObjectDetector(return_feature_vectors=True)
 model.train()
 model.to(device)
 
@@ -246,6 +247,7 @@ targets = [
 
 # summary(model, input_data=(images, targets))
 
-loss, detections = model(images, targets)
+loss, detections, box_features = model(images, targets)
 print(loss)
 print(detections)
+print(box_features.shape)

@@ -13,7 +13,7 @@ class ReportGenerationModel(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.encoder = ObjectDetector()
+        self.encoder = ObjectDetector(return_feature_vectors=True)
         path_to_best_object_detector_weights = "..."
         self.encoder.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
@@ -30,12 +30,12 @@ class ReportGenerationModel(nn.Module):
                 position_ids: Optional[torch.LongTensor] = None,
                 use_cache: Optional[bool] = False
                 ):
-        image_features = self.encoder(images)  # image features of shape [batch_size, 1024]
+        losses, detections, region_features = self.encoder(images)  # region features of shape [batch_size, 36, 1024]
 
         decoder_output = self.decoder(
             input_ids,
             attention_mask,
-            image_features,
+            region_features,
             return_loss,
             past_key_values,
             position_ids,
