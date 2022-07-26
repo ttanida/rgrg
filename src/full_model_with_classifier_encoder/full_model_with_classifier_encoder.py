@@ -22,14 +22,14 @@ class ReportGenerationModel(nn.Module):
                 images: torch.FloatTensor,  # images is of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,  # shape (batch_size x seq_len)
-                return_loss: bool = False,
+                return_loss: bool = True,
                 past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
                 position_ids: Optional[torch.LongTensor] = None,
                 use_cache: Optional[bool] = False
                 ):
         image_features = self.encoder(images)  # image features of shape [batch_size, 1024]
 
-        decoder_output = self.decoder(
+        loss = self.decoder(
             input_ids,
             attention_mask,
             image_features,
@@ -39,7 +39,7 @@ class ReportGenerationModel(nn.Module):
             use_cache
         )
 
-        return decoder_output
+        return loss
 
     @torch.no_grad()
     def generate(self,
