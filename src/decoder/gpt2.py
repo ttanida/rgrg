@@ -131,6 +131,7 @@ class GPT2PseudoAttention(nn.Module):
         # query, key, value matrices each have shape (batch_size x seq_len x hidden_dim)
         q_word, k_word, v_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
 
+        # if layer_past is None, we are either training the model or generating the first token in text generation mode
         if layer_past is None:
             # add an addition dimension to the image_hidden_states
             image_hidden_states = image_hidden_states[:, None, :]  # shape (batch_size x 1 x hidden_dim)
@@ -159,6 +160,7 @@ class GPT2PseudoAttention(nn.Module):
 
             attn_output = self._attn(q_word, k_image_word, v_image_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
         else:
+            # if there is a layer_past (which stores key and value tensors of past tokens), then this means we are in text generation mode
             q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
             k_word = self._split_heads(k_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
             v_word = self._split_heads(v_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
