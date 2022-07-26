@@ -57,7 +57,7 @@ class CustomRoIHeads(RoIHeads):
         proposals: List[Tensor],
         image_shapes: List[Tuple[int, int]],
         targets: Optional[List[Dict[str, Tensor]]] = None
-    ):  # -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
+    ) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]:
         if targets is not None:
             for t in targets:
                 floating_point_types = (torch.float, torch.double, torch.half)

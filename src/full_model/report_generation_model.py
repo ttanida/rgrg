@@ -17,6 +17,7 @@ class ReportGenerationModel(nn.Module):
         path_to_best_object_detector_weights = "..."
         self.encoder.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
+        # TODO: implement binary classifier
         # self.binary_classifier = BinaryClassifier()
 
         self.decoder = DecoderModel()
@@ -92,7 +93,7 @@ class ReportGenerationModel(nn.Module):
                  do_sample: bool = False,
                  num_return_sequences: int = 1,
                  early_stopping: bool = False
-                 ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
+        ):
         """
         In inference mode, we input 1 image (with 36 regions) at a time.
 
