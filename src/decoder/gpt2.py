@@ -263,8 +263,9 @@ class DecoderModel(nn.Module):
                 use_cache: Optional[bool] = False
                 ):
         """
-        If return_loss is False, returns language modeling logits (of shape batch_size x seq_len x vocab_size).
-        If return_loss is True, returns a tuple of the cross entropy loss and language modeling logits.
+        If return_loss is True, returns the language modeling loss.
+        If return_loss is False (in which we are in text generation mode and use_cache will be True), returns the language modeling logits (of shape batch_size x seq_len x vocab_size)
+        as well as the so-called presents (which store the key and value tensors of the previous tokens, such that they don't have to be recomputed every time during text generation).
 
         To compute the loss, the input_ids are used as labels.
         To prevent padding tokens from counting towards the loss, the attention_mask is transformed to a boolean mask and inverted.
