@@ -1,16 +1,17 @@
 """
-Script creates train.csv, valid.csv and test.csv for object detection (i.e. without phrases).
+Script creates train.csv, valid.csv and test.csv for the full model.
 """
 import csv
 import json
 import logging
 import os
+import re
 
 from tqdm import tqdm
 
-from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
+from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_object_detector_dataset = "/u/home/tanida/datasets/object-detector-dataset"
+path_to_full_dataset = "/u/home/tanida/datasets/full-dataset"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -19,19 +20,19 @@ log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
 # if constant is None, then all possible rows are created
-NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
+NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 50
 
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
-    new_csv_file_path = os.path.join(path_to_object_detector_dataset, dataset)
+    new_csv_file_path = os.path.join(path_to_full_dataset, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
 
-        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "labels"]
+        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
@@ -75,6 +76,138 @@ def coordinates_faulty(height, width, x1, y1, x2, y2) -> bool:
     exceeds_limits = x1 >= width or y1 >= height
 
     return area_of_bbox_is_zero or smaller_than_zero or exceeds_limits
+
+
+def determine_if_abnormal(attributes_list: list[list]) -> bool:
+    """
+    attributes_list is a list of lists that contains attributes corresponding to the phrases describing a specific bbox.
+
+    E.g. the phrases: ['Right lung is clear without pneumothorax.', 'No pneumothorax identified.'] have the attributes_list
+    [['anatomicalfinding|no|lung opacity', 'anatomicalfinding|no|pneumothorax', 'nlp|yes|normal'], ['anatomicalfinding|no|pneumothorax']],
+    where the 1st inner list contains the attributes pertaining to the 1st phrase, and the 2nd inner list contains attributes for the 2nd phrase respectively.
+
+    Phrases describing abnormalities have the attribute 'nlp|yes|abnormal'.
+    """
+    for attributes in attributes_list:
+        for attribute in attributes:
+            if attribute == "nlp|yes|abnormal":
+                return True
+
+    # no abnormality could be detected
+    return False
+
+
+def convert_phrases_to_single_string(phrases: list[str]) -> str:
+    """
+    Takes a list of phrases describing the region of a single bbox and returns a single string.
+
+    Also performs operations to clean the single string, such as:
+        - removes irrelevant substrings (like "PORTABLE UPRIGHT AP VIEW OF THE CHEST:")
+        - removes whitespace characters (e.g. \n or \t) and redundant whitespaces
+        - removes duplicate sentences
+
+    Args:
+        phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
+
+    Returns:
+        phrases (str): a single string, with the list of strings concatenated
+    """
+    def remove_substrings(phrases):
+        def remove_wet_read(phrases):
+            """Removes substring like 'WET READ: ___ ___ 8:19 AM' that is irrelevant."""
+            # since there can be multiple WET READS's, collect the indices where they start and end in index_slices_to_remove
+            index_slices_to_remove = []
+            for index in range(len(phrases)):
+                if phrases[index:index + 8] == "WET READ":
+
+                    # curr_index searches for "AM" or "PM" that signals the end of the WET READ substring
+                    for curr_index in range(index + 8, len(phrases)):
+                        # since it's possible that a WET READ substring does not have an"AM" or "PM" that signals its end, we also have to break out of the iteration
+                        # if the next WET READ substring is encountered
+                        if phrases[curr_index:curr_index + 2] in ["AM", "PM"] or phrases[curr_index:curr_index + 8] == "WET READ":
+                            break
+
+                    # only add (index, curr_index + 2) (i.e. the indices of the found WET READ substring) to index_slices_to_remove if an "AM" or "PM" were found
+                    if phrases[curr_index:curr_index + 2] in ["AM", "PM"]:
+                        index_slices_to_remove.append((index, curr_index + 2))
+
+            # remove the slices in reversed order, such that the correct index order is preserved
+            for indices_tuple in reversed(index_slices_to_remove):
+                start_index, end_index = indices_tuple
+                phrases = phrases[:start_index] + phrases[end_index:]
+
+            return phrases
+
+        phrases = remove_wet_read(phrases)
+        phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL)
+
+        return phrases
+
+    def remove_whitespace(phrases):
+        """Remove white space and capitalize words that come after a period."""
+        # new_phrases collects all words
+        new_phrases = ""
+
+        # set the previous word as a period, such that the first word in new_phrases is capitalized
+        prev_word = "."
+
+        for word in phrases.split():
+            if prev_word[-1] == ".":
+                new_phrases += (word[0].upper() + word[1:])  # capitalize the word
+            else:
+                new_phrases += word
+
+            # add a space for the next word
+            new_phrases += " "
+
+            # set current word as previous word for the next word
+            prev_word = word
+
+        # remove the trailing whitespace
+        return new_phrases.rstrip()
+
+    def remove_duplicate_sentences(phrases):
+        # remove the last period
+        if phrases[-1] == ".":
+            phrases = phrases[:-1]
+
+        # dicts are insertion ordered as of Python 3.6
+        phrases_dict = {phrase: None for phrase in phrases.split(". ")}
+
+        phrases = ". ".join(phrase for phrase in phrases_dict)
+
+        # add last period
+        return phrases + "."
+
+    # convert list of phrases into a single phrase
+    phrases = " ".join(phrases)
+
+    # remove "PORTABLE UPRIGHT AP VIEW OF THE CHEST:" and similar substrings from phrases, since they don't add any relevant information
+    phrases = remove_substrings(phrases)
+
+    # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.)
+    phrases = remove_whitespace(phrases)
+
+    phrases = remove_duplicate_sentences(phrases)
+
+    return phrases
+
+
+def get_attributes_dict(image_scene_graph: dict) -> dict[tuple]:
+    attributes_dict = {}
+    for attribute in image_scene_graph["attributes"]:
+        bbox_name = attribute["bbox_name"]
+
+        # ignore bbox_names such as "left chest wall" or "right breast" that don't appear in the 36 anatomical regions that have bbox coordiantes
+        if bbox_name not in ANATOMICAL_REGIONS:
+            continue
+
+        phrases = convert_phrases_to_single_string(attribute["phrases"])
+        is_abnormal = determine_if_abnormal(attribute["attributes"])
+
+        attributes_dict[bbox_name] = (phrases, is_abnormal)
+
+    return attributes_dict
 
 
 def get_total_num_rows(path_csv_file: str) -> int:
@@ -140,12 +273,27 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             with open(chest_imagenome_scene_graph_file_path) as fp:
                 image_scene_graph = json.load(fp)
 
-            # we assume that the images were already padded and resized to 224x224 (see custom_object_detector_dataset.py)
+            # get the attributes specified for the specific image in its image_scene_graph
+            # the attributes contain (among other things) phrases used in the reference report used to describe different bbox regions and
+            # information whether a described bbox region is normal or abnormal
+            #
+            # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
+            # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
+            # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
+            anatomical_region_attributes = get_attributes_dict(image_scene_graph)
+
+            # we assume that the images were already padded and resized to 224x224
             width, height = 224, 224
 
             new_image_row = [index, subject_id, study_id, image_id, mimic_image_file_path]
             bbox_coordinates = []
-            labels = []
+            bbox_labels = []
+            bbox_phrases = []
+            bbox_phrase_exist_vars = []
+            bbox_is_abnormal_vars = []
+
+            # counter to make sure that all 36 regions are processed in for loop
+            num_regions = 0
 
             # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
             for anatomical_region in image_scene_graph["objects"]:
@@ -157,10 +305,12 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 x2 = anatomical_region["x2"]
                 y2 = anatomical_region["y2"]
 
-                # check if bbox coordinates are faulty
-                # if so, skip the anatomical region/bbox
+                # check if any bbox coordinates are faulty (of all 36 regions)
+                # if there is at least 1 region with faulty bbox coordinates, then break out of loop
+                # this will ensure that num_regions counter will not reach 35, and thus:
+                # -> only images with correct bbox coordinates for all 36 regions will be added to dataset
                 if coordinates_faulty(height, width, x1, y1, x2, y2):
-                    continue
+                    break
 
                 # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
                 # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
@@ -175,13 +325,24 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 # since background has class label 0 for object detection, shift the remaining class labels by 1
                 class_label = ANATOMICAL_REGIONS[bbox_name] + 1
 
+                # get bbox_phrase (describing the region inside bbox) and bbox_is_abnormal boolean variable (indicating if region inside bbox is abnormal)
+                # if there is no phrase, then the region inside bbox is normal and thus has "" for bbox_phrase (empty phrase) and False for bbox_is_abnormal
+                bbox_phrase, bbox_is_abnormal = anatomical_region_attributes.get(bbox_name, ("", False))
+                bbox_phrase_exist = True if bbox_phrase != "" else False
+
                 bbox_coordinates.append(bbox_coords)
-                labels.append(class_label)
+                bbox_labels.append(class_label)
+                bbox_phrases.append(bbox_phrase)
+                bbox_phrase_exist_vars.append(bbox_phrase_exist)
+                bbox_is_abnormal_vars.append(bbox_is_abnormal)
 
-            new_image_row.extend([bbox_coordinates, labels])
+                num_regions += 1
 
-            new_rows.append(new_image_row)
-            index += 1
+            if num_regions == 35:
+                # only add image information to dataset if information of all 36 regions is included
+                new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
+                new_rows.append(new_image_row)
+                index += 1
 
             if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
                 return new_rows
@@ -193,7 +354,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
     log.info(f"Creating new {dataset}.csv file...")
 
     # get rows to create new csv_file
-    # new_rows is a list of lists, where an inner list specifies all information about a single image (i.e. bounding boxes + labels)
+    # new_rows is a list of lists, where an inner list specifies all information about a single image
     new_rows = get_rows(path_csv_file, image_ids_to_avoid)
 
     # write those rows into a new csv file
@@ -203,12 +364,12 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
 
 
 def create_new_dataframes(csv_files_dict, image_ids_to_avoid):
-    if os.path.exists(path_to_object_detector_dataset):
-        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_object_detector_dataset}.")
+    if os.path.exists(path_to_full_dataset):
+        log.error(f"Full dataset folder already exists at {path_to_full_dataset}.")
         log.error("Delete dataset folder before running script to create new folder!")
         return None
 
-    os.mkdir(path_to_object_detector_dataset)
+    os.mkdir(path_to_full_dataset)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file, image_ids_to_avoid)
 
