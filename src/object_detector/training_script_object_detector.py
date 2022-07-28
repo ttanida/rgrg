@@ -34,16 +34,16 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 3
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 1
-PERCENTAGE_OF_VAL_SET_TO_USE = 1
+RUN = 4
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.03
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.1
 BATCH_SIZE = 32
 NUM_WORKERS = 12
-EPOCHS = 100
+EPOCHS = 150
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 1000  # number of evaluations to wait before early stopping
-PATIENCE_LR_SCHEDULER = 50  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
 def get_val_loss(model, val_dl):
@@ -55,7 +55,7 @@ def get_val_loss(model, val_dl):
     Returns:
         val_loss (float): Val loss for val set.
     """
-    # my model is modified to return both losses and detections regardless of if it's in train or eval mode
+    # my model is modified to return both losses and detections in eval mode
     # PyTorch implementation only return losses in train mode, and only detections in eval mode
     # see https://stackoverflow.com/questions/60339336/validation-loss-for-pytorch-faster-rcnn/65347721#65347721
     model.eval()
@@ -159,7 +159,7 @@ def train_model(
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
-            loss_dict, _ = model(images, targets)
+            loss_dict = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
@@ -188,7 +188,8 @@ def train_model(
                 model.train()
 
                 # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
-                lr_scheduler.step(val_loss)
+                # lr_scheduler.step(val_loss)
+                lr_scheduler.step(train_loss)
 
                 if val_loss < lowest_val_loss:
                     num_evaluations_without_decrease_val_loss = 0
@@ -220,7 +221,8 @@ def train_model(
         torch.save(best_model_state, best_model_save_path)
 
     # save the model with the overall lowest val loss
-    torch.save(best_model_state, best_model_save_path)
+    # torch.save(best_model_state, best_model_save_path)
+    torch.save(model.state_dict(), os.path.join(weights_folder_path, "last_epoch.pth"))
     log.info("\nFinished training!")
     log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
     return None

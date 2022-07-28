@@ -83,16 +83,17 @@ class CustomRoIHeads(RoIHeads):
             loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, labels, regression_targets)
             detector_losses = {"loss_classifier": loss_classifier, "loss_box_reg": loss_box_reg}
 
-        boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
-        num_images = len(boxes)
-        for i in range(num_images):
-            detections.append(
-                {
-                    "boxes": boxes[i],
-                    "labels": labels[i],
-                    "scores": scores[i],
-                }
-            )
+        if not self.training:
+            boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
+            num_images = len(boxes)
+            for i in range(num_images):
+                detections.append(
+                    {
+                        "boxes": boxes[i],
+                        "labels": labels[i],
+                        "scores": scores[i],
+                    }
+                )
 
         roi_heads_output = {}
         roi_heads_output["detections"] = detections

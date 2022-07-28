@@ -34,8 +34,8 @@ class ObjectDetector(nn.Module):
     The PyTorch implementation returns a Dict[Tensor] containing the 4 losses in train mode, and a List[Dict[Tensor]] containing
     the detections for each image in eval mode.
 
-    My implementation returns both the losses and the detections regardless of if the model is in train or eval mode.
-    Note that if targets == None in the forward method, then losses will be an empty dict.
+    My implementation returns also only returns the loss_dict in train mode, but in eval mode returns both the loss_dict (with the val_losses)
+    and the detections (note that if targets == None in eval mode, then losses will be an empty dict).
 
     A single detection dict for a single image contains the following fields:
         - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
@@ -120,8 +120,8 @@ class ObjectDetector(nn.Module):
             batch_size_per_image=512,
             positive_fraction=0.25,
             bbox_reg_weights=None,
-            score_thresh=0.05,
-            nms_thresh=0.5,
+            score_thresh=0.01,  # TODO: try out different values
+            nms_thresh=0.0,  # TODO: try out different values
             detections_per_img=100,  # TODO: set detections_per_img to 36 for 36 anatomical regions?
         )
 
@@ -187,8 +187,12 @@ class ObjectDetector(nn.Module):
                 - labels (Int64Tensor[N]): the class label for each ground-truth box
 
         Returns:
-            losses (Dict[Tensor]), which contains the 4 losses. If targets == None, then losses will be an empty dict.
-            detections (List[Dict[str, Tensor]]), which are the predictions for each input image.
+            in train mode:
+                - losses (Dict[Tensor]), which contains the 4 losses
+
+            in eval mode:
+                - losses (Dict[Tensor]). If targets == None, then losses will be an empty dict.
+                - detections (List[Dict[str, Tensor]]), which are the predictions for each input image.
 
                 The fields of a single dict (for a single image) are:
                     - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
@@ -215,10 +219,16 @@ class ObjectDetector(nn.Module):
         losses.update(detector_losses)
         losses.update(proposal_losses)
 
-        if self.return_feature_vectors:
-            return losses, detections, box_features
+        if self.training:
+            if not self.return_feature_vectors:
+                return losses
+            else:
+                return losses, box_features
         else:
-            return losses, detections
+            if not self.return_feature_vectors:
+                return losses, detections
+            else:
+                return losses, detections, box_features
 
 
 # model = ObjectDetector()
