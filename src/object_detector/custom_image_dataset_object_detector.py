@@ -33,7 +33,7 @@ class CustomImageDataset(Dataset):
             # bbox_coordinates (List[List[int]]) is the 2nd column of the dataframes
             bbox_coordinates = self.dataset_df.iloc[index, 1]
 
-            # labels (List[int]) is the 3rd column of the dataframes
+            # bbox_labels (List[int]) is the 3rd column of the dataframes
             labels = self.dataset_df.iloc[index, 2]
 
             sample = {

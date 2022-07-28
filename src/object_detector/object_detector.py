@@ -155,8 +155,7 @@ class ObjectDetector(nn.Module):
                 degen_bb: List[float] = boxes[bb_idx].tolist()
                 torch._assert(
                     False,
-                    "All bounding boxes should have positive height and width."
-                    f" Found invalid box {degen_bb} for target at index {target_idx}.",
+                    "All bounding boxes should have positive height and width." f" Found invalid box {degen_bb} for target at index {target_idx}.",
                 )
 
     def _transform_inputs_for_rpn_and_roi(self, images, features):
@@ -222,32 +221,32 @@ class ObjectDetector(nn.Module):
             return losses, detections
 
 
-model = ObjectDetector()
+# model = ObjectDetector()
 
-device = torch.device("cpu")
-model = ObjectDetector(return_feature_vectors=True)
-model.train()
-model.to(device)
+# device = torch.device("cpu")
+# model = ObjectDetector(return_feature_vectors=True)
+# model.train()
+# model.to(device)
 
-images = torch.rand(3, 1, 224, 224)
-targets = [
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-]
+# images = torch.rand(3, 1, 224, 224)
+# targets = [
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+# ]
 
-# summary(model, input_data=(images, targets))
+# # summary(model, input_data=(images, targets))
 
-loss, detections, box_features = model(images, targets)
-print(loss)
-print(detections)
-print(box_features.shape)
+# loss, detections, box_features = model(images, targets)
+# print(loss)
+# print(detections)
+# print(box_features.shape)

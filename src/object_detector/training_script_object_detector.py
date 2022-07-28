@@ -35,7 +35,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 1
+RUN = 0
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1
 PERCENTAGE_OF_VAL_SET_TO_USE = 1
 BATCH_SIZE = 32
@@ -233,7 +233,7 @@ def train_model(
 
 
 def collate_fn(batch: List[Dict[str, Tensor]]):
-    # each dict in batch is for a single image and has the keys "image", "boxes", "labels"
+    # each dict in batch (which is a list) is for a single image and has the keys "image", "boxes", "labels"
 
     # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. returned None)
     # otherwise, whole training loop will stop (even if only 1 image fails to open)
@@ -247,7 +247,7 @@ def collate_fn(batch: List[Dict[str, Tensor]]):
         # remove image tensors from batch and store them in dedicated images_batch tensor
         images_batch[i] = sample.pop("image")
 
-    # since batch now only contains dicts with keys "boxes" and "labels", rename it as targets
+    # since batch (which is a list) now only contains dicts with keys "boxes" and "labels", rename it as targets
     targets = batch
 
     # create a new batch variable to store images_batch and targets
@@ -288,15 +288,15 @@ def get_transforms(dataset: str):
 
 
 def get_datasets_as_dfs(config_file_path):
-    path_dataset_object_detector = "/u/home/tanida/datasets/object-detector-dataset"
+    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model"
 
-    usecols = ["mimic_image_file_path", "bbox_coordinates", "labels"]
+    usecols = ["mimic_image_file_path", "bbox_coordinates", "bbox_labels"]
 
-    # since bbox_coordinates and labels are stored as strings in the csv_file, we have to apply
+    # since bbox_coordinates and bbox_labels are stored as strings in the csv_file, we have to apply
     # the literal_eval func to convert them to python lists
-    converters = {"bbox_coordinates": literal_eval, "labels": literal_eval}
+    converters = {"bbox_coordinates": literal_eval, "bbox_labels": literal_eval}
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, f"{dataset}-50") + ".csv" for dataset in ["train", "valid", "test"]}
+    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])
@@ -306,8 +306,8 @@ def get_datasets_as_dfs(config_file_path):
     new_num_samples_train = int(PERCENTAGE_OF_TRAIN_SET_TO_USE * total_num_samples_train)
     new_num_samples_val = int(PERCENTAGE_OF_VAL_SET_TO_USE * total_num_samples_val)
 
-    log.info(f"Train: {new_num_samples_train} phrases")
-    log.info(f"Val: {new_num_samples_val} phrases")
+    log.info(f"Train: {new_num_samples_train} images")
+    log.info(f"Val: {new_num_samples_val} images")
 
     with open(config_file_path, "a") as f:
         f.write(f"\tTRAIN NUM IMAGES: {new_num_samples_train}\n")

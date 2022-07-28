@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_full_dataset = "/u/home/tanida/datasets/full-dataset"
+path_to_full_dataset = "/u/home/tanida/datasets/dataset-for-full-model"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -307,7 +307,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
                 # check if any bbox coordinates are faulty (of all 36 regions)
                 # if there is at least 1 region with faulty bbox coordinates, then break out of loop
-                # this will ensure that num_regions counter will not reach 35, and thus:
+                # this will ensure that num_regions counter will not reach 36, and thus:
                 # -> only images with correct bbox coordinates for all 36 regions will be added to dataset
                 if coordinates_faulty(height, width, x1, y1, x2, y2):
                     break
@@ -338,7 +338,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
                 num_regions += 1
 
-            if num_regions == 35:
+            if num_regions == 36:
                 # only add image information to dataset if information of all 36 regions is included
                 new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
                 new_rows.append(new_image_row)
