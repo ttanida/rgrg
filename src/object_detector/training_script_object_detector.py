@@ -43,7 +43,7 @@ NUM_WORKERS = 12
 EPOCHS = 30
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE = 10  # number of evaluations to wait before early stopping
+PATIENCE = 100  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
@@ -56,15 +56,10 @@ def get_val_loss(model, val_dl):
     Returns:
         val_loss (float): Val loss for val set.
     """
-    # we set model to train on purpose, since model does not return loss_dict in eval mode
+    # my model is modified to return both losses and detections regardless of if it's in train or eval mode
+    # PyTorch implementation only return losses in train mode, and only detections in eval mode
     # see https://stackoverflow.com/questions/60339336/validation-loss-for-pytorch-faster-rcnn/65347721#65347721
-    model.train()
-
-    # but we can still set the individual BatchNorm2d modules in the backbone to eval
-    # (since behaviour differs between train and eval mode)
-    for module in model.modules():
-        if isinstance(module, nn.BatchNorm2d):
-            module.eval()
+    model.eval()
 
     val_loss = 0.0
 
@@ -288,7 +283,7 @@ def get_transforms(dataset: str):
 
 
 def get_datasets_as_dfs(config_file_path):
-    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model"
+    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model-50"
 
     usecols = ["mimic_image_file_path", "bbox_coordinates", "bbox_labels"]
 
@@ -296,7 +291,7 @@ def get_datasets_as_dfs(config_file_path):
     # the literal_eval func to convert them to python lists
     converters = {"bbox_coordinates": literal_eval, "bbox_labels": literal_eval}
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
+    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, f"{dataset}-50") + ".csv" for dataset in ["train", "valid", "test"]}
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])

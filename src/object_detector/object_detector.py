@@ -7,7 +7,7 @@ import torch.nn as nn
 import torchvision
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
-from torchinfo import summary
+# from torchinfo import summary
 import torchxrayvision as xrv
 
 from custom_roi_heads import CustomRoIHeads
