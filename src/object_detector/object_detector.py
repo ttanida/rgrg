@@ -7,7 +7,7 @@ import torch.nn as nn
 import torchvision
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
-# from torchinfo import summary
+from torchinfo import summary
 import torchxrayvision as xrv
 
 from custom_roi_heads import CustomRoIHeads
@@ -224,8 +224,8 @@ class ObjectDetector(nn.Module):
 # model = ObjectDetector()
 
 # device = torch.device("cpu")
-# model = ObjectDetector(return_feature_vectors=True)
-# model.train()
+# model = ObjectDetector(return_feature_vectors=False)
+# model.eval()
 # model.to(device)
 
 # images = torch.rand(3, 1, 224, 224)
@@ -244,9 +244,10 @@ class ObjectDetector(nn.Module):
 #     },
 # ]
 
-# # summary(model, input_data=(images, targets))
+# summary(model, input_data=(images, targets))
+# summary(model)
 
-# loss, detections, box_features = model(images, targets)
+# loss, detections = model(images)
 # print(loss)
 # print(detections)
 # print(box_features.shape)

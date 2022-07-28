@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import torch
 from torch import Tensor
-import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -35,16 +34,16 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 0
+RUN = 3
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1
 PERCENTAGE_OF_VAL_SET_TO_USE = 1
 BATCH_SIZE = 32
 NUM_WORKERS = 12
-EPOCHS = 30
+EPOCHS = 100
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE = 100  # number of evaluations to wait before early stopping
-PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+PATIENCE = 1000  # number of evaluations to wait before early stopping
+PATIENCE_LR_SCHEDULER = 50  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
 def get_val_loss(model, val_dl):

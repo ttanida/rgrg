@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
 # if constant is None, then all possible rows are created
-NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 50
+NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
