@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict, Tuple
+from matplotlib.cbook import index_of
 
 import torch
 from torch import Tensor
@@ -53,43 +54,67 @@ class CustomRoIHeads(RoIHeads):
         )
         self.return_feature_vectors = return_feature_vectors
 
-    def find_max_inds(
-        self,
-        class_logits_image
-    ):
-        max_inds = []
-        while len(max_inds) < 36:
-            values, indices = torch.max(class_logits_image, dim=0)
-
     def get_top_box_features(
         self,
         box_features,
         class_logits,
         proposals
     ):
-        # remove logits of the background class
-        class_logits = class_logits[:, 1:]
+        # apply softmax on background class as well
+        # (such that if the background class has a high score, all other classes will have a low score)
+        pred_scores = F.softmax(class_logits, -1)
 
-        # split class_logits (which is a tensor with logits for all RoIs of all images in the batch)
-        # into the tuple class_logits_per_image (where 1 class_logits tensor has logits for all RoIs of 1 image)
+        # remove score of the background class
+        pred_scores = pred_scores[:, 1:]
+
+        # split pred_scores (which is a tensor with scores for all RoIs of all images in the batch)
+        # into the tuple pred_scores_per_image (where 1 pred_score tensor has scores for all RoIs of 1 image)
         boxes_per_image = [boxes_in_image.shape[0] for boxes_in_image in proposals]
-        class_logits_per_image = torch.split(class_logits, boxes_per_image, dim=0)
+        pred_scores_per_image = torch.split(pred_scores, boxes_per_image, dim=0)
 
         # also split box_features the same way
         box_features_per_image = torch.split(box_features, boxes_per_image, dim=0)
 
+        # collect the tensors of shape [36 x 1024] of the top box features for each image in a list
         top_box_features_per_image = []
 
-        for class_logits_image in class_logits_per_image:
-            # get the indices with the max values for each class (i.e. each column)
-            max_inds = torch.argmax(class_logits_image, dim=0)
+        # also collect an boolean array of shape [36] that specifies if a class was not predicted (True) for each image in a list
+        class_not_predicted_per_image = []
 
-            # we want unique top-1 RoI for every class
-            # if there exists a RoI that has the highest logit value for more than 1 class
-            # then we have to recalculate the max_inds
-            if len(torch.unique(max_inds)) != 36:
-                max_inds = self.find_max_inds(class_logits_image)
+        for pred_scores_image, box_features_image in zip(pred_scores_per_image, box_features_per_image):
+            # get the predicted class for every box
+            pred_classes = torch.argmax(pred_scores_image, dim=1)
 
+            # create a mask that is True at the predicted class index for every box
+            mask_pred_classes = torch.zeros_like(pred_scores_image, dtype=torch.bool, device=pred_scores_image.device)
+            mask_pred_classes[torch.arange(mask_pred_classes.size(0)), pred_classes] = True
+
+            # by multiplying the pred_scores with the mask, we set to 0.0 all scores except for the top score in each row
+            pred_top_scores_image = pred_scores_image * mask_pred_classes
+
+            # get the row indices of the box features with the top score for each class
+            inds_boxes_with_top_scores = torch.argmax(pred_top_scores_image, dim=0)
+
+            # check if all classes have at least 1 box where they are the predicted class (i.e. have the highest score)
+            # this is done because we want to collect 36 box features (each with the highest score for the class) for 36 regions
+            num_predictions_per_class = torch.sum(mask_pred_classes, dim=0)
+
+            # get a boolean array that is True for the classes that were not predicted
+            class_not_predicted = num_predictions_per_class == 0
+
+            # extract the box features for the top score for each class
+            # note that if a class was not predicted (as the class with the highest score for at least 1 box),
+            # then the argmax will have returned index 0 for that class (since all scores of the class will have been 0.0)
+            # but since we have the boolean array class_not_predicted, we can filter out this class (and its box feature) later
+            top_box_features = box_features_image[inds_boxes_with_top_scores]
+            top_box_features_per_image.append(top_box_features)
+
+            class_not_predicted_per_image.append(class_not_predicted)
+
+        top_box_features_per_image_tensor = torch.stack(top_box_features_per_image, dim=0)
+        class_not_predicted_per_image_tensor = torch.stack(class_not_predicted_per_image, dim=0)
+
+        return top_box_features_per_image_tensor, class_not_predicted_per_image_tensor
 
     def postprocess_detections(
         self,
@@ -184,6 +209,7 @@ class CustomRoIHeads(RoIHeads):
         if self.training:
             if self.return_feature_vectors:
                 # get the top-1 bbox features for every class (i.e. a tensor of shape [batch_size, 36, 1024])
+                # the box_features are sorted by class (i.e. the 2nd dim is sorted)
                 top_box_features = self.get_top_box_features(box_features, class_logits, proposals)
         else:
             boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
