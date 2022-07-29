@@ -53,6 +53,33 @@ class CustomRoIHeads(RoIHeads):
         )
         self.return_feature_vectors = return_feature_vectors
 
+    def get_top_box_features(
+        self,
+        box_features,
+        class_logits,
+        proposals
+    ):
+        # remove logits of the background class
+        class_logits = class_logits[:, 1:]
+
+        # split class_logits (which is a tensor with logits for all RoIs of all images in the batch)
+        # into the tuple class_logits_per_image (where 1 class_logits tensor has logits for all RoIs of 1 image)
+        boxes_per_image = [boxes_in_image.shape[0] for boxes_in_image in proposals]
+        class_logits_per_image = torch.split(class_logits, boxes_per_image, dim=0)
+
+        # also split box_features the same way
+        box_features_per_image = torch.split(box_features, boxes_per_image, dim=0)
+
+        top_box_features_per_image = []
+
+        for class_logits_image in class_logits_per_image:
+            # get the indices with the max values for each class (i.e. each column)
+            max_inds = torch.argmax(class_logits_image, dim=0)
+
+            # if there exists a RoI that has the highest logit value for more than 1 class
+            if len(torch.unique(max_inds)) != 36:
+
+
     def postprocess_detections(
         self,
         class_logits: Tensor,
@@ -143,7 +170,11 @@ class CustomRoIHeads(RoIHeads):
             loss_classifier, loss_box_reg = fastrcnn_loss(class_logits, box_regression, labels, regression_targets)
             detector_losses = {"loss_classifier": loss_classifier, "loss_box_reg": loss_box_reg}
 
-        if not self.training:
+        if self.training:
+            if self.return_feature_vectors:
+                # get the top-1 bbox features for every class (i.e. a tensor of shape [batch_size, 36, 1024])
+                top_box_features = self.get_top_box_features(box_features, class_logits, proposals)
+        else:
             boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
             num_images = len(boxes)
             for i in range(num_images):

@@ -34,8 +34,8 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 4
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.03
+RUN = 5
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.08
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.1
 BATCH_SIZE = 32
 NUM_WORKERS = 12
