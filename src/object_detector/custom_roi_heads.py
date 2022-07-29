@@ -53,6 +53,14 @@ class CustomRoIHeads(RoIHeads):
         )
         self.return_feature_vectors = return_feature_vectors
 
+    def find_max_inds(
+        self,
+        class_logits_image
+    ):
+        max_inds = []
+        while len(max_inds) < 36:
+            values, indices = torch.max(class_logits_image, dim=0)
+
     def get_top_box_features(
         self,
         box_features,
@@ -76,8 +84,11 @@ class CustomRoIHeads(RoIHeads):
             # get the indices with the max values for each class (i.e. each column)
             max_inds = torch.argmax(class_logits_image, dim=0)
 
+            # we want unique top-1 RoI for every class
             # if there exists a RoI that has the highest logit value for more than 1 class
+            # then we have to recalculate the max_inds
             if len(torch.unique(max_inds)) != 36:
+                max_inds = self.find_max_inds(class_logits_image)
 
 
     def postprocess_detections(
