@@ -209,26 +209,39 @@ class ObjectDetector(nn.Module):
         proposals, proposal_losses = self.rpn(images, features, targets)
         roi_heads_output = self.roi_heads(features, proposals, images.image_sizes, targets)
 
-        detections = roi_heads_output["detections"]
+        # the roi_heads_output always includes the detector_losses
         detector_losses = roi_heads_output["detector_losses"]
 
+        # they include the detections when we are evaluating
+        if not self.training:
+            detections = roi_heads_output["detections"]
+
+        # they include the top_region_features and class_not_predicted if we train/evaluate the full model
         if self.return_feature_vectors:
-            box_features = roi_heads_output["box_features"]
+            top_region_features = roi_heads_output["top_region_features"]
+            class_not_predicted = roi_heads_output["class_not_predicted"]
 
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
 
-        if self.training:
-            if not self.return_feature_vectors:
+        # if we don't return the region features, then we train/evaluate the object detector in isolation (i.e. not as part of the full model)
+        if not self.return_feature_vectors:
+            if self.training:
+                # we only need the losses to train the object detector
                 return losses
             else:
-                return losses, box_features
-        else:
-            if not self.return_feature_vectors:
+                # we need both losses and detections to evaluate the object detector
                 return losses, detections
+
+        # if we return region features, then we train/evaluate the full model (with object detector as one part of it)
+        if self.return_feature_vectors:
+            if self.training:
+                # we need the losses to train the object detector, and the top_region_features/class_not_predicted to train the binary classifier and decoder
+                return losses, top_region_features, class_not_predicted
             else:
-                return losses, detections, box_features
+                # we additionally need the detections to evaluate the object detector
+                return losses, detections, top_region_features, class_not_predicted
 
 
 # model = ObjectDetector()
