@@ -7,7 +7,7 @@ import torch.nn as nn
 import torchvision
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
-from torchinfo import summary
+# from torchinfo import summary
 import torchxrayvision as xrv
 
 from custom_roi_heads import CustomRoIHeads
@@ -254,34 +254,37 @@ class ObjectDetector(nn.Module):
                 return losses, detections, top_region_features, class_not_predicted
 
 
-model = ObjectDetector()
+# model = ObjectDetector()
 
-device = torch.device("cpu")
-model = ObjectDetector(return_feature_vectors=True)
-model.eval()
-model.to(device)
+# device = torch.device("cpu")
+# model = ObjectDetector(return_feature_vectors=True)
+# model.eval()
+# model.to(device)
 
-images = torch.rand(3, 1, 224, 224)
-targets = [
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-    {
-        "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-        "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-    },
-]
+# images = torch.rand(3, 1, 224, 224)
+# targets = [
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+#     {
+#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
+#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
+#     },
+# ]
 
 # summary(model, input_data=(images, targets))
 # summary(model)
 
-losses, detections, top_region_features, class_not_predicted = model(images, targets)
-print(losses)
-print(detections)
-print(top_region_features)
-print(class_not_predicted)
+# losses, detections, top_region_features, class_not_predicted = model(images)
+# print(losses)
+# print(detections)
+# print()
+# print(detections["top_region_boxes"].shape)
+# print(detections["top_scores"].shape)
+# print(top_region_features.shape)
+# print(class_not_predicted.shape)

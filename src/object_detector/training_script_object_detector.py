@@ -256,8 +256,8 @@ def collate_fn(batch: List[Dict[str, Tensor]]):
 
 def get_transforms(dataset: str):
     # see compute_mean_std_dataset.py in src/dataset_bounding_boxes
-    mean = 0.471
-    std = 0.302
+    # mean = 0.471
+    # std = 0.302
 
     # note: transforms are applied to the already resized (to 224x224) and padded images
     # (see __getitem__ method of custom dataset class)!
@@ -265,14 +265,19 @@ def get_transforms(dataset: str):
     # use albumentations for Compose and transforms
     train_transforms = A.Compose([
         # optionally add augmentation transforms here (but bboxes also have to be transformed in this case!)
-        A.Normalize(mean=mean, std=std),
+
+        # don't use standard normalization procedure, but apply normalization as described in torchxrayvision
+        # https://github.com/mlmed/torchxrayvision#image-pre-processing
+        # the normalization as described in torchxrayvision is already applied in the custom dataset class before the transforms
+        # A.Normalize(mean=mean, std=std),
         ToTensorV2()
     ])
 
     # don't apply data augmentations to val and test set
     val_test_transforms = A.Compose(
         [
-            A.Normalize(mean=mean, std=std),
+            # don't use standard normalization procedure, but apply normalization as described in torchxrayvision in the custom dataset class
+            # A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ]
     )

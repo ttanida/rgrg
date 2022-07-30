@@ -1,5 +1,4 @@
 from typing import Optional, List, Dict, Tuple
-from matplotlib.cbook import index_of
 
 import torch
 from torch import Tensor

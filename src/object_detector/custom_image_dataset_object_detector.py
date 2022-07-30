@@ -1,6 +1,7 @@
 import cv2
 import torch
 from torch.utils.data import Dataset
+import torchxrayvision as xrv
 
 
 class CustomImageDataset(Dataset):
@@ -26,9 +27,13 @@ class CustomImageDataset(Dataset):
             # resize image to 224x224 (since bbox-coordinates are also set for 224x224 images)
             resized_image = self._resize_pad_image(image, width=224)
 
+            # normalize as done in torchxrayvision (since backbone is a classifier trained by library)
+            # see https://github.com/mlmed/torchxrayvision#image-pre-processing
+            normalized_resized_image = xrv.datasets.normalize(resized_image, 255)
+
             # apply transformations
             # albumentations transforms return a dict, which is why key "image" has to be selected
-            resized_image_tensor = self.transforms(image=resized_image)["image"]
+            resized_image_tensor = self.transforms(image=normalized_resized_image)["image"]
 
             # bbox_coordinates (List[List[int]]) is the 2nd column of the dataframes
             bbox_coordinates = self.dataset_df.iloc[index, 1]
