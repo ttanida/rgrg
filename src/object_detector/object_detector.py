@@ -219,9 +219,10 @@ class ObjectDetector(nn.Module):
         # the roi_heads_output always includes the detector_losses
         detector_losses = roi_heads_output["detector_losses"]
 
-        # they include the detections when we are evaluating
+        # they include the detections and class_not_predicted when we are evaluating
         if not self.training:
             detections = roi_heads_output["detections"]
+            class_not_predicted = roi_heads_output["class_not_predicted"]
 
         # they include the top_region_features and class_not_predicted if we train/evaluate the full model
         if self.return_feature_vectors:
@@ -238,9 +239,9 @@ class ObjectDetector(nn.Module):
                 # we only need the losses to train the object detector
                 return losses
             else:
-                # we need both losses and detections to evaluate the object detector
+                # we need both losses, detections and class_not_predicted to evaluate the object detector
                 # losses with be an empty dict if targets == None (i.e. during inference)
-                return losses, detections
+                return losses, detections, class_not_predicted
 
         # if we return region features, then we train/evaluate the full model (with object detector as one part of it)
         if self.return_feature_vectors:

@@ -180,6 +180,9 @@ class CustomRoIHeads(RoIHeads):
                 # but since we have the boolean array class_not_predicted, we can filter out this class (and its erroneous region box) later on
                 top_region_boxes = pred_region_boxes_img[indices_with_top_scores]
 
+                # note: top_region_boxes and top_scores are both ordered by class
+                # (i.e. class 0 will be the first row in top_region_boxes and the first value in top_scores,
+                # class 35 will be the last row in top_region_boxes and the last value in top_scores)
                 output["detections"]["top_region_boxes"].append(top_region_boxes)
                 output["detections"]["top_scores"].append(top_scores)
 
@@ -220,7 +223,6 @@ class CustomRoIHeads(RoIHeads):
         box_features = self.box_head(box_features)
         class_logits, box_regression = self.box_predictor(box_features)
 
-        detections: List[Dict[str, torch.Tensor]] = []
         detector_losses = {}
 
         if labels and regression_targets:
@@ -231,65 +233,18 @@ class CustomRoIHeads(RoIHeads):
         roi_heads_output = {}
         roi_heads_output["detector_losses"] = detector_losses
 
-        # if we train the full model (i.e. self.return_feature_vectors == True), then we need top_region_features and class_not_predicted
-        # if we evaluate the object detector (in isolation or as part of the full model), then we need the detections
+        # if we train the full model (i.e. self.return_feature_vectors == True), we need the "top_region_features"
+        # if we evaluate the object detector (in isolation or as part of the full model), we need the "detections"
+        # if we do either of them, we always need "class_not_predicted" (see doc_string of method for details)
         if self.return_feature_vectors or not self.training:
             output = self.get_top_region_features_detections_class_not_predicted(box_features, box_regression, class_logits, proposals, image_shapes)
 
+            roi_heads_output["class_not_predicted"] = output["class_not_predicted"]
+
             if self.return_feature_vectors:
                 roi_heads_output["top_region_features"] = output["top_region_features"]
-                roi_heads_output["class_not_predicted"] = output["class_not_predicted"]
-            
+
             if not self.training:
                 roi_heads_output["detections"] = output["detections"]
-
-        return roi_heads_output
-
-
-        # # if we don't return the region features, then we train/evaluate the object detector in isolation (i.e. not as part of the full model)
-        # if not self.return_feature_vectors:
-        #     if self.training:
-        #         # we only need the losses to train the object detector
-        #         return losses
-        #     else:
-        #         # we need both losses and detections to evaluate the object detector
-        #         return losses, detections
-
-        # # if we return region features, then we train/evaluate the full model (with object detector as one part of it)
-        # if self.return_feature_vectors:
-        #     if self.training:
-        #         # we need the losses to train the object detector, and the top_region_features/class_not_predicted to train the binary classifier and decoder
-        #         return losses, top_region_features, class_not_predicted
-        #     else:
-        #         # we additionally need the detections to evaluate the object detector
-        #         return losses, detections, top_region_features, class_not_predicted
-
-
-        if self.training:
-            if self.return_feature_vectors:
-                # get the top-1 bbox features for every class (i.e. a tensor of shape [batch_size, 36, 1024])
-                # the box_features are sorted by class (i.e. the 2nd dim is sorted)
-                # also get class_not_predicted, a boolean tensor of shape [batch_size, 36], that specifies if
-                # a class was predicted by the object detector for at least 1 proposal
-                top_region_features, class_not_predicted = self.get_top_region_features(box_features, class_logits, proposals, return_detections=False)
-        else:
-            # in eval mode, also 
-
-
-
-            # boxes, scores, labels = self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
-            # num_images = len(boxes)
-            # for i in range(num_images):
-            #     detections.append(
-            #         {
-            #             "boxes": boxes[i],
-            #             "labels": labels[i],
-            #             "scores": scores[i],
-            #         }
-            #     )
-
-        if self.return_feature_vectors:
-            roi_heads_output["top_region_features"] = top_region_features
-            roi_heads_output["class_not_predicted"] = class_not_predicted
 
         return roi_heads_output
