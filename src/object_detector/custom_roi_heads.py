@@ -93,14 +93,13 @@ class CustomRoIHeads(RoIHeads):
             # get the predicted class for every box
             pred_classes = torch.argmax(pred_scores_image, dim=1)
 
-            # create a mask that is True at the predicted class index for every box
-            mask_pred_classes = torch.zeros_like(pred_scores_image, dtype=torch.bool, device=pred_scores_image.device)
-            mask_pred_classes[torch.arange(mask_pred_classes.size(0)), pred_classes] = True
+            # create a mask that is 1 at the predicted class index for every box and 0 otherwise
+            mask_pred_classes = torch.nn.functional.one_hot(pred_classes, num_classes=36)
 
             # by multiplying the pred_scores with the mask, we set to 0.0 all scores except for the top score in each row
             pred_top_scores_image = pred_scores_image * mask_pred_classes
 
-            # get the row indices of the region features with the top score for each class
+            # get the row indices of the features with the top-1 score for each class (since dim=0 goes by class)
             inds_regions_with_top_scores = torch.argmax(pred_top_scores_image, dim=0)
 
             # check if all regions/classes have at least 1 box where they are the predicted class (i.e. have the highest score)
@@ -122,6 +121,8 @@ class CustomRoIHeads(RoIHeads):
         top_region_features_per_image_tensor = torch.stack(top_region_features_per_image, dim=0)
         class_not_predicted_per_image_tensor = torch.stack(class_not_predicted_per_image, dim=0)
 
+        # top_region_features_per_image_tensor of shape [batch_size x 36 x 1024]
+        # class_not_predicted_per_image_tensor of shape [batch_size x 36]
         return top_region_features_per_image_tensor, class_not_predicted_per_image_tensor
 
     def postprocess_detections(
