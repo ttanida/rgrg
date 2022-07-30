@@ -34,13 +34,10 @@ class ObjectDetector(nn.Module):
     The PyTorch implementation returns a Dict[Tensor] containing the 4 losses in train mode, and a List[Dict[Tensor]] containing
     the detections for each image in eval mode.
 
-    My implementation returns also only returns the loss_dict in train mode, but in eval mode returns both the loss_dict (with the val_losses)
-    and the detections (note that if targets == None in eval mode, then losses will be an empty dict).
+    My implementation returns different things depending on if the object detector is trained/evaluated in isolation,
+    or if it's trained/evaluated as part of the full model.
 
-    A single detection dict for a single image contains the following fields:
-        - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
-        - labels (Int64Tensor[N]): the predicted labels for each image
-        - scores (Tensor[N]): the scores or each prediction
+    Please check the doc string of the forward method for more details.
     """
 
     def __init__(self, return_feature_vectors=False):
@@ -187,17 +184,27 @@ class ObjectDetector(nn.Module):
                 - labels (Int64Tensor[N]): the class label for each ground-truth box
 
         Returns:
-            in train mode:
-                - losses (Dict[Tensor]), which contains the 4 losses
+            (1) If object detector is trained/evaluated in isolation, then self.return_feature_vectors should be False and it returns
+                (I) in train mode:
+                    - losses (Dict[Tensor]), which contains the 4 object detector losses
+                (II) in eval mode:
+                    - losses (Dict[Tensor]). If targets == None (i.e. during inference), then (val) losses will be an empty dict
+                    - detections (List[Dict[str, Tensor]]), which are the predictions for each input image.
 
-            in eval mode:
-                - losses (Dict[Tensor]). If targets == None, then losses will be an empty dict.
-                - detections (List[Dict[str, Tensor]]), which are the predictions for each input image.
-
-                The fields of a single dict (for a single image) are:
-                    - boxes (FloatTensor[N, 4]): the predicted boxes in [x1, y1, x2, y2] format
-                    - labels (Int64Tensor[N]): the predicted labels for each image
-                    - scores (Tensor[N]): the scores or each prediction
+            (2) If object detector is trained/evaluated as part of the full model, then self.return_feature_vectors should be True and it returns
+                (I) in train mode:
+                    - losses
+                    - top_region_features (FloatTensor(batch_size, 36, 1024)):
+                        - the features with the highest scores for each region and for each image in the batch
+                        - these are needed to train the binary classifier ("Filter") and language model
+                    - class_not_predicted (BoolTensor(batch_size, 36)):
+                        - boolean is True if a region/class did not have the highest score (i.e. was not top-1) for any RoI box
+                        - this means the object detector effectively did not detect the region, and it is thus filtered out from the next modules in the full model
+                (II) in eval mode:
+                    - losses. If targets == None (i.e. during inference), then (val) losses will be an empty dict
+                    - detections
+                    - top_region_features
+                    - class_not_predicted
         """
         if targets is not None:
             self._check_targets(targets)
@@ -232,6 +239,7 @@ class ObjectDetector(nn.Module):
                 return losses
             else:
                 # we need both losses and detections to evaluate the object detector
+                # losses with be an empty dict if targets == None (i.e. during inference)
                 return losses, detections
 
         # if we return region features, then we train/evaluate the full model (with object detector as one part of it)
@@ -241,6 +249,7 @@ class ObjectDetector(nn.Module):
                 return losses, top_region_features, class_not_predicted
             else:
                 # we additionally need the detections to evaluate the object detector
+                # losses with be an empty dict if targets == None (i.e. during inference)
                 return losses, detections, top_region_features, class_not_predicted
 
 

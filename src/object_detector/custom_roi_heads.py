@@ -94,7 +94,7 @@ class CustomRoIHeads(RoIHeads):
             pred_classes = torch.argmax(pred_scores_image, dim=1)
 
             # create a mask that is 1 at the predicted class index for every box and 0 otherwise
-            mask_pred_classes = torch.nn.functional.one_hot(pred_classes, num_classes=36)
+            mask_pred_classes = torch.nn.functional.one_hot(pred_classes, num_classes=36).to(pred_scores_image.device)
 
             # by multiplying the pred_scores with the mask, we set to 0.0 all scores except for the top score in each row
             pred_top_scores_image = pred_scores_image * mask_pred_classes
