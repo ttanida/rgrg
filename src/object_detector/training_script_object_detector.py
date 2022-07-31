@@ -10,7 +10,7 @@ from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 import torch
 from torch import Tensor
 from torch.optim import AdamW
@@ -36,7 +36,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 0
+RUN = 1
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.08
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.1
 BATCH_SIZE = 32
@@ -48,14 +48,15 @@ PATIENCE = 1000  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
-def get_title(region_set, region_indices, class_predicted_img):
+def get_title(region_set, region_indices, region_colors, class_predicted_img):
     # region_set always contains 6 region names
 
     # get a list of 6 boolean values that specify if that region was predicted
     class_preds = [class_predicted_img[region_index] for region_index in region_indices]
 
-    # add "(np)" after region if it was not predicted
-    region_set = [region if cls_pred else region + " (np)" for region, cls_pred in zip(region_set, class_preds)]
+    # add color_code to region name (e.g. "(r)" for red)
+    # also add np to the brackets if region was not predicted (e.g. "(r, np)" if red region was not predicted)
+    region_set = [region + f" ({color})" if cls_pred else region + f" ({color}, np)" for region, color, cls_pred in zip(region_set, region_colors, class_preds)]
 
     # add a line break to the title, as to not make it too long
     return ", ".join(region_set[:3]) + "\n" + ", ".join(region_set[3:])
@@ -82,7 +83,7 @@ def plot_box(box, ax, clr, linestyle, class_pred=True):
         ax.annotate("not predicted", (x0, y0), color=clr, weight="bold", fontsize=10)
 
 
-def plot_gt_and_pred_bboxes_to_tensorboard(writer, images, detections, targets, class_predicted, num_images_to_plot=2):
+def plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_predicted, num_images_to_plot=2):
     # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
     # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
@@ -104,7 +105,7 @@ def plot_gt_and_pred_bboxes_to_tensorboard(writer, images, detections, targets, 
     regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5, region_set_6]
     region_colors = ["b", "g", "r", "c", "m", "y"]
 
-    for num_img in num_images_to_plot:
+    for num_img in range(num_images_to_plot):
         image = images[num_img].cpu().numpy().transpose(1, 2, 0)
 
         gt_boxes_img = gt_boxes_batch[num_img]
@@ -131,10 +132,10 @@ def plot_gt_and_pred_bboxes_to_tensorboard(writer, images, detections, targets, 
                 if box_class_pred:
                     plot_box(box_pred, ax, clr=color, linestyle="dashed")
 
-            title = get_title(region_set, region_indices, class_predicted_img)
+            title = get_title(region_set, region_indices, region_colors, class_predicted_img)
             ax.set_title(title)
 
-            writer.add_figure(f"img_{num_img}_region_set_{num_region_set}", fig)
+            writer.add_figure(f"img_{num_img}_region_set_{num_region_set}", fig, overall_steps_taken)
 
 
 def compute_box_area(box):
@@ -196,12 +197,13 @@ def compute_iou_per_class(detections, targets, class_predicted):
     return iou
 
 
-def get_val_loss_and_other_metrics(model, val_dl, writer):
+def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
         val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
         writer (tensorboardX.SummaryWriter.writer): Writer used to plot gt and predicted bboxes of first couple of image in val set
+        overall_steps_taken: for tensorboard
 
     Returns:
         val_loss (float): val loss for val set
@@ -258,7 +260,7 @@ def get_val_loss_and_other_metrics(model, val_dl, writer):
             sum_iou_per_class += compute_iou_per_class(detections, targets, class_predicted)
 
             if batch_num == 0:
-                plot_gt_and_pred_bboxes_to_tensorboard(writer, images, detections, targets, class_predicted, num_images_to_plot=2)
+                plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_predicted, num_images_to_plot=2)
 
     val_loss /= len(val_dl)
     avg_num_predicted_classes_per_image = torch.sum(sum_class_predicted / num_images).item()
@@ -366,7 +368,7 @@ def train_model(
 
                 # val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl)
                 # TODO: change back train_dl -> val_dl
-                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, train_dl, writer)
+                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, train_dl, writer, overall_steps_taken)
 
                 writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
                 writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_predicted_classes_per_image, overall_steps_taken)
@@ -455,6 +457,22 @@ def collate_fn(batch: List[Dict[str, Tensor]]):
     batch_new["targets"] = targets
 
     return batch_new
+
+
+def get_data_loaders(train_dataset, val_dataset):
+    def seed_worker(worker_id):
+        """To preserve reproducibility for the randomly shuffled train loader."""
+        worker_seed = torch.initial_seed() % 2**32
+        np.random.seed(worker_seed)
+        random.seed(worker_seed)
+
+    g = torch.Generator()
+    g.manual_seed(seed_val)
+
+    train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, worker_init_fn=seed_worker, generator=g, pin_memory=True)
+    val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+
+    return train_loader, val_loader
 
 
 def get_transforms(dataset: str):
@@ -578,8 +596,7 @@ def main():
     train_dataset = CustomImageDataset(datasets_as_dfs["train"], train_transforms)
     val_dataset = CustomImageDataset(datasets_as_dfs["valid"], val_transforms)
 
-    train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
-    val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+    train_loader, val_loader = get_data_loaders(train_dataset, val_dataset)
 
     model = ObjectDetector(return_feature_vectors=False)
     model.to(device, non_blocking=True)
