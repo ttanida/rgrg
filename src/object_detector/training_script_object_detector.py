@@ -99,6 +99,9 @@ def compute_iou_per_class(detections, targets, class_predicted):
     # calculate IoU for valid classes, otherwise set IoU to 0
     iou = torch.where(valid, (intersection_area / union_area), 0.)
 
+    # sum up the values along the batch dimension (the values will be averaged later)
+    iou = torch.sum(iou, dim=0)
+
     return iou
 
 
