@@ -46,7 +46,25 @@ PATIENCE = 1000  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
-def compute_iou_per_class(detections, targets, class_not_predicted):
+def compute_box_area(box):
+    """
+    Calculate the area of a box given the 4 corner values.
+
+    Args:
+        box (Tensor[batch_size x 36 x 4])
+
+    Returns:
+        area (Tensor[batch_size x 36])
+    """
+    x0 = box[..., 0]
+    y0 = box[..., 1]
+    x1 = box[..., 2]
+    y1 = box[..., 3]
+
+    return (x1 - x0) * (y1 - y0)
+
+
+def compute_iou_per_class(detections, targets, class_predicted):
     # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
     # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
@@ -56,7 +74,32 @@ def compute_iou_per_class(detections, targets, class_not_predicted):
     # gt_boxes is of shape [batch_size x 36 x 4]
     gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
 
-    x0_max = torch.maximum(pred_boxes[:, :, 0], gt_boxes[:, :, 0])
+    # below tensors are of shape [batch_size x 36]
+    x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
+    y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
+    x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
+    y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
+
+    # intersection_boxes is of shape [batch_size x 36 x 4]
+    intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
+
+    # below tensors are of shape [batch_size x 36]
+    intersection_area = compute_box_area(intersection_boxes)
+    pred_area = compute_box_area(pred_boxes)
+    gt_area = compute_box_area(gt_boxes)
+
+    union_area = (pred_area + gt_area) - intersection_area
+
+    # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
+    valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
+
+    # also only calculate IoU for classes that were predicted
+    valid = torch.logical_and(valid_intersection, class_predicted)
+
+    # calculate IoU for valid classes, otherwise set IoU to 0
+    iou = torch.where(valid, (intersection_area / union_area), 0.)
+
+    return iou
 
 
 def get_val_loss(model, val_dl):
@@ -67,19 +110,19 @@ def get_val_loss(model, val_dl):
 
     Returns:
         val_loss (float): val loss for val set
-        avg_num_classes_not_predicted_per_image (float): as variable name says
+        avg_num_classes_predicted_per_image (float): as variable name says
         avg_iou_per_class (list[float]): average IoU per class computed over all images in val set
     """
     # PyTorch implementation only return losses in train mode, and only detections in eval mode
     # see https://stackoverflow.com/questions/60339336/validation-loss-for-pytorch-faster-rcnn/65347721#65347721
-    # my model is modified to return losses, detections and class_not_predicted in eval mode
+    # my model is modified to return losses, detections and class_predicted in eval mode
     # see forward method of object detector class for more information
     model.eval()
 
     val_loss = 0.0
 
     num_images = 0
-    num_classes_not_predicted = 0
+    num_classes_predicted = 0
 
     # tensor of accumulating the ios of each class (will be divided by num_images at the end of get average)
     sum_iou_per_class = torch.zeros(36)
@@ -101,24 +144,24 @@ def get_val_loss(model, val_dl):
             # "top_region_boxes" maps to a tensor of shape [batch_size x 36 x 4]
             # "top_scores" maps to a tensor of shape [batch_size x 36]
 
-            # class_not_predicted is a tensor of shape [batch_size x 36]
-            loss_dict, detections, class_not_predicted = model(images, targets)
+            # class_predicted is a tensor of shape [batch_size x 36]
+            loss_dict, detections, class_predicted = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
             val_loss += loss.item() * batch_size
 
-            # sum up all classes that were not predicted in batch
-            num_classes_not_predicted += sum(class_not_predicted).item()
+            # sum up all classes that were predicted in batch
+            num_classes_predicted += sum(class_predicted).item()
 
             # sum up the IoUs for each class
-            sum_iou_per_class += compute_iou_per_class(detections, targets, class_not_predicted)
+            sum_iou_per_class += compute_iou_per_class(detections, targets, class_predicted)
 
     val_loss /= len(val_dl)
-    avg_num_classes_not_predicted_per_image = num_classes_not_predicted / num_images
+    avg_num_classes_predicted_per_image = num_classes_predicted / num_images
     avg_iou_per_class = (sum_iou_per_class / num_images).tolist()
 
-    return val_loss, avg_num_classes_not_predicted_per_image, avg_iou_per_class
+    return val_loss, avg_num_classes_predicted_per_image, avg_iou_per_class
 
 
 def log_stats_to_console(

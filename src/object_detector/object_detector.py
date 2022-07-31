@@ -197,14 +197,15 @@ class ObjectDetector(nn.Module):
                     - top_region_features (FloatTensor(batch_size, 36, 1024)):
                         - the features with the highest scores for each region and for each image in the batch
                         - these are needed to train the binary classifier ("Filter") and language model
-                    - class_not_predicted (BoolTensor(batch_size, 36)):
-                        - boolean is True if a region/class did not have the highest score (i.e. was not top-1) for any RoI box
-                        - this means the object detector effectively did not detect the region, and it is thus filtered out from the next modules in the full model
+                    - class_predicted (BoolTensor(batch_size, 36)):
+                        - boolean is True if a region/class had the highest score (i.e. was not top-1) for at least 1 RoI box
+                        - if the value is False for any class, then this means the object detector effectively did not detect the region,
+                        and it is thus filtered out from the next modules in the full model
                 (II) in eval mode:
                     - losses. If targets == None (i.e. during inference), then (val) losses will be an empty dict
                     - detections
                     - top_region_features
-                    - class_not_predicted
+                    - class_predicted
         """
         if targets is not None:
             self._check_targets(targets)
@@ -219,15 +220,15 @@ class ObjectDetector(nn.Module):
         # the roi_heads_output always includes the detector_losses
         detector_losses = roi_heads_output["detector_losses"]
 
-        # they include the detections and class_not_predicted when we are evaluating
+        # they include the detections and class_predicted when we are evaluating
         if not self.training:
             detections = roi_heads_output["detections"]
-            class_not_predicted = roi_heads_output["class_not_predicted"]
+            class_predicted = roi_heads_output["class_predicted"]
 
-        # they include the top_region_features and class_not_predicted if we train/evaluate the full model
+        # they include the top_region_features and class_predicted if we train/evaluate the full model
         if self.return_feature_vectors:
             top_region_features = roi_heads_output["top_region_features"]
-            class_not_predicted = roi_heads_output["class_not_predicted"]
+            class_predicted = roi_heads_output["class_predicted"]
 
         losses = {}
         losses.update(detector_losses)
@@ -239,19 +240,19 @@ class ObjectDetector(nn.Module):
                 # we only need the losses to train the object detector
                 return losses
             else:
-                # we need both losses, detections and class_not_predicted to evaluate the object detector
+                # we need both losses, detections and class_predicted to evaluate the object detector
                 # losses with be an empty dict if targets == None (i.e. during inference)
-                return losses, detections, class_not_predicted
+                return losses, detections, class_predicted
 
         # if we return region features, then we train/evaluate the full model (with object detector as one part of it)
         if self.return_feature_vectors:
             if self.training:
-                # we need the losses to train the object detector, and the top_region_features/class_not_predicted to train the binary classifier and decoder
-                return losses, top_region_features, class_not_predicted
+                # we need the losses to train the object detector, and the top_region_features/class_predicted to train the binary classifier and decoder
+                return losses, top_region_features, class_predicted
             else:
                 # we additionally need the detections to evaluate the object detector
                 # losses with be an empty dict if targets == None (i.e. during inference)
-                return losses, detections, top_region_features, class_not_predicted
+                return losses, detections, top_region_features, class_predicted
 
 
 # model = ObjectDetector()
@@ -280,11 +281,11 @@ class ObjectDetector(nn.Module):
 # summary(model, input_data=(images, targets))
 # summary(model)
 
-# losses, detections, top_region_features, class_not_predicted = model(images)
+# losses, detections, top_region_features, class_predicted = model(images)
 # print(losses)
 # print(detections)
 # print()
 # print(detections["top_region_boxes"].shape)
 # print(detections["top_scores"].shape)
 # print(top_region_features.shape)
-# print(class_not_predicted.shape)
+# print(class_predicted.shape)
