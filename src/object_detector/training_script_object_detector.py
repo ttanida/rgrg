@@ -34,7 +34,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 5
+RUN = 0
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.08
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.1
 BATCH_SIZE = 32
@@ -46,6 +46,19 @@ PATIENCE = 1000  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
+def compute_iou_per_class(detections, targets, class_not_predicted):
+    # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+    # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+    # the 2nd to the 2nd class and so on
+    pred_boxes = detections["top_region_boxes"]
+
+    # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
+    # gt_boxes is of shape [batch_size x 36 x 4]
+    gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
+
+    x0_max = torch.maximum(pred_boxes[:, :, 0], gt_boxes[:, :, 0])
+
+
 def get_val_loss(model, val_dl):
     """
     Args:
@@ -53,34 +66,59 @@ def get_val_loss(model, val_dl):
         val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
 
     Returns:
-        val_loss (float): Val loss for val set.
+        val_loss (float): val loss for val set
+        avg_num_classes_not_predicted_per_image (float): as variable name says
+        avg_iou_per_class (list[float]): average IoU per class computed over all images in val set
     """
-    # my model is modified to return both losses and detections in eval mode
     # PyTorch implementation only return losses in train mode, and only detections in eval mode
     # see https://stackoverflow.com/questions/60339336/validation-loss-for-pytorch-faster-rcnn/65347721#65347721
+    # my model is modified to return losses, detections and class_not_predicted in eval mode
+    # see forward method of object detector class for more information
     model.eval()
 
     val_loss = 0.0
 
+    num_images = 0
+    num_classes_not_predicted = 0
+
+    # tensor of accumulating the ios of each class (will be divided by num_images at the end of get average)
+    sum_iou_per_class = torch.zeros(36)
+
     with torch.no_grad():
         for batch in tqdm(val_dl):
+            # "targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
+            # "boxes" maps to a tensor of shape [36 x 4] and "labels" maps to a tensor of shape [36]
+            # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 36] (starting at 1, since 0 is background)
             images, targets = batch.values()
 
             batch_size = images.size(0)
+            num_images += batch_size
 
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
-            loss_dict, _ = model(images, targets)
+            # detections is a dict with keys "top_region_boxes" and "top_scores"
+            # "top_region_boxes" maps to a tensor of shape [batch_size x 36 x 4]
+            # "top_scores" maps to a tensor of shape [batch_size x 36]
+
+            # class_not_predicted is a tensor of shape [batch_size x 36]
+            loss_dict, detections, class_not_predicted = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
-
             val_loss += loss.item() * batch_size
 
-    val_loss /= len(val_dl)
+            # sum up all classes that were not predicted in batch
+            num_classes_not_predicted += sum(class_not_predicted).item()
 
-    return val_loss
+            # sum up the IoUs for each class
+            sum_iou_per_class += compute_iou_per_class(detections, targets, class_not_predicted)
+
+    val_loss /= len(val_dl)
+    avg_num_classes_not_predicted_per_image = num_classes_not_predicted / num_images
+    avg_iou_per_class = (sum_iou_per_class / num_images).tolist()
+
+    return val_loss, avg_num_classes_not_predicted_per_image, avg_iou_per_class
 
 
 def log_stats_to_console(
@@ -151,7 +189,7 @@ def train_model(
         train_loss = 0.0
         steps_taken = 0
         for num_batch, batch in tqdm(enumerate(train_dl)):
-            # batch is a dict with keys for 'images' and 'targets'
+            # batch is a dict with keys "images" and "targets"
             images, targets = batch.values()
 
             batch_size = images.size(0)
@@ -378,7 +416,7 @@ def main():
     train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
     val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 
-    model = ObjectDetector()
+    model = ObjectDetector(return_feature_vectors=False)
     model.to(device, non_blocking=True)
     model.train()
 
