@@ -7,6 +7,7 @@ from typing import List, Dict
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from tensorboardX import SummaryWriter
@@ -45,6 +46,95 @@ LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 1000  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+
+
+def get_title(region_set, region_indices, class_predicted_img):
+    # region_set always contains 6 region names
+
+    # get a list of 6 boolean values that specify if that region was predicted
+    class_preds = [class_predicted_img[region_index] for region_index in region_indices]
+
+    # add "(np)" after region if it was not predicted
+    region_set = [region if cls_pred else region + " (np)" for region, cls_pred in zip(region_set, class_preds)]
+
+    # add a line break to the title, as to not make it too long
+    return ", ".join(region_set[:3]) + "\n" + ", ".join(region_set[3:])
+
+
+def plot_box(box, ax, clr, linestyle, class_pred=True):
+    x0, y0, x1, y1 = box
+    h = y1 - y0
+    w = x1 - x0
+    ax.add_artist(
+        plt.Rectangle(
+            xy=(x0, y0),
+            height=h,
+            width=w,
+            fill=False,
+            color=clr,
+            linewidth=1,
+            linestyle=linestyle
+        )
+    )
+
+    # add an annotation to the gt box, that the pred box does not exist
+    if not class_pred:
+        ax.annotate("not predicted", (x0, y0), color=clr, weight="bold", fontsize=10)
+
+
+def plot_gt_and_pred_bboxes_to_tensorboard(writer, images, detections, targets, class_predicted, num_images_to_plot=2):
+    # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+    # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+    # the 2nd to the 2nd class and so on
+    pred_boxes_batch = detections["top_region_boxes"]
+
+    # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
+    # gt_boxes is of shape [batch_size x 36 x 4]
+    gt_boxes_batch = torch.stack([t["boxes"] for t in targets], dim=0)
+
+    # plot 6 regions at a time, as to not overload the image with boxes
+    # the region_sets were chosen as to minimize overlap between the contained regions (i.e. better visibility)
+    region_set_1 = ["right lung", "right costophrenic angle", "left lung", "left costophrenic angle", "cardiac silhouette", "spine"]
+    region_set_2 = ["right upper lung zone", "right mid lung zone", "right lower lung zone", "left upper lung zone", "left mid lung zone", "left lower lung zone"]
+    region_set_3 = ["right hilar structures", "right apical zone", "right cardiophrenic angle", "left hilar structures", "left apical zone", "left cardiophrenic angle"]
+    region_set_4 = ["right hemidiaphragm", "left hemidiaphragm", "trachea", "right clavicle", "left clavicle", "aortic arch"]
+    region_set_5 = ["mediastinum", "left upper abdomen", "right upper abdomen", "svc", "cavoatrial junction", "carina"]
+    region_set_6 = ["right atrium", "descending aorta", "left cardiac silhouette", "upper mediastinum", "right cardiac silhouette", "abdomen"]
+
+    regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5, region_set_6]
+    region_colors = ["b", "g", "r", "c", "m", "y"]
+
+    for num_img in num_images_to_plot:
+        image = images[num_img].cpu().numpy().transpose(1, 2, 0)
+
+        gt_boxes_img = gt_boxes_batch[num_img]
+        pred_boxes_img = pred_boxes_batch[num_img]
+        class_predicted_img = class_predicted[num_img].tolist()
+
+        for num_region_set, region_set in enumerate(regions_sets):
+            fig = plt.figure(figsize=(8, 8))
+            ax = plt.gca()
+
+            plt.imshow(image, cmap='gray')
+            plt.axis('off')
+
+            region_indices = [ANATOMICAL_REGIONS[region] for region in region_set]
+
+            for region_index, color in zip(region_indices, region_colors):
+                box_gt = gt_boxes_img[region_index].tolist()
+                box_pred = pred_boxes_img[region_index].tolist()
+                box_class_pred = class_predicted_img[region_index]
+
+                plot_box(box_gt, ax, clr=color, linestyle="solid", class_pred=box_class_pred)
+
+                # only plot box of the predicted class, if the class was actually predicted
+                if box_class_pred:
+                    plot_box(box_pred, ax, clr=color, linestyle="dashed")
+
+            title = get_title(region_set, region_indices, class_predicted_img)
+            ax.set_title(title)
+
+            writer.add_figure(f"img_{num_img}_region_set_{num_region_set}", fig)
 
 
 def compute_box_area(box):
@@ -106,11 +196,12 @@ def compute_iou_per_class(detections, targets, class_predicted):
     return iou
 
 
-def get_val_loss_and_other_metrics(model, val_dl):
+def get_val_loss_and_other_metrics(model, val_dl, writer):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
         val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
+        writer (tensorboardX.SummaryWriter.writer): Writer used to plot gt and predicted bboxes of first couple of image in val set
 
     Returns:
         val_loss (float): val loss for val set
@@ -137,7 +228,7 @@ def get_val_loss_and_other_metrics(model, val_dl):
     sum_iou_per_class = torch.zeros(36, device=device)
 
     with torch.no_grad():
-        for batch in tqdm(val_dl):
+        for batch_num, batch in tqdm(enumerate(val_dl)):
             # "targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
             # "boxes" maps to a tensor of shape [36 x 4] and "labels" maps to a tensor of shape [36]
             # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 36] (starting at 1, since 0 is background)
@@ -165,6 +256,9 @@ def get_val_loss_and_other_metrics(model, val_dl):
 
             # sum up the IoUs for each class
             sum_iou_per_class += compute_iou_per_class(detections, targets, class_predicted)
+
+            if batch_num == 0:
+                plot_gt_and_pred_bboxes_to_tensorboard(writer, images, detections, targets, class_predicted, num_images_to_plot=2)
 
     val_loss /= len(val_dl)
     avg_num_predicted_classes_per_image = torch.sum(sum_class_predicted / num_images).item()
@@ -269,19 +363,22 @@ def train_model(
 
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
-                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl)
 
-                writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
+                # val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl)
+                # TODO: change back train_dl -> val_dl
+                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, train_dl, writer)
+
+                writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
                 writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_predicted_classes_per_image, overall_steps_taken)
 
                 # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
                 anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
 
                 for class_, avg_preds_class in zip(anatomical_regions, avg_predictions_per_class):
-                    writer.add_scalar(f"_num_preds_{class_}", avg_preds_class, overall_steps_taken)
+                    writer.add_scalar(f"num_preds_{class_}", avg_preds_class, overall_steps_taken)
 
                 for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
-                    writer.add_scalar(f"_iou_{class_}", avg_iou_class, overall_steps_taken)
+                    writer.add_scalar(f"iou_{class_}", avg_iou_class, overall_steps_taken)
 
                 log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
@@ -289,7 +386,9 @@ def train_model(
                 model.train()
 
                 # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
+
                 # lr_scheduler.step(val_loss)
+                # TODO: change back train_loss -> val_loss
                 lr_scheduler.step(train_loss)
 
                 if val_loss < lowest_val_loss:
@@ -322,8 +421,11 @@ def train_model(
         torch.save(best_model_state, best_model_save_path)
 
     # save the model with the overall lowest val loss
+
     # torch.save(best_model_state, best_model_save_path)
+    # TODO: change back as it was above!
     torch.save(model.state_dict(), os.path.join(weights_folder_path, "last_epoch.pth"))
+
     log.info("\nFinished training!")
     log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
     return None
