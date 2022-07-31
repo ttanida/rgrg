@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
+from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
 from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
 from src.object_detector.object_detector import ObjectDetector
 
@@ -105,7 +106,7 @@ def compute_iou_per_class(detections, targets, class_predicted):
     return iou
 
 
-def get_val_loss(model, val_dl):
+def get_val_loss_and_other_metrics(model, val_dl):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
@@ -113,7 +114,10 @@ def get_val_loss(model, val_dl):
 
     Returns:
         val_loss (float): val loss for val set
-        avg_num_classes_predicted_per_image (float): as variable name says
+        avg_num_predicted_classes_per_image (float): since it's possible that certain classes/regions of all 36 regions are not predicted in an image,
+        this metric counts how many classes are predicted on average for an image. Ideally, this number should be 36.0
+        avg_predictions_per_class (list[float]): this metric counts how many times a class had a prediction on average. E.g. the value is 1.0,
+        then the class was predicted in all images of the val set
         avg_iou_per_class (list[float]): average IoU per class computed over all images in val set
     """
     # PyTorch implementation only return losses in train mode, and only detections in eval mode
@@ -125,9 +129,11 @@ def get_val_loss(model, val_dl):
     val_loss = 0.0
 
     num_images = 0
-    num_classes_predicted = 0
 
-    # tensor of accumulating the ios of each class (will be divided by num_images at the end of get average)
+    # tensor for accumulating the number of times a class is predicted over all images (will be divided by num_images at the end of get average)
+    sum_class_predicted = torch.zeros(36)
+
+    # tensor for accumulating the ios of each class (will be divided by num_images at the end of get average)
     sum_iou_per_class = torch.zeros(36)
 
     with torch.no_grad():
@@ -154,17 +160,18 @@ def get_val_loss(model, val_dl):
             loss = sum(loss for loss in loss_dict.values())
             val_loss += loss.item() * batch_size
 
-            # sum up all classes that were predicted in batch
-            num_classes_predicted += sum(class_predicted).item()
+            # sum up prediction for each class
+            sum_class_predicted += torch.sum(class_predicted, dim=0)
 
             # sum up the IoUs for each class
             sum_iou_per_class += compute_iou_per_class(detections, targets, class_predicted)
 
     val_loss /= len(val_dl)
-    avg_num_classes_predicted_per_image = num_classes_predicted / num_images
+    avg_num_predicted_classes_per_image = torch.sum(sum_class_predicted / num_images).item()
+    avg_predictions_per_class = (sum_class_predicted / num_images).tolist()
     avg_iou_per_class = (sum_iou_per_class / num_images).tolist()
 
-    return val_loss, avg_num_classes_predicted_per_image, avg_iou_per_class
+    return val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class
 
 
 def log_stats_to_console(
@@ -262,11 +269,18 @@ def train_model(
 
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
-                val_loss = get_val_loss(model, val_dl)
+                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl)
 
                 writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
+                writer.add_scalar("avg num predicted classes per image", avg_num_predicted_classes_per_image, overall_steps_taken)
 
-                log.info(f"\nTrain and val loss evaluated at step {overall_steps_taken}!\n")
+                for class_, avg_preds_class in zip(ANATOMICAL_REGIONS, avg_predictions_per_class):
+                    writer.add_scalar(f"num preds: {class_}", avg_preds_class, overall_steps_taken)
+
+                for class_, avg_iou_class in zip(ANATOMICAL_REGIONS, avg_iou_per_class):
+                    writer.add_scalar(f"IoU: {class_}", avg_iou_class, overall_steps_taken)
+
+                log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
                 # set the model back to training
                 model.train()
