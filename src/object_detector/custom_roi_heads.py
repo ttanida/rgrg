@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Tuple
 
 import torch
 from torch import Tensor
+import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models.detection.roi_heads import RoIHeads, fastrcnn_loss
 from torchvision.ops import boxes as box_ops
@@ -51,7 +52,11 @@ class CustomRoIHeads(RoIHeads):
             keypoint_head,
             keypoint_predictor,
         )
+        # return_feature_vectors == True if we train/evaluate the object detector as part of the full model
         self.return_feature_vectors = return_feature_vectors
+
+        # AdaptiveAvgPool2d to get box features after roi pooling from [num_proposals, 1024, 7, 7] to [num_proposals, 1024, 1, 1]
+        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
 
     def get_top_region_features_detections_class_predicted(
         self,
@@ -221,8 +226,11 @@ class CustomRoIHeads(RoIHeads):
             labels = None
             regression_targets = None
 
-        box_features = self.box_roi_pool(features, proposals, image_shapes)
-        box_features = self.box_head(box_features)
+        # box_features_after_roi_pool has shape [overall_num_proposals_for_all_images x 1024 x 7 x 7]
+        box_features_after_roi_pool = self.box_roi_pool(features, proposals, image_shapes)
+
+        # box_features has shape [overall_num_proposals_for_all_images x 1024]
+        box_features = self.box_head(box_features_after_roi_pool)
         class_logits, box_regression = self.box_predictor(box_features)
 
         detector_losses = {}
@@ -239,7 +247,13 @@ class CustomRoIHeads(RoIHeads):
         # if we evaluate the object detector (in isolation or as part of the full model), we need the "detections"
         # if we do either of them, we always need "class_predicted" (see doc_string of method for details)
         if self.return_feature_vectors or not self.training:
-            output = self.get_top_region_features_detections_class_predicted(box_features, box_regression, class_logits, proposals, image_shapes)
+            # take the box features after the roi pool and transform from [num_proposals, 1024, 7, 7] to [num_proposals, 1024, 1, 1]
+            box_features_after_roi_pool = self.avg_pool(box_features_after_roi_pool)
+
+            # remove all dims of size 1
+            box_features_after_roi_pool = torch.squeeze(box_features_after_roi_pool)
+
+            output = self.get_top_region_features_detections_class_predicted(box_features_after_roi_pool, box_regression, class_logits, proposals, image_shapes)
 
             roi_heads_output["class_predicted"] = output["class_predicted"]
 

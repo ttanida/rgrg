@@ -608,6 +608,8 @@ def main():
 
     log.info("\nStarting training!\n")
 
+    raise Exception("Remove all TODOs")
+
     train_model(
         model=model,
         train_dl=train_loader,

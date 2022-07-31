@@ -13,20 +13,20 @@ class ReportGenerationModel(nn.Module):
     """
     def __init__(self):
         super().__init__()
-        self.encoder = ObjectDetector(return_feature_vectors=True)
+        self.object_detector = ObjectDetector(return_feature_vectors=True)
         path_to_best_object_detector_weights = "..."
-        self.encoder.load_state_dict(torch.load(path_to_best_object_detector_weights))
+        self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
         # TODO: implement binary classifier
         # self.binary_classifier = BinaryClassifier()
 
-        self.decoder = DecoderModel()
+        self.language_model = DecoderModel()
         path_to_best_detector_weights = "..."
-        self.encoder.load_state_dict(torch.load(path_to_best_detector_weights))
+        self.language_model.load_state_dict(torch.load(path_to_best_detector_weights))
 
     def forward(self,
                 images: torch.FloatTensor,  # images is of shape [batch_size, 1, 224, 224] (whole gray-scale images of size 224 x 224)
-                input_ids: torch.LongTensor,  # shape [batch_size x 36 x seq_len], 1 sentence for every region for every image (sentence can be empty though)
+                input_ids: torch.LongTensor,  # shape [batch_size x 36 x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
                 attention_mask: torch.FloatTensor,  # shape [batch_size x 36 x seq_len]
                 region_targets: torch.BoolTensor,  # shape [batch_size x 36], boolean mask that indicates if a region has a sentence or not
                 return_loss: bool = True,
@@ -35,7 +35,7 @@ class ReportGenerationModel(nn.Module):
                 use_cache: Optional[bool] = False
                 ):
         # region_features of shape [batch_size, 36, 1024] (i.e. 1 feature vector for every region for every image in batch)
-        obj_detector_loss_dict, detections, region_features = self.encoder(images)
+        obj_detector_loss_dict, detections, region_features = self.object_detector(images)
 
         binary_classifier_loss = self.binary_classifier(region_features, region_targets, return_loss)
 
@@ -44,7 +44,7 @@ class ReportGenerationModel(nn.Module):
         # filtering out those regions by itself
         non_empty_input_ids, non_empty_attention_mask, filtered_region_features = self.filter_out_empty_sentences(region_targets, input_ids, attention_mask, region_features)
 
-        decoder_loss = self.decoder(
+        language_model_loss = self.language_model(
             non_empty_input_ids,
             non_empty_attention_mask,
             filtered_region_features,
@@ -54,7 +54,7 @@ class ReportGenerationModel(nn.Module):
             use_cache
         )
 
-        return obj_detector_loss_dict, binary_classifier_loss, decoder_loss, detections
+        return obj_detector_loss_dict, binary_classifier_loss, language_model_loss, detections
 
     def filter_out_empty_sentences(self,
                                    region_mask,  # shape [batch_size x 36]
@@ -111,13 +111,13 @@ class ReportGenerationModel(nn.Module):
         These output ids can then be decoded by the tokenizer to get the generated sentences.
         """
         # region_features of shape [batch_size=1, 36, 1024]
-        _, detections, region_features = self.encoder(images)
+        _, detections, region_features = self.object_detector(images)
 
         # binary_classifier_filtered_region_features of shape [num_regions_selected_in_image, 1024]
         binary_classifier_filtered_region_features, regions_selected_for_sentence_generation = self.binary_classifier(region_features, return_loss=False)
 
         # output_ids of shape (batch_size x longest_generated_sequence_length)
-        output_ids = self.decoder.generate(
+        output_ids = self.language_model.generate(
             binary_classifier_filtered_region_features,
             max_length,
             num_beams,
