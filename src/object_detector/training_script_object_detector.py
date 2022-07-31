@@ -9,12 +9,12 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import numpy as np
 import pandas as pd
+from tensorboardX import SummaryWriter
 import torch
 from torch import Tensor
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
@@ -98,7 +98,7 @@ def compute_iou_per_class(detections, targets, class_predicted):
     valid = torch.logical_and(valid_intersection, class_predicted)
 
     # calculate IoU for valid classes, otherwise set IoU to 0
-    iou = torch.where(valid, (intersection_area / union_area), 0.)
+    iou = torch.where(valid, (intersection_area / union_area), torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
 
     # sum up the values along the batch dimension (the values will be averaged later)
     iou = torch.sum(iou, dim=0)
@@ -131,10 +131,10 @@ def get_val_loss_and_other_metrics(model, val_dl):
     num_images = 0
 
     # tensor for accumulating the number of times a class is predicted over all images (will be divided by num_images at the end of get average)
-    sum_class_predicted = torch.zeros(36)
+    sum_class_predicted = torch.zeros(36, device=device)
 
     # tensor for accumulating the ios of each class (will be divided by num_images at the end of get average)
-    sum_iou_per_class = torch.zeros(36)
+    sum_iou_per_class = torch.zeros(36, device=device)
 
     with torch.no_grad():
         for batch in tqdm(val_dl):
@@ -272,13 +272,16 @@ def train_model(
                 val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl)
 
                 writer.add_scalars("loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
-                writer.add_scalar("avg num predicted classes per image", avg_num_predicted_classes_per_image, overall_steps_taken)
+                writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_predicted_classes_per_image, overall_steps_taken)
 
-                for class_, avg_preds_class in zip(ANATOMICAL_REGIONS, avg_predictions_per_class):
-                    writer.add_scalar(f"num preds: {class_}", avg_preds_class, overall_steps_taken)
+                # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
+                anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
 
-                for class_, avg_iou_class in zip(ANATOMICAL_REGIONS, avg_iou_per_class):
-                    writer.add_scalar(f"IoU: {class_}", avg_iou_class, overall_steps_taken)
+                for class_, avg_preds_class in zip(anatomical_regions, avg_predictions_per_class):
+                    writer.add_scalar(f"_num_preds_{class_}", avg_preds_class, overall_steps_taken)
+
+                for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
+                    writer.add_scalar(f"_iou_{class_}", avg_iou_class, overall_steps_taken)
 
                 log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
