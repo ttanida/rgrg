@@ -36,16 +36,16 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 2
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.08
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.1
-BATCH_SIZE = 32
+RUN = 0
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
+BATCH_SIZE = 64
 NUM_WORKERS = 12
-EPOCHS = 150
+EPOCHS = 20
 LR = 1e-3
-EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE = 1000  # number of evaluations to wait before early stopping
-PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
+PATIENCE = 7  # number of evaluations to wait before early stopping
+PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
 def get_title(region_set, region_indices, region_colors, class_predicted_img):
@@ -366,9 +366,7 @@ def train_model(
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
 
-                # val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl)
-                # TODO: change back train_dl -> val_dl
-                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, train_dl, writer, overall_steps_taken)
+                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken)
 
                 writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
                 writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_predicted_classes_per_image, overall_steps_taken)
@@ -388,10 +386,7 @@ def train_model(
                 model.train()
 
                 # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
-
-                # lr_scheduler.step(val_loss)
-                # TODO: change back train_loss -> val_loss
-                lr_scheduler.step(train_loss)
+                lr_scheduler.step(val_loss)
 
                 if val_loss < lowest_val_loss:
                     num_evaluations_without_decrease_val_loss = 0
@@ -421,12 +416,6 @@ def train_model(
 
         # save the current best model weights at the end of each epoch
         torch.save(best_model_state, best_model_save_path)
-
-    # save the model with the overall lowest val loss
-
-    # torch.save(best_model_state, best_model_save_path)
-    # TODO: change back as it was above!
-    torch.save(model.state_dict(), os.path.join(weights_folder_path, "last_epoch.pth"))
 
     log.info("\nFinished training!")
     log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
@@ -510,7 +499,7 @@ def get_transforms(dataset: str):
 
 
 def get_datasets_as_dfs(config_file_path):
-    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model-50"
+    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model"
 
     usecols = ["mimic_image_file_path", "bbox_coordinates", "bbox_labels"]
 
@@ -518,7 +507,7 @@ def get_datasets_as_dfs(config_file_path):
     # the literal_eval func to convert them to python lists
     converters = {"bbox_coordinates": literal_eval, "bbox_labels": literal_eval}
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, f"{dataset}-50") + ".csv" for dataset in ["train", "valid", "test"]}
+    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])
@@ -607,8 +596,6 @@ def main():
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     log.info("\nStarting training!\n")
-
-    raise Exception("Remove all TODOs")
 
     train_model(
         model=model,
