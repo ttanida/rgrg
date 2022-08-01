@@ -7,6 +7,7 @@ from typing import List, Dict
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -36,7 +37,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 0
+RUN = 3
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
 BATCH_SIZE = 64
@@ -466,28 +467,30 @@ def get_data_loaders(train_dataset, val_dataset):
 
 def get_transforms(dataset: str):
     # see compute_mean_std_dataset.py in src/dataset_bounding_boxes
-    # mean = 0.471
-    # std = 0.302
+    mean = 0.471
+    std = 0.302
 
     # note: transforms are applied to the already resized (to 224x224) and padded images
     # (see __getitem__ method of custom dataset class)!
 
     # use albumentations for Compose and transforms
+    # all augmentations are applied with p=0.5
+    # since Affine translates and rotates the image, we also have to do the same with the bounding boxes, hence the bbox_params arugment
     train_transforms = A.Compose([
-        # optionally add augmentation transforms here (but bboxes also have to be transformed in this case!)
-
-        # don't use standard normalization procedure, but apply normalization as described in torchxrayvision
-        # https://github.com/mlmed/torchxrayvision#image-pre-processing
-        # the normalization as described in torchxrayvision is already applied in the custom dataset class before the transforms
-        # A.Normalize(mean=mean, std=std),
+        A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1),
+        A.GaussianBlur(blur_limit=(1, 1)),
+        A.ColorJitter(),
+        A.Sharpen(alpha=(0.1, 0.2), lightness=0.0),
+        A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
+        A.GaussNoise(),
+        A.Normalize(mean=mean, std=std),
         ToTensorV2()
-    ])
+    ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels']))
 
     # don't apply data augmentations to val and test set
     val_test_transforms = A.Compose(
         [
-            # don't use standard normalization procedure, but apply normalization as described in torchxrayvision in the custom dataset class
-            # A.Normalize(mean=mean, std=std),
+            A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ]
     )

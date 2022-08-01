@@ -27,24 +27,23 @@ class CustomImageDataset(Dataset):
             # resize image to 224x224 (since bbox-coordinates are also set for 224x224 images)
             resized_image = self._resize_pad_image(image, width=224)
 
-            # normalize as done in torchxrayvision (since backbone is a classifier trained by library)
-            # see https://github.com/mlmed/torchxrayvision#image-pre-processing
-            normalized_resized_image = xrv.datasets.normalize(resized_image, 255)
-
-            # apply transformations
-            # albumentations transforms return a dict, which is why key "image" has to be selected
-            resized_image_tensor = self.transforms(image=normalized_resized_image)["image"]
-
             # bbox_coordinates (List[List[int]]) is the 2nd column of the dataframes
             bbox_coordinates = self.dataset_df.iloc[index, 1]
 
             # bbox_labels (List[int]) is the 3rd column of the dataframes
-            labels = self.dataset_df.iloc[index, 2]
+            class_labels = self.dataset_df.iloc[index, 2]
+
+            # apply transformations to image, bboxes and labels
+            transformed = self.transforms(image=resized_image, bboxes=bbox_coordinates, class_labels=class_labels)
+
+            transformed_image = transformed["image"]
+            transformed_bboxes = transformed["bboxes"]
+            transformed_bbox_labels = transformed["class_labels"]
 
             sample = {
-                "image": resized_image_tensor,
-                "boxes": torch.tensor(bbox_coordinates, dtype=torch.float),
-                "labels": torch.tensor(labels, dtype=torch.int64),
+                "image": transformed_image,
+                "boxes": torch.tensor(transformed_bboxes, dtype=torch.float),
+                "labels": torch.tensor(transformed_bbox_labels, dtype=torch.int64),
             }
         except Exception:
             return None
@@ -63,7 +62,8 @@ class CustomImageDataset(Dataset):
 
         # new_size should be in (width, height) format
 
-        im = cv2.resize(image, (new_size[1], new_size[0]), interpolation=cv2.INTER_NEAREST)
+        # INTER_AREA interpolation works best for shrinking images
+        im = cv2.resize(image, (new_size[1], new_size[0]), interpolation=cv2.INTER_AREA)
 
         delta_w = width - new_size[1]
         delta_h = width - new_size[0]
