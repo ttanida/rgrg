@@ -55,21 +55,21 @@ PATIENCE = 7  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
-def get_title(region_set, region_indices, region_colors, class_predicted_img):
+def get_title(region_set, region_indices, region_colors, class_detected_img):
     # region_set always contains 6 region names
 
-    # get a list of 6 boolean values that specify if that region was predicted
-    class_preds = [class_predicted_img[region_index] for region_index in region_indices]
+    # get a list of 6 boolean values that specify if that region was detected
+    class_detected = [class_detected_img[region_index] for region_index in region_indices]
 
     # add color_code to region name (e.g. "(r)" for red)
-    # also add np to the brackets if region was not predicted (e.g. "(r, np)" if red region was not predicted)
-    region_set = [region + f" ({color})" if cls_pred else region + f" ({color}, np)" for region, color, cls_pred in zip(region_set, region_colors, class_preds)]
+    # also add nd to the brackets if region was not detected (e.g. "(r, nd)" if red region was not detected)
+    region_set = [region + f" ({color})" if cls_detect else region + f" ({color}, nd)" for region, color, cls_detect in zip(region_set, region_colors, class_detected)]
 
     # add a line break to the title, as to not make it too long
     return ", ".join(region_set[:3]) + "\n" + ", ".join(region_set[3:])
 
 
-def plot_box(box, ax, clr, linestyle, class_pred=True):
+def plot_box(box, ax, clr, linestyle, class_detected=True):
     x0, y0, x1, y1 = box
     h = y1 - y0
     w = x1 - x0
@@ -85,12 +85,12 @@ def plot_box(box, ax, clr, linestyle, class_pred=True):
         )
     )
 
-    # add an annotation to the gt box, that the pred box does not exist
-    if not class_pred:
-        ax.annotate("not predicted", (x0, y0), color=clr, weight="bold", fontsize=10)
+    # add an annotation to the gt box, that the pred box does not exist (i.e. the corresponding class was not detected)
+    if not class_detected:
+        ax.annotate("not detected", (x0, y0), color=clr, weight="bold", fontsize=10)
 
 
-def plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_predicted, num_images_to_plot=2):
+def plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_detected, num_images_to_plot=2):
     # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
     # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
@@ -117,7 +117,7 @@ def plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, 
 
         gt_boxes_img = gt_boxes_batch[num_img]
         pred_boxes_img = pred_boxes_batch[num_img]
-        class_predicted_img = class_predicted[num_img].tolist()
+        class_detected_img = class_detected[num_img].tolist()
 
         for num_region_set, region_set in enumerate(regions_sets):
             fig = plt.figure(figsize=(8, 8))
@@ -131,15 +131,15 @@ def plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, 
             for region_index, color in zip(region_indices, region_colors):
                 box_gt = gt_boxes_img[region_index].tolist()
                 box_pred = pred_boxes_img[region_index].tolist()
-                box_class_pred = class_predicted_img[region_index]
+                box_class_detected = class_detected_img[region_index]
 
-                plot_box(box_gt, ax, clr=color, linestyle="solid", class_pred=box_class_pred)
+                plot_box(box_gt, ax, clr=color, linestyle="solid", class_detected=box_class_detected)
 
-                # only plot box of the predicted class, if the class was actually predicted
-                if box_class_pred:
+                # only plot predicted box if class was actually detected
+                if box_class_detected:
                     plot_box(box_pred, ax, clr=color, linestyle="dashed")
 
-            title = get_title(region_set, region_indices, region_colors, class_predicted_img)
+            title = get_title(region_set, region_indices, region_colors, class_detected_img)
             ax.set_title(title)
 
             writer.add_figure(f"img_{num_img}_region_set_{num_region_set}", fig, overall_steps_taken)
@@ -163,7 +163,7 @@ def compute_box_area(box):
     return (x1 - x0) * (y1 - y0)
 
 
-def compute_iou_per_class(detections, targets, class_predicted):
+def compute_iou_per_class(detections, targets, class_detected):
     # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
     # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
@@ -192,8 +192,8 @@ def compute_iou_per_class(detections, targets, class_predicted):
     # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
     valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
 
-    # also only calculate IoU for classes that were predicted
-    valid = torch.logical_and(valid_intersection, class_predicted)
+    # also only calculate IoU for classes that were detected
+    valid = torch.logical_and(valid_intersection, class_detected)
 
     # calculate IoU for valid classes, otherwise set IoU to 0
     iou = torch.where(valid, (intersection_area / union_area), torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
@@ -214,15 +214,15 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
 
     Returns:
         val_loss (float): val loss for val set
-        avg_num_predicted_classes_per_image (float): since it's possible that certain classes/regions of all 36 regions are not predicted in an image,
-        this metric counts how many classes are predicted on average for an image. Ideally, this number should be 36.0
-        avg_predictions_per_class (list[float]): this metric counts how many times a class had a prediction on average. E.g. the value is 1.0,
-        then the class was predicted in all images of the val set
+        avg_num_detected_classes_per_image (float): since it's possible that certain classes/regions of all 36 regions are not detected in an image,
+        this metric counts how many classes are detected on average for an image. Ideally, this number should be 36.0
+        avg_detections_per_class (list[float]): this metric counts how many times a class was detected in an image on average. E.g. if the value is 1.0,
+        then the class was detected in all images of the val set
         avg_iou_per_class (list[float]): average IoU per class computed over all images in val set
     """
     # PyTorch implementation only return losses in train mode, and only detections in eval mode
     # see https://stackoverflow.com/questions/60339336/validation-loss-for-pytorch-faster-rcnn/65347721#65347721
-    # my model is modified to return losses, detections and class_predicted in eval mode
+    # my model is modified to return losses, detections and class_detected in eval mode
     # see forward method of object detector class for more information
     model.eval()
 
@@ -230,8 +230,8 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
 
     num_images = 0
 
-    # tensor for accumulating the number of times a class is predicted over all images (will be divided by num_images at the end of get average)
-    sum_class_predicted = torch.zeros(36, device=device)
+    # tensor for accumulating the number of times a class is detected over all images (will be divided by num_images at the end of get average)
+    sum_class_detected = torch.zeros(36, device=device)
 
     # tensor for accumulating the ios of each class (will be divided by num_images at the end of get average)
     sum_iou_per_class = torch.zeros(36, device=device)
@@ -253,28 +253,28 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
             # "top_region_boxes" maps to a tensor of shape [batch_size x 36 x 4]
             # "top_scores" maps to a tensor of shape [batch_size x 36]
 
-            # class_predicted is a tensor of shape [batch_size x 36]
-            loss_dict, detections, class_predicted = model(images, targets)
+            # class_detected is a tensor of shape [batch_size x 36]
+            loss_dict, detections, class_detected = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
             val_loss += loss.item() * batch_size
 
-            # sum up prediction for each class
-            sum_class_predicted += torch.sum(class_predicted, dim=0)
+            # sum up detections for each class
+            sum_class_detected += torch.sum(class_detected, dim=0)
 
             # sum up the IoUs for each class
-            sum_iou_per_class += compute_iou_per_class(detections, targets, class_predicted)
+            sum_iou_per_class += compute_iou_per_class(detections, targets, class_detected)
 
             if batch_num == 0:
-                plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_predicted, num_images_to_plot=2)
+                plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_detected, num_images_to_plot=2)
 
     val_loss /= len(val_dl)
-    avg_num_predicted_classes_per_image = torch.sum(sum_class_predicted / num_images).item()
-    avg_predictions_per_class = (sum_class_predicted / num_images).tolist()
+    avg_num_detected_classes_per_image = torch.sum(sum_class_detected / num_images).item()
+    avg_detections_per_class = (sum_class_detected / num_images).tolist()
     avg_iou_per_class = (sum_iou_per_class / num_images).tolist()
 
-    return val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class
+    return val_loss, avg_num_detected_classes_per_image, avg_detections_per_class, avg_iou_per_class
 
 
 def log_stats_to_console(
@@ -372,16 +372,16 @@ def train_model(
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
 
-                val_loss, avg_num_predicted_classes_per_image, avg_predictions_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken)
+                val_loss, avg_num_detected_classes_per_image, avg_detections_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken)
 
                 writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
-                writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_predicted_classes_per_image, overall_steps_taken)
+                writer.add_scalar("avg_num_detected_classes_per_image", avg_num_detected_classes_per_image, overall_steps_taken)
 
                 # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
                 anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
 
-                for class_, avg_preds_class in zip(anatomical_regions, avg_predictions_per_class):
-                    writer.add_scalar(f"num_preds_{class_}", avg_preds_class, overall_steps_taken)
+                for class_, avg_detections_class in zip(anatomical_regions, avg_detections_per_class):
+                    writer.add_scalar(f"num_detections_{class_}", avg_detections_class, overall_steps_taken)
 
                 for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
                     writer.add_scalar(f"iou_{class_}", avg_iou_class, overall_steps_taken)
