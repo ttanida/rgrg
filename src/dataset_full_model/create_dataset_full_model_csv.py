@@ -7,11 +7,12 @@ import logging
 import os
 import re
 
+import imagesize
 from tqdm import tqdm
 
 from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_full_dataset = "/u/home/tanida/datasets/dataset-for-full-model"
+path_to_full_dataset = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -282,8 +283,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph)
 
-            # we assume that the images were already padded and resized to 224x224
-            width, height = 224, 224
+            width, height = imagesize.get(mimic_image_file_path)
 
             new_image_row = [index, subject_id, study_id, image_id, mimic_image_file_path]
             bbox_coordinates = []
@@ -299,11 +299,11 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
 
-                # use the coordinates for a padded and resized 224x224 CXR image (e.g. "x1" instead of "original_x1")
-                x1 = anatomical_region["x1"]
-                y1 = anatomical_region["y1"]
-                x2 = anatomical_region["x2"]
-                y2 = anatomical_region["y2"]
+                # get the bbox coordinates for the region
+                x1 = anatomical_region["original_x1"]
+                y1 = anatomical_region["original_y1"]
+                x2 = anatomical_region["original_x2"]
+                y2 = anatomical_region["original_y2"]
 
                 # check if any bbox coordinates are faulty (of all 36 regions)
                 # if there is at least 1 region with faulty bbox coordinates, then break out of loop
