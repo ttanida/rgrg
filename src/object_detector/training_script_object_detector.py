@@ -476,23 +476,25 @@ def get_transforms(dataset: str):
     # use albumentations for Compose and transforms
     # all augmentations are applied with p=0.5
     # since Affine translates and rotates the image, we also have to do the same with the bounding boxes, hence the bbox_params arugment
-    train_transforms = A.Compose([
-        A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1),
-        A.GaussianBlur(blur_limit=(1, 1)),
-        A.ColorJitter(),
-        A.Sharpen(alpha=(0.1, 0.2), lightness=0.0),
-        A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
-        A.GaussNoise(),
-        A.Normalize(mean=mean, std=std),
-        ToTensorV2()
-    ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels']))
+    train_transforms = A.Compose(
+        [
+            A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1),
+            A.GaussianBlur(blur_limit=(1, 1)),
+            A.ColorJitter(),
+            A.Sharpen(alpha=(0.1, 0.2), lightness=0.0),
+            A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
+            A.GaussNoise(),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2()
+        ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels'])
+    )
 
     # don't apply data augmentations to val and test set
     val_test_transforms = A.Compose(
         [
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
-        ]
+        ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels'])
     )
 
     if dataset == "train":

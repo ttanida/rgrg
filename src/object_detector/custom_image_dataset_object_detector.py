@@ -1,7 +1,6 @@
 import cv2
 import torch
 from torch.utils.data import Dataset
-import torchxrayvision as xrv
 
 
 class CustomImageDataset(Dataset):
@@ -33,7 +32,7 @@ class CustomImageDataset(Dataset):
             # bbox_labels (List[int]) is the 3rd column of the dataframes
             class_labels = self.dataset_df.iloc[index, 2]
 
-            # apply transformations to image, bboxes and labels
+            # apply augmentation transformations to image, bboxes and label
             transformed = self.transforms(image=resized_image, bboxes=bbox_coordinates, class_labels=class_labels)
 
             transformed_image = transformed["image"]
