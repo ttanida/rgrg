@@ -38,6 +38,11 @@ torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
 RUN = 3
+# can be useful to add additional information to run_config.txt file
+RUN_COMMENT = """
+Backbone changed to ResNet-50 with input image resolution 512.
+Data augmentation used:
+"""
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
 BATCH_SIZE = 64
@@ -560,6 +565,7 @@ def create_run_folder():
 
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
     config_parameters = {
+        "COMMENT": RUN_COMMENT,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
         "BATCH_SIZE": BATCH_SIZE,
