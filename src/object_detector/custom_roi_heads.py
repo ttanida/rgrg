@@ -55,7 +55,7 @@ class CustomRoIHeads(RoIHeads):
         # return_feature_vectors == True if we train/evaluate the object detector as part of the full model
         self.return_feature_vectors = return_feature_vectors
 
-        # AdaptiveAvgPool2d to get box features after roi pooling from [num_proposals, 1024, 7, 7] to [num_proposals, 1024, 1, 1]
+        # AdaptiveAvgPool2d to get box features after roi pooling from [num_proposals, 1024, 8, 8] to [num_proposals, 1024, 1, 1]
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
 
     def get_top_region_features_detections_class_predicted(
@@ -226,7 +226,7 @@ class CustomRoIHeads(RoIHeads):
             labels = None
             regression_targets = None
 
-        # box_features_after_roi_pool has shape [overall_num_proposals_for_all_images x 1024 x 7 x 7]
+        # box_features_after_roi_pool has shape [overall_num_proposals_for_all_images x 1024 x 8 x 8]
         box_features_after_roi_pool = self.box_roi_pool(features, proposals, image_shapes)
 
         # box_features has shape [overall_num_proposals_for_all_images x 1024]
@@ -247,7 +247,7 @@ class CustomRoIHeads(RoIHeads):
         # if we evaluate the object detector (in isolation or as part of the full model), we need the "detections"
         # if we do either of them, we always need "class_predicted" (see doc_string of method for details)
         if self.return_feature_vectors or not self.training:
-            # take the box features after the roi pool and transform from [num_proposals, 1024, 7, 7] to [num_proposals, 1024, 1, 1]
+            # take the box features after the roi pool and transform from [num_proposals, 1024, 8, 8] to [num_proposals, 1024, 1, 1]
             box_features_after_roi_pool = self.avg_pool(box_features_after_roi_pool)
 
             # remove all dims of size 1

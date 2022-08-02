@@ -13,7 +13,7 @@ class ImageList:
     def __init__(self, images_tensor: Tensor) -> None:
         self.tensors = images_tensor
 
-        # all tensors have the same shape (most likely [batch_size, 1, 224, 224])
+        # all tensors have the same shape (most likely [batch_size, 1, 512, 512])
         batch_size = images_tensor.shape[0]
         image_sizes = images_tensor.shape[-2:]
 

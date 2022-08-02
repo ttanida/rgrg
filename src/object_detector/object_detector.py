@@ -22,7 +22,7 @@ class ObjectDetector(nn.Module):
 
     During training, the model expects both the input image tensor as well as the targets.
 
-    The input image tensor is expected to be a tensor of shape [batch_size, 1, H, W], with H = W (which will most likely be 224 or 512).
+    The input image tensor is expected to be a tensor of shape [batch_size, 1, H, W], with H = W (which will most likely be 512).
     This differs form the PyTorch implementation, where the input images are expected to be a list of tensors (of different shapes).
     We apply transformations before inputting the images into the model, whereas the PyTorch implementation applies transformations
     after the images were inputted into the model.
@@ -42,18 +42,20 @@ class ObjectDetector(nn.Module):
 
     def __init__(self, return_feature_vectors=False):
         super().__init__()
-        # boolean to specify if feature vectors should be returned after TwoMLPHead (i.e. linear layers) inside RoIHeads
+        # boolean to specify if feature vectors should be returned after roi pooling inside RoIHeads
         self.return_feature_vectors = return_feature_vectors
 
         # 36 classes for 36 anatomical regions + background (defined as class 0)
         self.num_classes = 37
 
         # use only the feature extractor of the pre-trained classification model
-        self.backbone = xrv.models.DenseNet(weights="densenet121-res224-all").features
+        # (i.e. use all children but the last 2, which are AdaptiveAvgPool2d and Linear)
+        resnet = xrv.models.ResNet(weights="resnet50-res512-all")
+        self.backbone = nn.Sequential(*list(resnet.model.children())[:-2])
 
         # FasterRCNN needs to know the number of output channels of the backbone
-        # for densenet121, it's 1024 (with feature maps of size 7x7)
-        self.backbone.out_channels = 1024
+        # for ResNet-50, it's 2048 (with feature maps of size 16x16)
+        self.backbone.out_channels = 2048
 
         self.rpn = self._create_rpn()
         self.roi_heads = self._create_roi_heads()
@@ -68,10 +70,10 @@ class ObjectDetector(nn.Module):
         # https://github.com/martinzlocha/anchor-optimization
         # https://towardsdatascience.com/anchor-boxes-the-key-to-quality-object-detection-ddf9d612d4f9
 
-        # since the input image size is 224 x 224, we choose the sizes accordingly
+        # since the input image size is 512 x 512, we choose the sizes accordingly
         anchor_generator = AnchorGenerator(
-            sizes=((10, 20, 30, 40, 50, 60, 70, 80, 90, 150),),
-            aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 8.0),),
+            sizes=((20, 40, 60, 80, 100, 120, 140, 160, 180, 300),),
+            aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 5.0, 8.0),),
             # sizes=((32, 64, 128, 256, 512),),
             # aspect_ratios=((0.5, 1.0, 2.0),),
         )
@@ -98,7 +100,8 @@ class ObjectDetector(nn.Module):
         # define the roi pooling layer
         # if the backbone returns a Tensor, featmap_names is expected to be [0]
         # (uniform) size of feature maps after roi pooling layer is defined in output_size
-        roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=["0"], output_size=7, sampling_ratio=2)
+        # TODO: try different roi pool output sizes
+        roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=["0"], output_size=8, sampling_ratio=2)
 
         resolution = roi_pooler.output_size[0]
         representation_size = 1024
@@ -117,9 +120,9 @@ class ObjectDetector(nn.Module):
             batch_size_per_image=512,
             positive_fraction=0.25,
             bbox_reg_weights=None,
-            score_thresh=0.01,  # TODO: try out different values
-            nms_thresh=0.0,  # TODO: try out different values
-            detections_per_img=100,  # TODO: set detections_per_img to 36 for 36 anatomical regions?
+            score_thresh=0.01,
+            nms_thresh=0.0,
+            detections_per_img=100,
         )
 
         return roi_heads
@@ -164,7 +167,7 @@ class ObjectDetector(nn.Module):
 
         Args:
             images (Tensor)
-            features (Tensor): of shape [batch_size, 1024, 7, 7]
+            features (Tensor): of shape [batch_size, 2048, 16, 16]
 
         Returns:
             images (ImageList)
@@ -178,7 +181,7 @@ class ObjectDetector(nn.Module):
     def forward(self, images: Tensor, targets: Optional[List[Dict[str, Tensor]]] = None):
         """
         Args:
-            images (Tensor): images to be processed of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
+            images (Tensor): images to be processed of shape [batch_size, 1, 512, 512] (gray-scale images of size 512 x 512)
             targets (List[Dict[str, Tensor]]): list of batch_size dicts, where a single dict contains the fields:
                 - boxes (FloatTensor[N, 4]): the ground-truth boxes in [x1, y1, x2, y2] format
                 - labels (Int64Tensor[N]): the class label for each ground-truth box
@@ -262,7 +265,7 @@ class ObjectDetector(nn.Module):
 # model.eval()
 # model.to(device)
 
-# images = torch.rand(3, 1, 224, 224)
+# images = torch.rand(3, 1, 512, 512)
 # targets = [
 #     {
 #         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),

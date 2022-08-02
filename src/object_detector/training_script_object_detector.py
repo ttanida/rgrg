@@ -43,6 +43,7 @@ RUN_COMMENT = """
 Backbone changed to ResNet-50 with input image resolution 512.
 Data augmentation used:
 """
+IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
 BATCH_SIZE = 64
@@ -245,7 +246,7 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
             batch_size = images.size(0)
             num_images += batch_size
 
-            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
             # detections is a dict with keys "top_region_boxes" and "top_scores"
@@ -325,12 +326,11 @@ def train_model(
 
     Returns
     -------
-    None, but saves model with the lowest val loss over all epochs.
+    None, but saves model with the overall lowest val loss at the end of every epoch.
     """
-
     lowest_val_loss = np.inf
 
-    # the best_model_state is the one where the val loss is the lowest over all evaluations
+    # the best_model_state is the one where the val loss is the lowest overall
     best_model_state = None
 
     # parameter to determine early stopping
@@ -349,7 +349,7 @@ def train_model(
 
             batch_size = images.size(0)
 
-            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 224 x 224)
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
             loss_dict = model(images, targets)
@@ -475,20 +475,27 @@ def get_transforms(dataset: str):
     mean = 0.471
     std = 0.302
 
-    # note: transforms are applied to the already resized (to 224x224) and padded images
-    # (see __getitem__ method of custom dataset class)!
-
     # use albumentations for Compose and transforms
-    # all augmentations are applied with p=0.5
+    # augmentations are applied with prob=0.5
     # since Affine translates and rotates the image, we also have to do the same with the bounding boxes, hence the bbox_params arugment
     train_transforms = A.Compose(
         [
+            # we want the long edge of the image to be resized to IMAGE_INPUT_SIZE, and the short edge of the image to be padded to IMAGE_INPUT_SIZE on both sides,
+            # such that the aspect ratio of the images are kept, while getting images of uniform size (IMAGE_INPUT_SIZE x IMAGE_INPUT_SIZE)
+            # LongestMaxSize: resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio
+            # INTER_AREA works best for shrinking images
+            A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
             A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1),
             A.GaussianBlur(blur_limit=(1, 1)),
             A.ColorJitter(),
             A.Sharpen(alpha=(0.1, 0.2), lightness=0.0),
+            # randomly (by default prob=0.5) translate and rotate image
+            # mode and cval specify that black pixels are used to fill in newly created pixels
+            # translate between -2% and 2% of the image height/width, rotate between -2 and 2 degrees
             A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
             A.GaussNoise(),
+            # PadIfNeeded: pads both sides of the shorter edge with 0's (black pixels)
+            A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
             A.Normalize(mean=mean, std=std),
             ToTensorV2()
         ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels'])
@@ -497,6 +504,8 @@ def get_transforms(dataset: str):
     # don't apply data augmentations to val and test set
     val_test_transforms = A.Compose(
         [
+            A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
+            A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels'])
@@ -509,7 +518,7 @@ def get_transforms(dataset: str):
 
 
 def get_datasets_as_dfs(config_file_path):
-    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model"
+    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
 
     usecols = ["mimic_image_file_path", "bbox_coordinates", "bbox_labels"]
 
@@ -566,6 +575,7 @@ def create_run_folder():
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
     config_parameters = {
         "COMMENT": RUN_COMMENT,
+        "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
         "BATCH_SIZE": BATCH_SIZE,
