@@ -37,22 +37,19 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 4
+RUN = 5
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """
-Backbone changed to ResNet-50 with input image resolution 512.
-Data augmentation used:
-"""
+RUN_COMMENT = """Backbone changed to ResNet-50 with input image resolution 512. Train on full dataset."""
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.000005
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.0004
-BATCH_SIZE = 16
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
+BATCH_SIZE = 32
 NUM_WORKERS = 12
 EPOCHS = 20
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE = 7  # number of evaluations to wait before early stopping
-PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+PATIENCE = 80  # number of evaluations to wait before early stopping
+PATIENCE_LR_SCHEDULER = 40  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
@@ -375,13 +372,13 @@ def train_model(
                 val_loss, avg_num_detected_classes_per_image, avg_detections_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken)
 
                 writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
-                writer.add_scalar("avg_num_detected_classes_per_image", avg_num_detected_classes_per_image, overall_steps_taken)
+                writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_detected_classes_per_image, overall_steps_taken)
 
                 # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
                 anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
 
                 for class_, avg_detections_class in zip(anatomical_regions, avg_detections_per_class):
-                    writer.add_scalar(f"num_detections_{class_}", avg_detections_class, overall_steps_taken)
+                    writer.add_scalar(f"num_preds_{class_}", avg_detections_class, overall_steps_taken)
 
                 for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
                     writer.add_scalar(f"iou_{class_}", avg_iou_class, overall_steps_taken)
