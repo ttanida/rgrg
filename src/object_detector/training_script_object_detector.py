@@ -37,16 +37,16 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 3
+RUN = 4
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """
 Backbone changed to ResNet-50 with input image resolution 512.
 Data augmentation used:
 """
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
-BATCH_SIZE = 64
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.000005
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.0004
+BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 20
 LR = 1e-3
