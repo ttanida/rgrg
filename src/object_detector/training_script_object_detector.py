@@ -15,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch
 from torch import Tensor
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -37,13 +37,13 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 5
+RUN = 6
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Backbone changed to ResNet-50 with input image resolution 512. Train on full dataset."""
+RUN_COMMENT = """Backbone changed to ResNet-50 with input image resolution 512. Train on full dataset. Convert from ReduceLROnPlateau to StepLR"""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 20
 LR = 1e-3
@@ -383,6 +383,8 @@ def train_model(
                 for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
                     writer.add_scalar(f"iou_{class_}", avg_iou_class, overall_steps_taken)
 
+                writer.add_scalar("lr", lr_scheduler.get_last_lr(), overall_steps_taken)
+
                 log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
                 # set the model back to training
@@ -610,7 +612,7 @@ def main():
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
-    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
+    lr_scheduler = StepLR(opt, step_size=6000, gamma=0.1)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     log.info("\nStarting training!\n")
