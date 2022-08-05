@@ -54,6 +54,8 @@ class ReportGenerationModel(nn.Module):
                 top_region_features, class_detected, return_pred=False, region_has_sentence=region_has_sentence
             )
 
+        # TODO: for decoder evaluation, use selected_regions (pred) instead of region_has_sentence (gt)
+
         # during training and evaluation, we train/evaluate the decoder only on region features that have a (non-empty) sentence
         # this is done under the assumption that at inference time, the binary classifier will do an adequate job at selecting those regions by itself
         # we also filter out region features (and corresponding inputs_ids/attention_masks) that correspond to region/classes that were not detected by the object detector

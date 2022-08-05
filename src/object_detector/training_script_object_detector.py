@@ -160,7 +160,7 @@ def compute_box_area(box):
     return (x1 - x0) * (y1 - y0)
 
 
-def compute_iou_per_class(detections, targets, class_detected):
+def compute_intersection_and_union_area_per_class(detections, targets, class_detected):
     # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
     # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
@@ -189,16 +189,17 @@ def compute_iou_per_class(detections, targets, class_detected):
     # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
     valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
 
-    # also only calculate IoU for classes that were detected
-    valid = torch.logical_and(valid_intersection, class_detected)
+    # also there is no intersection if the class was not detected by object detector
+    valid_intersection = torch.logical_and(valid_intersection, class_detected)
 
-    # calculate IoU for valid classes, otherwise set IoU to 0
-    iou = torch.where(valid, (intersection_area / union_area), torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
+    # set all non-valid intersection areas to 0
+    intersection_area = torch.where(valid_intersection, intersection_area, torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
 
-    # sum up the values along the batch dimension (the values will be averaged later)
-    iou = torch.sum(iou, dim=0)
+    # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
+    intersection_area = torch.sum(intersection_area, dim=0)
+    union_area = torch.sum(union_area, dim=0)
 
-    return iou
+    return intersection_area, union_area
 
 
 def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
@@ -230,8 +231,11 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
     # tensor for accumulating the number of times a class is detected over all images (will be divided by num_images at the end of get average)
     sum_class_detected = torch.zeros(36, device=device)
 
-    # tensor for accumulating the ios of each class (will be divided by num_images at the end of get average)
-    sum_iou_per_class = torch.zeros(36, device=device)
+    # tensor for accumulating the intersection area of each class (will be divided by union area of each class at the end of get the IoU for each class)
+    sum_intersection_area_per_class = torch.zeros(36, device=device)
+
+    # tensor for accumulating the union area of each class (will divide the intersection area of each class at the end of get the IoU for each class)
+    sum_union_area_per_class = torch.zeros(36, device=device)
 
     with torch.no_grad():
         for batch_num, batch in tqdm(enumerate(val_dl)):
@@ -260,8 +264,10 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
             # sum up detections for each class
             sum_class_detected += torch.sum(class_detected, dim=0)
 
-            # sum up the IoUs for each class
-            sum_iou_per_class += compute_iou_per_class(detections, targets, class_detected)
+            # compute intersection and union area for each class and add them to the sum
+            intersection_area_per_class, union_area_per_class = compute_intersection_and_union_area_per_class(detections, targets, class_detected)
+            sum_intersection_area_per_class += intersection_area_per_class
+            sum_union_area_per_class += union_area_per_class
 
             if batch_num == 0:
                 plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_detected, num_images_to_plot=2)
@@ -269,7 +275,7 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
     val_loss /= len(val_dl)
     avg_num_detected_classes_per_image = torch.sum(sum_class_detected / num_images).item()
     avg_detections_per_class = (sum_class_detected / num_images).tolist()
-    avg_iou_per_class = (sum_iou_per_class / num_images).tolist()
+    avg_iou_per_class = (sum_intersection_area_per_class / sum_union_area_per_class).tolist()
 
     return val_loss, avg_num_detected_classes_per_image, avg_detections_per_class, avg_iou_per_class
 
@@ -486,7 +492,7 @@ def get_transforms(dataset: str):
             A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
             A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1),
             A.GaussianBlur(blur_limit=(1, 1)),
-            A.ColorJitter(),
+            A.ColorJitter(hue=0.0, saturation=0.0),
             A.Sharpen(alpha=(0.1, 0.2), lightness=0.0),
             # randomly (by default prob=0.5) translate and rotate image
             # mode and cval specify that black pixels are used to fill in newly created pixels
