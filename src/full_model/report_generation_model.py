@@ -59,6 +59,7 @@ class ReportGenerationModel(nn.Module):
                 class_detected, region_has_sentence, input_ids, attention_mask, top_region_features
             )
         else:
+            # during evaluation, also return detections (i.e. detected bboxes)
             obj_detector_loss_dict, detections, top_region_features, class_detected = self.object_detector(images, image_targets)
 
             # during evaluation, get the binary classifier loss, regions that were selected by the binary classifier (and that were also detected)
