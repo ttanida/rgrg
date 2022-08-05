@@ -8,6 +8,7 @@ from typing import List, Dict
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
+from datasets import Dataset
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from torch import Tensor
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 from torch.utils.data import DataLoader
+from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
 from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
@@ -41,8 +43,8 @@ RUN = 0
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Train full model on small dataset"""
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.0005
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.004
 BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 20
@@ -52,8 +54,152 @@ PATIENCE = 80  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 40  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = (
+    5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+)
 NUM_SENTENCES_TO_GENERATE = 300
+
+
+def get_transforms(dataset: str):
+    # see compute_mean_std_dataset.py in src/dataset_bounding_boxes
+    mean = 0.471
+    std = 0.302
+
+    # use albumentations for Compose and transforms
+    # augmentations are applied with prob=0.5
+    # since Affine translates and rotates the image, we also have to do the same with the bounding boxes, hence the bbox_params arugment
+    train_transforms = A.Compose(
+        [
+            # we want the long edge of the image to be resized to IMAGE_INPUT_SIZE, and the short edge of the image to be padded to IMAGE_INPUT_SIZE on both sides,
+            # such that the aspect ratio of the images are kept, while getting images of uniform size (IMAGE_INPUT_SIZE x IMAGE_INPUT_SIZE)
+            # LongestMaxSize: resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio
+            # INTER_AREA works best for shrinking images
+            A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
+            A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1),
+            A.GaussianBlur(blur_limit=(1, 1)),
+            A.ColorJitter(),
+            A.Sharpen(alpha=(0.1, 0.2), lightness=0.0),
+            # randomly (by default prob=0.5) translate and rotate image
+            # mode and cval specify that black pixels are used to fill in newly created pixels
+            # translate between -2% and 2% of the image height/width, rotate between -2 and 2 degrees
+            A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
+            A.GaussNoise(),
+            # PadIfNeeded: pads both sides of the shorter edge with 0's (black pixels)
+            A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2()
+        ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels'])
+    )
+
+    # don't apply data augmentations to val and test set
+    val_test_transforms = A.Compose(
+        [
+            A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
+            A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+        ], bbox_params=A.BboxParams(format="pascal_voc", label_fields=['class_labels'])
+    )
+
+    if dataset == "train":
+        return train_transforms
+    else:
+        return val_test_transforms
+
+
+def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
+    def tokenize_function(example):
+        phrase = example["bbox_phrases"]
+        bos_token = "<|endoftext|>"  # note: in the GPT2 tokenizer, bos_token = eos_token = "<|endoftext|>"
+        eos_token = "<|endoftext|>"
+        if len(phrase) == 0:
+            phrase_with_special_tokens = bos_token + "#" + eos_token
+        else:
+            phrase_with_special_tokens = bos_token + phrase + eos_token
+        return tokenizer(phrase_with_special_tokens, truncation=True, max_length=1024)
+
+    # don't set batched=True, otherwise phrases that are empty will not be processed correctly
+    # tokenized datasets will consist of the columns
+    #   - mimic_image_file_path
+    #   - bbox_coordinates
+    #   - bbox_labels
+    #   - bbox_phrases
+    #   - input_ids (new)
+    #   - attention_mask (new)
+    #   - bbox_phrase_exists
+    #   - bbox_is_abnormal
+    tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
+    tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
+
+    # remove redundant "bbox_phrases" column for the train set
+    # keep the "bbox_phrases" column for the val set, since we need the gt phrases to compute BLEU/BERT scores
+    tokenized_train_dataset = tokenized_train_dataset.remove_columns(["bbox_phrases"])
+
+    return tokenized_train_dataset, tokenized_val_dataset
+
+
+def get_tokenizer():
+    checkpoint = "healx/gpt-2-pubmed-medium"
+    tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
+    tokenizer.pad_token = tokenizer.eos_token
+
+    return tokenizer
+
+
+def get_datasets(config_file_path):
+    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
+
+    usecols = [
+        "mimic_image_file_path",
+        "bbox_coordinates",
+        "bbox_labels",
+        "bbox_phrases",
+        "bbox_phrase_exists",
+        "bbox_is_abnormal",
+    ]
+
+    # all of the columns below are stored as strings in the csv_file
+    # however, as they are actually lists, we apply the literal_eval func to convert them to lists
+    converters = {
+        "bbox_coordinates": literal_eval,
+        "bbox_labels": literal_eval,
+        "bbox_phrases": literal_eval,
+        "bbox_phrase_exists": literal_eval,
+        "bbox_is_abnormal": literal_eval,
+    }
+
+    datasets_as_dfs = {
+        dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]
+    }
+
+    # keep_default_na=False is necessary for the empty bbox phrases (i.e. "") to be read in correctly
+    datasets_as_dfs = {
+        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters, keep_default_na=False)
+        for dataset, csv_file_path in datasets_as_dfs.items()
+    }
+
+    total_num_samples_train = len(datasets_as_dfs["train"])
+    total_num_samples_val = len(datasets_as_dfs["valid"])
+
+    # compute new number of samples for both train and val
+    new_num_samples_train = int(PERCENTAGE_OF_TRAIN_SET_TO_USE * total_num_samples_train)
+    new_num_samples_val = int(PERCENTAGE_OF_VAL_SET_TO_USE * total_num_samples_val)
+
+    log.info(f"Train: {new_num_samples_train} images")
+    log.info(f"Val: {new_num_samples_val} images")
+
+    with open(config_file_path, "a") as f:
+        f.write(f"\tTRAIN NUM IMAGES: {new_num_samples_train}\n")
+        f.write(f"\tVAL NUM IMAGES: {new_num_samples_val}\n")
+
+    # limit the datasets to those new numbers
+    datasets_as_dfs["train"] = datasets_as_dfs["train"][:new_num_samples_train]
+    datasets_as_dfs["valid"] = datasets_as_dfs["valid"][:new_num_samples_val]
+
+    raw_train_dataset = Dataset.from_pandas(datasets_as_dfs["train"])
+    raw_val_dataset = Dataset.from_pandas(datasets_as_dfs["valid"])
+
+    return raw_train_dataset, raw_val_dataset
 
 
 def create_run_folder():
@@ -82,6 +228,8 @@ def create_run_folder():
 
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
     config_parameters = {
+        "COMMENT": RUN_COMMENT,
+        "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
         "BATCH_SIZE": BATCH_SIZE,
@@ -94,7 +242,7 @@ def create_run_folder():
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
         "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
-        "NUM_SENTENCES_TO_GENERATE": NUM_SENTENCES_TO_GENERATE
+        "NUM_SENTENCES_TO_GENERATE": NUM_SENTENCES_TO_GENERATE,
     }
 
     with open(config_file_path, "w") as f:
@@ -107,6 +255,19 @@ def create_run_folder():
 
 def main():
     weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_folder_path = create_run_folder()
+
+    # the datasets still contain the untokenized phrases
+    raw_train_dataset, raw_val_dataset = get_datasets(config_file_path)
+
+    tokenizer = get_tokenizer()
+
+    # tokenize the raw datasets
+    tokenized_train_dataset, tokenized_val_dataset = get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset)
+
+    train_transforms = get_transforms("train")
+    val_transforms = get_transforms("val")
+
+    
 
 
 if __name__ == "__main__":
