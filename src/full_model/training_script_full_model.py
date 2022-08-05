@@ -54,9 +54,7 @@ PATIENCE = 80  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 40  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = (
-    5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
-)
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_SENTENCES_TO_GENERATE = 300
 
 

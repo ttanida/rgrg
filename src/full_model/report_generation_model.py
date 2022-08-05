@@ -31,7 +31,7 @@ class ReportGenerationModel(nn.Module):
         image_targets: List[Dict],  # contains a dict for every image with keys "boxes" and "labels"
         input_ids: torch.LongTensor,  # shape [batch_size x 36 x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
         attention_mask: torch.FloatTensor,  # shape [batch_size x 36 x seq_len]
-        region_has_sentence: torch.BoolTensor,  # shape [batch_size x 36], boolean mask that indicates if a region has a sentence or not
+        region_has_sentence: torch.BoolTensor,  # shape [batch_size x 36], ground truth boolean mask that indicates if a region has a sentence or not
         return_loss: bool = True,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -55,6 +55,9 @@ class ReportGenerationModel(nn.Module):
             )
 
         # TODO: for decoder evaluation, use selected_regions (pred) instead of region_has_sentence (gt)
+
+        # we train the decoder only on region features that have a (non-empty) sentence. These are selected via the boolean mask region_has_sentence
+        # we evaluate the decoder on region features selected by the classifier
 
         # during training and evaluation, we train/evaluate the decoder only on region features that have a (non-empty) sentence
         # this is done under the assumption that at inference time, the binary classifier will do an adequate job at selecting those regions by itself
@@ -115,7 +118,10 @@ class ReportGenerationModel(nn.Module):
             But we don't only select the input_ids/attention_mask/region_features via region_has_sentence, but also combine it (via logical and)
             with class_detected to only get the valid inputs to train/evaluate the decoder.
         """
-        valid = torch.logical_and(class_detected, region_has_sentence)
+        if self.training:
+            valid = torch.logical_and(class_detected, region_has_sentence)
+        else:
+            
 
         valid_input_ids = input_ids[valid]  # of shape [detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
         valid_attention_mask = attention_mask[valid]  # of shape [detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]

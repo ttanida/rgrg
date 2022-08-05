@@ -19,14 +19,37 @@ class BinaryClassifier(nn.Module):
         self,
         top_region_features,  # tensor of shape [batch_size x 36 x 1024]
         class_detected,  # boolean tensor of shape [batch_size x 36], indicates if the object detector has detected the region/class or not
-        return_pred,  # boolean value that is True if we are in inference mode and want to get the regions that were selected for sentence generation by the classifier
+        return_loss,  # boolean value that is True if we are in inference mode and want to get the regions that were selected for sentence generation by the classifier
         region_has_sentence=None  # boolean tensor of shape [batch_size x 36], indicates if a region has a sentence (True) or not (False) as the ground truth
     ):
         # logits of shape [batch_size x 36]
         logits = self.classifier(top_region_features).squeeze(dim=-1)
 
+        # the loss is needed for training and evaluation
+        if return_loss:
+            # only compute loss for logits that correspond to a class that was detected
+            detected_logits = logits[class_detected]
+            detected_region_has_sentence = region_has_sentence[class_detected]
+            loss = self.loss_fn(detected_logits, detected_region_has_sentence)
+
+        if self.training:
+            return loss
+        else:
+            # compute selected_regions for eval
+            selected_regions = logits > 0
+            selected_regions[~class_detected] = False
+
+            if return_loss:
+                return loss, selected_regions
+            else:
+                selected_region_features = top_region_features[selected_regions]
+
+                return selected_region_features, selected_regions
+
+
+
         # train or eval mode
-        if not return_pred:
+        if not return_loss:
             # only compute loss for logits that correspond to a class that was detected
             detected_logits = logits[class_detected]
             detected_region_has_sentence = region_has_sentence[class_detected]
