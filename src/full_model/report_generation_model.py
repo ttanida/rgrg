@@ -12,6 +12,7 @@ class ReportGenerationModel(nn.Module):
     """
     Full model consisting of object detector encoder, binary classifier and language model decoder.
     """
+
     def __init__(self):
         super().__init__()
         self.object_detector = ObjectDetector(return_feature_vectors=True)
@@ -24,32 +25,41 @@ class ReportGenerationModel(nn.Module):
         path_to_best_detector_weights = "..."
         self.language_model.load_state_dict(torch.load(path_to_best_detector_weights))
 
-    def forward(self,
-                images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (whole gray-scale images of size 512 x 512)
-                image_targets: List[Dict],  # contains a dict for every image with keys "boxes" and "labels"
-                input_ids: torch.LongTensor,  # shape [batch_size x 36 x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
-                attention_mask: torch.FloatTensor,  # shape [batch_size x 36 x seq_len]
-                region_has_sentence: torch.BoolTensor,  # shape [batch_size x 36], boolean mask that indicates if a region has a sentence or not
-                return_loss: bool = True,
-                past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-                position_ids: Optional[torch.LongTensor] = None,
-                use_cache: Optional[bool] = False
-                ):
+    def forward(
+        self,
+        images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (whole gray-scale images of size 512 x 512)
+        image_targets: List[Dict],  # contains a dict for every image with keys "boxes" and "labels"
+        input_ids: torch.LongTensor,  # shape [batch_size x 36 x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
+        attention_mask: torch.FloatTensor,  # shape [batch_size x 36 x seq_len]
+        region_has_sentence: torch.BoolTensor,  # shape [batch_size x 36], boolean mask that indicates if a region has a sentence or not
+        return_loss: bool = True,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = False,
+    ):
+        """
+        Forward method is used for training and evaluation of model.
+        Generate method is used for inference.
+        """
         # top_region_features of shape [batch_size, 36, 1024] (i.e. 1 feature vector for every region for every image in batch)
         # class_detected is a boolean tensor of shape [batch_size, 36]. Its value is True for a class if the object detector detected the class/region in the image
         if self.training:
             obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
+            binary_classifier_loss = self.binary_classifier(
+                top_region_features, class_detected, return_pred=False, region_has_sentence=region_has_sentence
+            )
         else:
             obj_detector_loss_dict, detections, top_region_features, class_detected = self.object_detector(images, image_targets)
+            binary_classifier_loss, selected_regions = self.binary_classifier(
+                top_region_features, class_detected, return_pred=False, region_has_sentence=region_has_sentence
+            )
 
-        # binary classifier returns loss in both train and eval mode
-        # this is because in eval mode, we still evaluate the decoder only with top region features that have a sentence according to the ground truth (i.e. region_has_sentence)
-        binary_classifier_loss = self.binary_classifier(top_region_features, class_detected, return_pred=False, region_has_sentence=region_has_sentence)
-
-        # during training and evaluation, we train/evaluate the decoder only on region features who have a (non-empty) sentence
+        # during training and evaluation, we train/evaluate the decoder only on region features that have a (non-empty) sentence
         # this is done under the assumption that at inference time, the binary classifier will do an adequate job at selecting those regions by itself
         # we also filter out region features (and corresponding inputs_ids/attention_masks) that correspond to region/classes that were not detected by the object detector
-        valid_input_ids, valid_attention_mask, valid_region_features = self.get_valid_decoder_input(class_detected, region_has_sentence, input_ids, attention_mask, top_region_features)
+        valid_input_ids, valid_attention_mask, valid_region_features = self.get_valid_decoder_input(
+            class_detected, region_has_sentence, input_ids, attention_mask, top_region_features
+        )
 
         language_model_loss = self.language_model(
             valid_input_ids,
@@ -58,22 +68,32 @@ class ReportGenerationModel(nn.Module):
             return_loss,
             past_key_values,
             position_ids,
-            use_cache
+            use_cache,
         )
 
         if self.training:
             return obj_detector_loss_dict, binary_classifier_loss, language_model_loss
         else:
-            # class_detected is need to evaluate how good the object detector is at detecting the different regions during evaluation
+            # class_detected needed to evaluate how good the object detector is at detecting the different regions during evaluation
             # detections and class_detected needed to compute IoU of object detector during evaluation
-            return obj_detector_loss_dict, binary_classifier_loss, language_model_loss, detections, class_detected
+            # selected_regions needed to evaluate binary classifier during evaluation
+            return (
+                obj_detector_loss_dict,
+                binary_classifier_loss,
+                language_model_loss,
+                detections,
+                class_detected,
+                selected_regions,
+            )
 
-    def get_valid_decoder_input(self,
-                                class_detected,  # shape [batch_size x 36]
-                                region_has_sentence,  # shape [batch_size x 36]
-                                input_ids,  # shape [batch_size x 36 x seq_len]
-                                attention_mask,  # shape [batch_size x 36 x seq_len]
-                                region_features):  # shape [batch_size x 36 x 1024]
+    def get_valid_decoder_input(
+        self,
+        class_detected,  # shape [batch_size x 36]
+        region_has_sentence,  # shape [batch_size x 36]
+        input_ids,  # shape [batch_size x 36 x seq_len]
+        attention_mask,  # shape [batch_size x 36 x seq_len]
+        region_features,  # shape [batch_size x 36 x 1024]
+    ):
         """
         Only select region features (and input_ids/attention_mask) whose corresponding sentences are non-empty or that were detected by the object detector.
 
@@ -102,15 +122,16 @@ class ReportGenerationModel(nn.Module):
         return valid_input_ids, valid_attention_mask, valid_region_features
 
     @torch.no_grad()
-    def generate(self,
-                 images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (whole gray-scale images of size 512 x 512)
-                 max_length: int = None,
-                 num_beams: int = 1,
-                 num_beam_groups: int = 1,
-                 do_sample: bool = False,
-                 num_return_sequences: int = 1,
-                 early_stopping: bool = False
-                 ):
+    def generate(
+        self,
+        images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (whole gray-scale images of size 512 x 512)
+        max_length: int = None,
+        num_beams: int = 1,
+        num_beam_groups: int = 1,
+        do_sample: bool = False,
+        num_return_sequences: int = 1,
+        early_stopping: bool = False,
+    ):
         """
         In inference mode, we usually input 1 image (with 36 regions) at a time.
 
@@ -132,7 +153,9 @@ class ReportGenerationModel(nn.Module):
         # selected_region_features of shape [num_regions_selected_in_batch, 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
         # (thus it has exactly num_regions_selected_in_batch True values)
-        selected_region_features, selected_regions = self.binary_classifier(top_region_features, class_detected, return_pred=True)
+        selected_region_features, selected_regions = self.binary_classifier(
+            top_region_features, class_detected, return_pred=True
+        )
 
         # output_ids of shape (batch_size x longest_generated_sequence_length)
         output_ids = self.language_model.generate(
@@ -142,6 +165,7 @@ class ReportGenerationModel(nn.Module):
             num_beam_groups,
             do_sample,
             num_return_sequences,
-            early_stopping)
+            early_stopping,
+        )
 
         return output_ids, selected_regions, detections, class_detected

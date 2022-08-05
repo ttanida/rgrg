@@ -25,22 +25,38 @@ class BinaryClassifier(nn.Module):
         # logits of shape [batch_size x 36]
         logits = self.classifier(top_region_features).squeeze(dim=-1)
 
-        # if we are in train or eval mode, then we only want to return the train/val loss of the binary classifier
+        # train or eval mode
         if not return_pred:
             # only compute loss for logits that correspond to a class that was detected
             detected_logits = logits[class_detected]
             detected_region_has_sentence = region_has_sentence[class_detected]
 
             loss = self.loss_fn(detected_logits, detected_region_has_sentence)
-            return loss
+
+            # in train mode, only return the train loss
+            if self.training:
+                return loss
+            else:
+                # in eval model, return val loss and predictions (i.e. selected_regions)
+                # selected_regions necessary to evaluate binary classifier performance
+                # by comparing predictions to ground-truth region_has_sentence
+                #
+                # use a threshold of 0 in logit-space (i.e. 0.5 in probability-space)
+                # if a logit > 0, then it means that class/region has boolean value True and a sentence should be generated for it
+                # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
+                selected_regions = logits > 0
+
+                # set to False all regions that were not detected by object detector
+                # (since no detection -> no sentence generation possible)
+                selected_regions[~class_detected] = False
+
+                return loss, selected_regions
         else:
-            # in inference mode, we need the actual predictions by the classifier
-            # use a threshold of 0 in logit-space (i.e. 0.5 in probability-space)
-            # if a logit > 0, then it means that class/region has boolean value True and a sentence should be generated for it
-            # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
+            # in inference mode, we need the selected regions and its features by the classifier
             selected_regions = logits > 0
 
-            # set to False all regions that were not detected by object detector (since no detection -> no sentence generation possible)
+            # set to False all regions that were not detected by object detector
+            # (since no detection -> no sentence generation possible)
             selected_regions[~class_detected] = False
 
             # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
