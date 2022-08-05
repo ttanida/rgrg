@@ -131,10 +131,6 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
-    # remove redundant "bbox_phrases" column for the train set
-    # keep the "bbox_phrases" column for the val set, since we need the gt phrases to compute BLEU/BERT scores
-    tokenized_train_dataset = tokenized_train_dataset.remove_columns(["bbox_phrases"])
-
     return tokenized_train_dataset, tokenized_val_dataset
 
 
