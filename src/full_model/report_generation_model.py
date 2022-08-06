@@ -140,6 +140,10 @@ class ReportGenerationModel(nn.Module):
         input_ids,
         attention_mask
     ):
+        """
+        For evaluation, we want to evaluate the decoder on the top_region_features selected by the classifier to get a sentence generated.
+        We also have to get out the corresponding input_ids and attention_mask accordingly.
+        """
         valid_input_ids = input_ids[selected_regions]  # of shape [num_regions_selected_in_batch x seq_len]
         valid_attention_mask = attention_mask[selected_regions]  # of shape [num_regions_selected_in_batch x seq_len]
 

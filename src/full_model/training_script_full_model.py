@@ -22,7 +22,7 @@ from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
 from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
-from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
+from src.full_model.custom_dataset import CustomDataset
 from src.object_detector.object_detector import ObjectDetector
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -56,6 +56,22 @@ NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_SENTENCES_TO_GENERATE = 300
+
+
+def get_data_loaders(train_dataset, val_dataset):
+    def seed_worker(worker_id):
+        """To preserve reproducibility for the randomly shuffled train loader."""
+        worker_seed = torch.initial_seed() % 2**32
+        np.random.seed(worker_seed)
+        random.seed(worker_seed)
+
+    g = torch.Generator()
+    g.manual_seed(seed_val)
+
+    train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, worker_init_fn=seed_worker, generator=g, pin_memory=True)
+    val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+
+    return train_loader, val_loader
 
 
 def get_transforms(dataset: str):
@@ -107,27 +123,27 @@ def get_transforms(dataset: str):
 
 def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     def tokenize_function(example):
-        phrase = example["bbox_phrases"]
+        phrases = example["bbox_phrases"]  # List[str]
         bos_token = "<|endoftext|>"  # note: in the GPT2 tokenizer, bos_token = eos_token = "<|endoftext|>"
         eos_token = "<|endoftext|>"
-        if len(phrase) == 0:
-            phrase_with_special_tokens = bos_token + "#" + eos_token
-        else:
-            phrase_with_special_tokens = bos_token + phrase + eos_token
-        return tokenizer(phrase_with_special_tokens, truncation=True, max_length=1024)
 
-    # don't set batched=True, otherwise phrases that are empty will not be processed correctly
-    # tokenized datasets will consist of the columns
-    #   - mimic_image_file_path
-    #   - bbox_coordinates
-    #   - bbox_labels
-    #   - bbox_phrases
-    #   - input_ids (new)
-    #   - attention_mask (new)
-    #   - bbox_phrase_exists
-    #   - bbox_is_abnormal
+        phrases_with_special_tokens = [bos_token + phrase + eos_token for phrase in phrases]
+
+        # the tokenizer will return input_ids of type List[List[int]] and attention_mask of type List[List[int]]
+        return tokenizer(phrases_with_special_tokens, truncation=True, max_length=1024)
+
     tokenized_train_dataset = raw_train_dataset.map(tokenize_function)
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
+
+    # tokenized datasets will consist of the columns
+    #   - mimic_image_file_path
+    #   - bbox_coordinates (List[List[int]])
+    #   - bbox_labels (List[int])
+    #   - bbox_phrases (List[str])
+    #   - input_ids (List[List[int]])
+    #   - attention_mask (List[List[int]])
+    #   - bbox_phrase_exists (List[bool])
+    #   - bbox_is_abnormal (List[bool])
 
     return tokenized_train_dataset, tokenized_val_dataset
 
@@ -166,11 +182,16 @@ def get_datasets(config_file_path):
         dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]
     }
 
-    # keep_default_na=False is necessary for the empty bbox phrases (i.e. "") to be read in correctly
     datasets_as_dfs = {
-        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters, keep_default_na=False)
-        for dataset, csv_file_path in datasets_as_dfs.items()
+        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()
     }
+
+    # bbox_phrases is a list of str
+    # replace each bbox_phrase that is empty (i.e. "") by "#"
+    # this is done such that model learns to generate the "#" symbol instead of "" for empty sentences
+    # this is done because generated sentences that are "" (i.e. have len = 0) will cause problems when computing e.g. Bleu scores
+    for dataset_df in datasets_as_dfs.values():
+        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases])
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -261,7 +282,10 @@ def main():
     train_transforms = get_transforms("train")
     val_transforms = get_transforms("val")
 
-    
+    train_dataset_complete = CustomDataset("train", tokenized_train_dataset, train_transforms)
+    val_dataset_complete = CustomDataset("val", tokenized_val_dataset, val_transforms)
+
+    train_loader, val_loader = get_data_loaders(train_dataset_complete, val_dataset_complete)
 
 
 if __name__ == "__main__":
