@@ -61,9 +61,10 @@ class CustomCollator:
             region_is_abnormal[i] = sample_dict.pop("bbox_is_abnormal")
 
             if self.is_val:
+                # remove list bbox_phrases from batch and store it in the list bbox_phrases_batch
                 bbox_phrases_batch.append(sample_dict.pop("bbox_phrases"))
 
-        # batch is now a list that only contains dicts with keys
+        # batch is now a list that only contains dicts with keys input_ids and attention_mask (both of which are List[List[int]])
 
 
 
