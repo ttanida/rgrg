@@ -59,67 +59,75 @@ NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_..
 NUM_SENTENCES_TO_GENERATE = 300
 
 
-def compute_box_area(box):
+def update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal):
     """
-    Calculate the area of a box given the 4 corner values.
-
     Args:
-        box (Tensor[batch_size x 36 x 4])
-
-    Returns:
-        area (Tensor[batch_size x 36])
+        region_selection_scores (Dict[str, Dict])
+        selected_regions (Tensor[bool]): shape [batch_size x 36]
+        region_has_sentence (Tensor[bool]): shape [batch_size x 36]
+        region_is_abnormal (Tensor[bool]): shape [batch_size x 36]
     """
-    x0 = box[..., 0]
-    y0 = box[..., 1]
-    x1 = box[..., 2]
-    y1 = box[..., 3]
-
-    return (x1 - x0) * (y1 - y0)
-
-
-def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
-    # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-    # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
-    # the 2nd to the 2nd class and so on
-    pred_boxes = detections["top_region_boxes"]
-
-    # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-    # gt_boxes is of shape [batch_size x 36 x 4]
-    gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
-
-    # below tensors are of shape [batch_size x 36]
-    x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
-    y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
-    x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
-    y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
-
-    # intersection_boxes is of shape [batch_size x 36 x 4]
-    intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
-
-    # below tensors are of shape [batch_size x 36]
-    intersection_area = compute_box_area(intersection_boxes)
-    pred_area = compute_box_area(pred_boxes)
-    gt_area = compute_box_area(gt_boxes)
-
-    union_area = (pred_area + gt_area) - intersection_area
-
-    # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
-    valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
-
-    # also there is no intersection if the class was not detected by object detector
-    valid_intersection = torch.logical_and(valid_intersection, class_detected)
-
-    # set all non-valid intersection areas to 0
-    intersection_area = torch.where(valid_intersection, intersection_area, torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
-
-    # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
-    intersection_area = torch.sum(intersection_area, dim=0)
-    union_area = torch.sum(union_area, dim=0)
-
-    return intersection_area, union_area
 
 
 def update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected):
+    def compute_box_area(box):
+        """
+        Calculate the area of a box given the 4 corner values.
+
+        Args:
+            box (Tensor[batch_size x 36 x 4])
+
+        Returns:
+            area (Tensor[batch_size x 36])
+        """
+        x0 = box[..., 0]
+        y0 = box[..., 1]
+        x1 = box[..., 2]
+        y1 = box[..., 3]
+
+        return (x1 - x0) * (y1 - y0)
+
+    def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
+        # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+        # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+        # the 2nd to the 2nd class and so on
+        pred_boxes = detections["top_region_boxes"]
+
+        # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
+        # gt_boxes is of shape [batch_size x 36 x 4]
+        gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
+
+        # below tensors are of shape [batch_size x 36]
+        x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
+        y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
+        x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
+        y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
+
+        # intersection_boxes is of shape [batch_size x 36 x 4]
+        intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
+
+        # below tensors are of shape [batch_size x 36]
+        intersection_area = compute_box_area(intersection_boxes)
+        pred_area = compute_box_area(pred_boxes)
+        gt_area = compute_box_area(gt_boxes)
+
+        union_area = (pred_area + gt_area) - intersection_area
+
+        # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
+        valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
+
+        # also there is no intersection if the class was not detected by object detector
+        valid_intersection = torch.logical_and(valid_intersection, class_detected)
+
+        # set all non-valid intersection areas to 0
+        intersection_area = torch.where(valid_intersection, intersection_area, torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
+
+        # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
+        intersection_area = torch.sum(intersection_area, dim=0)
+        union_area = torch.sum(union_area, dim=0)
+
+        return intersection_area, union_area
+
     # sum up detections for each region
     region_detected_batch = torch.sum(class_detected, dim=0)
 
@@ -208,8 +216,6 @@ def get_val_losses_and_other_metrics(model, val_dl, writer, overall_steps_taken)
     """
     region_abnormal_scores = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
 
-
-
     with torch.no_grad():
         for batch_num, batch in tqdm(enumerate(val_dl)):
             # "image_targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
@@ -262,10 +268,10 @@ def get_val_losses_and_other_metrics(model, val_dl, writer, overall_steps_taken)
             region_abnormal_val_loss += classifier_loss_region_abnormal.item() * batch_size
             language_model_val_loss += language_model_loss.item() * batch_size
 
-            # update metrics for object detector
+            # update scores for object detector metrics
             update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected)
 
-            # update metrics for binary classifer for region selection
+            # update scores for region selection metrics
             update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal)
 
 
