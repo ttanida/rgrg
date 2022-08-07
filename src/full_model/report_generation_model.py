@@ -54,10 +54,16 @@ class ReportGenerationModel(nn.Module):
         if self.training:
             obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
 
-            # during training, only get the binary classifier loss
-            binary_classifier_loss = self.binary_classifier_region_selection(
+            # during training, only get the two losses for the two binary classifiers
+
+            classifier_loss_region_selection = self.binary_classifier_region_selection(
                 top_region_features, class_detected, return_loss=True, region_has_sentence=region_has_sentence
             )
+
+            classifier_loss_region_abnormal = self.binary_classifier_region_abnormal(
+                top_region_features, class_detected, region_is_abnormal
+            )
+
             # to train the decoder, we want to use only the top region features (and corresponding input_ids, attention_mask)
             # of regions that were both detected by the object detector and have a sentence as the ground truth
             # this is done under the assumption that at inference time, the binary classifier will do an adequate job
@@ -69,11 +75,16 @@ class ReportGenerationModel(nn.Module):
             # during evaluation, also return detections (i.e. detected bboxes)
             obj_detector_loss_dict, detections, top_region_features, class_detected = self.object_detector(images, image_targets)
 
-            # during evaluation, get the binary classifier loss, regions that were selected by the binary classifier (and that were also detected)
-            # and the corresponding region features (selected_region_features)
+            # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
+            # (and that were also detected) and the corresponding region features (selected_region_features)
             # this is done to evaluate the decoder under "real-word" conditions, i.e. the binary classifier decides which regions get a sentence
-            binary_classifier_loss, selected_regions, selected_region_features = self.binary_classifier_region_selection(
+            classifier_loss_region_selection, selected_regions, selected_region_features = self.binary_classifier_region_selection(
                 top_region_features, class_detected, return_loss=True, region_has_sentence=region_has_sentence
+            )
+
+            # for the binary classifier for abnormal/normal detection, get the loss and the predicted abnormal regions
+            classifier_loss_region_abnormal, predicted_abnormal_regions = self.binary_classifier_region_abnormal(
+                top_region_features, class_detected, region_is_abnormal
             )
 
             # use the selected_regions mask to filter the inputs_ids and attention_mask to those that correspond to regions that were selected
@@ -91,18 +102,22 @@ class ReportGenerationModel(nn.Module):
         )
 
         if self.training:
-            return obj_detector_loss_dict, binary_classifier_loss, language_model_loss
+            return obj_detector_loss_dict, classifier_loss_region_selection, classifier_loss_region_abnormal, language_model_loss
         else:
             # class_detected needed to evaluate how good the object detector is at detecting the different regions during evaluation
             # detections and class_detected needed to compute IoU of object detector during evaluation
-            # selected_regions needed to evaluate binary classifier during evaluation and to map each generated sentence to its corresponding region (for example for plotting)
+            # selected_regions needed to evaluate binary classifier for region selection during evaluation and
+            # to map each generated sentence to its corresponding region (for example for plotting)
+            # predicted_abnormal_regions needed to evalute the binary classifier for normal/abnormal detection
             return (
                 obj_detector_loss_dict,
-                binary_classifier_loss,
+                classifier_loss_region_selection,
+                classifier_loss_region_abnormal,
                 language_model_loss,
                 detections,
                 class_detected,
                 selected_regions,
+                predicted_abnormal_regions
             )
 
     def get_valid_decoder_input_for_training(

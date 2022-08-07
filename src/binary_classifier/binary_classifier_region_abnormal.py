@@ -39,15 +39,13 @@ class BinaryClassifierRegionAbnormal(nn.Module):
         if self.training:
             return loss
         else:
-            # for evaluation, we also need the regions that were predicted to be abnormal/normal as to compare with the ground truth (region_is_abnormal)
+            # for evaluation, we also need the regions that were predicted to be abnormal/normal to compare with the ground truth (region_is_abnormal)
             # and compute recall, precision etc.
 
             # use a threshold of 0 in logit-space (i.e. 0.5 in probability-space)
             # if a logit > 0, then it means that class/region has boolean value True and is considered abnormal
             predicted_abnormal_regions = logits > 0
 
-            # set to False all regions that were not detected by object detector
-            # (if a region was not detected, we just consider it to be normal by default)
-            predicted_abnormal_regions[~class_detected] = False
+            # regions that were not detected will be filtered out later (via class_detected) when computing recall, precision etc.
 
-            return predicted_abnormal_regions
+            return loss, predicted_abnormal_regions

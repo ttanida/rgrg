@@ -59,6 +59,239 @@ NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_..
 NUM_SENTENCES_TO_GENERATE = 300
 
 
+def compute_box_area(box):
+    """
+    Calculate the area of a box given the 4 corner values.
+
+    Args:
+        box (Tensor[batch_size x 36 x 4])
+
+    Returns:
+        area (Tensor[batch_size x 36])
+    """
+    x0 = box[..., 0]
+    y0 = box[..., 1]
+    x1 = box[..., 2]
+    y1 = box[..., 3]
+
+    return (x1 - x0) * (y1 - y0)
+
+
+def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
+    # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+    # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+    # the 2nd to the 2nd class and so on
+    pred_boxes = detections["top_region_boxes"]
+
+    # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
+    # gt_boxes is of shape [batch_size x 36 x 4]
+    gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
+
+    # below tensors are of shape [batch_size x 36]
+    x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
+    y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
+    x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
+    y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
+
+    # intersection_boxes is of shape [batch_size x 36 x 4]
+    intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
+
+    # below tensors are of shape [batch_size x 36]
+    intersection_area = compute_box_area(intersection_boxes)
+    pred_area = compute_box_area(pred_boxes)
+    gt_area = compute_box_area(gt_boxes)
+
+    union_area = (pred_area + gt_area) - intersection_area
+
+    # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
+    valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
+
+    # also there is no intersection if the class was not detected by object detector
+    valid_intersection = torch.logical_and(valid_intersection, class_detected)
+
+    # set all non-valid intersection areas to 0
+    intersection_area = torch.where(valid_intersection, intersection_area, torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
+
+    # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
+    intersection_area = torch.sum(intersection_area, dim=0)
+    union_area = torch.sum(union_area, dim=0)
+
+    return intersection_area, union_area
+
+
+def update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected):
+    # sum up detections for each region
+    region_detected_batch = torch.sum(class_detected, dim=0)
+
+    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(detections, image_targets, class_detected)
+
+    obj_detector_scores["sum_region_detected"] += region_detected_batch
+    obj_detector_scores["sum_intersection_area_per_region"] += intersection_area_per_region_batch
+    obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
+
+
+def get_val_losses_and_other_metrics(model, val_dl, writer, overall_steps_taken):
+    """
+    Args:
+        model (nn.Module): The input model to be evaluated.
+        val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
+        writer (tensorboardX.SummaryWriter.writer): Writer used to plot gt and predicted bboxes of first couple of image in val set
+        overall_steps_taken: for tensorboard
+
+    Returns:
+        val_loss (float): val loss for val set
+        avg_num_detected_classes_per_image (float): since it's possible that certain classes/regions of all 36 regions are not detected in an image,
+        this metric counts how many classes are detected on average for an image. Ideally, this number should be 36.0
+        avg_detections_per_class (list[float]): this metric counts how many times a class was detected in an image on average. E.g. if the value is 1.0,
+        then the class was detected in all images of the val set
+        avg_iou_per_class (list[float]): average IoU per class computed over all images in val set
+    """
+    model.eval()
+
+    total_val_loss = 0.0
+    obj_detector_val_loss = 0.0
+    region_selection_val_loss = 0.0
+    region_abnormal_val_loss = 0.0
+    language_model_val_loss = 0.0
+
+    num_images = 0
+
+    """
+    For the object detector, besides the obj_detector_val_loss, we also want to compute:
+      - the average IoU for each region,
+      - average number of detected regions per image (ideally 36.0)
+      - average number each region is detected in an image (ideally 1.0 for all regions)
+
+    To compute these metrics, we allocate several tensors:
+
+    sum_intersection_area_per_region: for accumulating the intersection area of each region
+    (will be divided by union area of each region at the end of get the IoU for each region)
+
+    sum_union_area_per_region: for accumulating the union area of each region
+    (will divide the intersection area of each region at the end of get the IoU for each region)
+
+    sum_region_detected: for accumulating the number of times a region is detected over all images
+    (this 1D array will be divided by num_images to get the average number each region is detected in an image,
+    and these averages will be summed up to get the average number of detected regions in an image)
+    """
+    obj_detector_scores = {}
+    obj_detector_scores["sum_intersection_area_per_region"] = torch.zeros(36, device=device)
+    obj_detector_scores["sum_union_area_per_region"] = torch.zeros(36, device=device)
+    obj_detector_scores["sum_region_detected"] = torch.zeros(36, device=device)
+
+    """
+    For the binary classifier for region selection, we want to compute the precision and recall for:
+      - all regions
+      - normal regions
+      - abnormal regions
+
+    Evaluation according to:
+      TP: (normal/abnormal) region has sentence (gt), and is selected by classifier to get sentence (pred)
+      FP: (normal/abnormal) region does not have sentence (gt), but is selected by classifier to get sentence (pred)
+      TN: (normal/abnormal) region does not have sentence (gt), and is not selected by classifier to get sentence (pred)
+      FN: (normal/abnormal) region has sentence (gt), but is not selected by classifier to get sentence (pred)
+    """
+    region_selection_scores = {}
+    region_selection_scores["all"] = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
+    region_selection_scores["normal"] = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
+    region_selection_scores["abnormal"] = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
+
+    """
+    For the binary classifier for region normal/abnormal detection, we want to compute the precision and recall for:
+      - all regions
+
+    Evaluation according to:
+      TP: region is abnormal (gt), and is predicted as abnormal by classifier (pred)
+      FP: region is normal (gt), but is predicted as abnormal by classifier (pred)
+      TN: region is normal (gt), and is predicted as normal by classifier (pred)
+      FN: region is abnormal (gt), but is predicted as normal by classifier (pred)
+    """
+    region_abnormal_scores = {"TP": 0, "FP": 0, "TN": 0, "FN": 0}
+
+
+
+    with torch.no_grad():
+        for batch_num, batch in tqdm(enumerate(val_dl)):
+            # "image_targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
+            # "boxes" maps to a tensor of shape [36 x 4] and "labels" maps to a tensor of shape [36]
+            # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 36] (starting at 1, since 0 is background)
+            images = batch["image"]
+            image_targets = batch["image_targets"]
+            input_ids = batch["input_ids"]
+            attention_mask = batch["attention_mask"]
+            region_has_sentence = batch["region_has_sentence"]
+            region_is_abnormal = batch["region_is_abnormal"]
+            reference_phrases = batch["reference_phrases"]
+
+            batch_size = images.size(0)
+            num_images += batch_size
+
+            # put all tensors on the GPU
+            images = images.to(device, non_blocking=True)
+            image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
+            input_ids = input_ids.to(device, non_blocking=True)
+            attention_mask = attention_mask.to(device, non_blocking=True)
+            region_has_sentence = region_has_sentence.to(device, non_blocking=True)
+            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
+
+            # detections is a dict with keys "top_region_boxes" and "top_scores"
+            # "top_region_boxes" maps to a tensor of shape [batch_size x 36 x 4]
+            # "top_scores" maps to a tensor of shape [batch_size x 36]
+            #
+            # class_detected is a tensor of shape [batch_size x 36]
+            # selected_regions is a tensor of shape [batch_size x 36]
+            # predicted_abnormal_regions is a tensor of shape [batch_size x 36]
+            obj_detector_loss_dict, classifier_loss_region_selection, classifier_loss_region_abnormal, language_model_loss, detections, class_detected, selected_regions, predicted_abnormal_regions = model(
+                images,
+                image_targets,
+                input_ids,
+                attention_mask,
+                region_has_sentence,
+                region_is_abnormal
+            )
+
+            # sum up all 4 losses from the object detector
+            obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
+
+            # sum up the rest of the losses
+            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal + language_model_loss
+
+            total_val_loss += total_loss.item() * batch_size
+            obj_detector_val_loss += obj_detector_losses.item() * batch_size
+            region_selection_val_loss += classifier_loss_region_selection.item() * batch_size
+            region_abnormal_val_loss += classifier_loss_region_abnormal.item() * batch_size
+            language_model_val_loss += language_model_loss.item() * batch_size
+
+            # update metrics for object detector
+            update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected)
+
+            # update metrics for binary classifer for region selection
+            update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal)
+
+
+
+
+
+
+
+            if batch_num == 0:
+                plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, image_targets, class_detected, num_images_to_plot=2)
+
+    # normalize the losses
+    total_val_loss /= len(val_dl)
+    obj_detector_val_loss /= len(val_dl)
+    region_selection_val_loss /= len(val_dl)
+    region_abnormal_val_loss /= len(val_dl)
+    language_model_val_loss /= len(val_dl)
+
+    # average object detector scores
+    avg_num_detected_regions_per_image = torch.sum(sum_region_detected / num_images).item()
+    avg_detections_per_region = (sum_region_detected / num_images).tolist()
+    avg_iou_per_region = (sum_intersection_area_per_region / sum_union_area_per_region).tolist()
+
+    return ...
+
+
 def train_model(
     model,
     train_dl,
@@ -113,8 +346,14 @@ def train_model(
     for epoch in range(epochs):
         log.info(f"\nTraining epoch {epoch}!\n")
 
-        train_loss = 0.0
+        total_train_loss = 0.0
+        obj_detector_train_loss = 0.0
+        region_selection_train_loss = 0.0
+        region_abnormal_train_loss = 0.0
+        language_model_train_loss = 0.0
+
         steps_taken = 0
+
         for num_batch, batch in tqdm(enumerate(train_dl)):
             images = batch["image"]
             image_targets = batch["image_targets"]
@@ -133,21 +372,31 @@ def train_model(
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
+            obj_detector_loss_dict, classifier_loss_region_selection, classifier_loss_region_abnormal, language_model_loss = model(
+                images,
+                image_targets,
+                input_ids,
+                attention_mask,
+                region_has_sentence,
+                region_is_abnormal
+            )
 
+            # sum up all 4 losses from the object detector
+            obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
+            # sum up the rest of the losses
+            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal + language_model_loss
 
-
-
-            loss_dict = model(images, targets)
-
-            # sum up all 4 losses
-            loss = sum(loss for loss in loss_dict.values())
-
-            loss.backward()
+            total_loss.backward()
             optimizer.step()
             optimizer.zero_grad()
 
-            train_loss += loss.item() * batch_size
+            total_train_loss += total_loss.item() * batch_size
+            obj_detector_train_loss += obj_detector_losses.item() * batch_size
+            region_selection_train_loss += classifier_loss_region_selection.item() * batch_size
+            region_abnormal_train_loss += classifier_loss_region_abnormal.item() * batch_size
+            language_model_train_loss += language_model_loss.item() * batch_size
+
             steps_taken += 1
             overall_steps_taken += 1
 
@@ -155,19 +404,23 @@ def train_model(
             if steps_taken >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
                 log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
 
-                # normalize the train loss by steps_taken
-                train_loss /= steps_taken
+                # normalize all losses by steps_taken
+                total_train_loss /= steps_taken
+                obj_detector_train_loss /= steps_taken
+                region_selection_train_loss /= steps_taken
+                region_abnormal_train_loss /= steps_taken
+                language_model_train_loss /= steps_taken
 
-                val_loss, avg_num_detected_classes_per_image, avg_detections_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken)
+                val_loss, avg_num_detected_classes_per_image, avg_detections_per_class, avg_iou_per_class = get_val_losses_and_other_metrics(model, val_dl, writer, overall_steps_taken)
 
-                writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
-                writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_detected_classes_per_image, overall_steps_taken)
+                writer.add_scalars("_loss", {"train_loss": total_train_loss, "val_loss": val_loss}, overall_steps_taken)
+                writer.add_scalar("avg_num_detected_classes_per_image", avg_num_detected_classes_per_image, overall_steps_taken)
 
                 # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
                 anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
 
                 for class_, avg_detections_class in zip(anatomical_regions, avg_detections_per_class):
-                    writer.add_scalar(f"num_preds_{class_}", avg_detections_class, overall_steps_taken)
+                    writer.add_scalar(f"num_detected_{class_}", avg_detections_class, overall_steps_taken)
 
                 for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
                     writer.add_scalar(f"iou_{class_}", avg_iou_class, overall_steps_taken)
@@ -202,10 +455,10 @@ def train_model(
 
                 # log to console at the end of an epoch
                 if (num_batch + 1) == len(train_dl):
-                    log_stats_to_console(train_loss, val_loss, epoch)
+                    log_stats_to_console(total_train_loss, val_loss, epoch)
 
                 # reset values
-                train_loss = 0.0
+                total_train_loss = 0.0
                 steps_taken = 0
 
         # save the current best model weights at the end of each epoch
@@ -214,7 +467,6 @@ def train_model(
     log.info("\nFinished training!")
     log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
     return None
-
 
 
 def get_data_loaders(tokenizer, train_dataset, val_dataset):
