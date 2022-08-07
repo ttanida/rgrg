@@ -59,6 +59,164 @@ NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_..
 NUM_SENTENCES_TO_GENERATE = 300
 
 
+def train_model(
+    model,
+    train_dl,
+    val_dl,
+    optimizer,
+    lr_scheduler,
+    epochs,
+    patience,
+    weights_folder_path,
+    writer
+):
+    """
+    Train a model on train set and evaluate on validation set.
+    Saves best model w.r.t. val loss.
+
+    Parameters
+    ----------
+    model: nn.Module
+        The input model to be trained.
+    train_dl: torch.utils.data.Dataloder
+        The train dataloader to train on.
+    val_dl: torch.utils.data.Dataloder
+        The val dataloader to validate on.
+    optimizer: Optimizer
+        The model's optimizer.
+    lr_scheduler: torch.optim.lr_scheduler
+        The learning rate scheduler to use.
+    epochs: int
+        Number of epochs to train for.
+    patience: int
+        Number of epochs to wait for val loss to decrease.
+        If patience is exceeded, then training is stopped early.
+    weights_folder_path: str
+        Path to folder where best weights will be saved.
+    writer: torch.utils.tensorboard.SummaryWriter
+        Writer for logging values to tensorboard.
+
+    Returns
+    -------
+    None, but saves model with the overall lowest val loss at the end of every epoch.
+    """
+    lowest_val_loss = np.inf
+
+    # the best_model_state is the one where the val loss is the lowest overall
+    best_model_state = None
+
+    # parameter to determine early stopping
+    num_evaluations_without_decrease_val_loss = 0
+
+    overall_steps_taken = 0  # for logging to tensorboard
+
+    for epoch in range(epochs):
+        log.info(f"\nTraining epoch {epoch}!\n")
+
+        train_loss = 0.0
+        steps_taken = 0
+        for num_batch, batch in tqdm(enumerate(train_dl)):
+            images = batch["image"]
+            image_targets = batch["image_targets"]
+            input_ids = batch["input_ids"]
+            attention_mask = batch["attention_mask"]
+            region_has_sentence = batch["region_has_sentence"]
+            region_is_abnormal = batch["region_is_abnormal"]
+
+            batch_size = images.size(0)
+
+            # put all tensors on the GPU
+            images = images.to(device, non_blocking=True)
+            image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
+            input_ids = input_ids.to(device, non_blocking=True)
+            attention_mask = attention_mask.to(device, non_blocking=True)
+            region_has_sentence = region_has_sentence.to(device, non_blocking=True)
+            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
+
+
+
+
+
+
+            loss_dict = model(images, targets)
+
+            # sum up all 4 losses
+            loss = sum(loss for loss in loss_dict.values())
+
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            train_loss += loss.item() * batch_size
+            steps_taken += 1
+            overall_steps_taken += 1
+
+            # evaluate every k steps and also at the end of an epoch
+            if steps_taken >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
+                log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
+
+                # normalize the train loss by steps_taken
+                train_loss /= steps_taken
+
+                val_loss, avg_num_detected_classes_per_image, avg_detections_per_class, avg_iou_per_class = get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken)
+
+                writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
+                writer.add_scalar("avg_num_predicted_classes_per_image", avg_num_detected_classes_per_image, overall_steps_taken)
+
+                # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
+                anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
+
+                for class_, avg_detections_class in zip(anatomical_regions, avg_detections_per_class):
+                    writer.add_scalar(f"num_preds_{class_}", avg_detections_class, overall_steps_taken)
+
+                for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
+                    writer.add_scalar(f"iou_{class_}", avg_iou_class, overall_steps_taken)
+
+                writer.add_scalar("lr", lr_scheduler.get_last_lr(), overall_steps_taken)
+
+                log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
+
+                # set the model back to training
+                model.train()
+
+                # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
+                lr_scheduler.step(val_loss)
+
+                if val_loss < lowest_val_loss:
+                    num_evaluations_without_decrease_val_loss = 0
+                    lowest_val_loss = val_loss
+                    best_epoch = epoch
+                    best_model_save_path = os.path.join(
+                        weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth"
+                    )
+                    best_model_state = deepcopy(model.state_dict())
+                else:
+                    num_evaluations_without_decrease_val_loss += 1
+
+                if num_evaluations_without_decrease_val_loss >= patience:
+                    # save the model with the overall lowest val loss
+                    torch.save(best_model_state, best_model_save_path)
+                    log.info(f"\nEarly stopping at epoch ({epoch}/{epochs})!")
+                    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
+                    return None
+
+                # log to console at the end of an epoch
+                if (num_batch + 1) == len(train_dl):
+                    log_stats_to_console(train_loss, val_loss, epoch)
+
+                # reset values
+                train_loss = 0.0
+                steps_taken = 0
+
+        # save the current best model weights at the end of each epoch
+        torch.save(best_model_state, best_model_save_path)
+
+    log.info("\nFinished training!")
+    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
+    return None
+
+
+
 def get_data_loaders(tokenizer, train_dataset, val_dataset):
     def seed_worker(worker_id):
         """To preserve reproducibility for the randomly shuffled train loader."""
@@ -300,6 +458,18 @@ def main():
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     log.info("\nStarting training!\n")
+
+    train_model(
+        model=model,
+        train_dl=train_loader,
+        val_dl=val_loader,
+        optimizer=opt,
+        lr_scheduler=lr_scheduler,
+        epochs=EPOCHS,
+        patience=PATIENCE,
+        weights_folder_path=weights_folder_path,
+        writer=writer
+    )
 
 
 if __name__ == "__main__":

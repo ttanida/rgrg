@@ -3,14 +3,19 @@ from typing import List, Dict, Optional, Tuple
 import torch
 import torch.nn as nn
 
-from binary_classifier.binary_classifier import BinaryClassifier
+from binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
+from binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
 from src.object_detector.object_detector import ObjectDetector
 from src.decoder.gpt2 import DecoderModel
 
 
 class ReportGenerationModel(nn.Module):
     """
-    Full model consisting of object detector encoder, binary classifier and language model decoder.
+    Full model consisting of:
+        - object detector encoder
+        - binary classifier for selecting regions for sentence generation
+        - binary classifier for detecting if a region is abnormal or normal (to encode this information in the region feature vectors)
+        - language model decoder
     """
 
     def __init__(self):
@@ -19,7 +24,8 @@ class ReportGenerationModel(nn.Module):
         path_to_best_object_detector_weights = "..."
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
-        self.binary_classifier = BinaryClassifier()
+        self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
+        self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
         self.language_model = DecoderModel()
         path_to_best_detector_weights = "..."
@@ -32,6 +38,7 @@ class ReportGenerationModel(nn.Module):
         input_ids: torch.LongTensor,  # shape [(batch_size * 36) x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
         attention_mask: torch.FloatTensor,  # shape [(batch_size * 36) x seq_len]
         region_has_sentence: torch.BoolTensor,  # shape [batch_size x 36], ground truth boolean mask that indicates if a region has a sentence or not
+        region_is_abnormal: torch.BoolTensor,  # shape [batch_size x 36], ground truth boolean mask that indicates if a region has is abnormal or not
         return_loss: bool = True,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -48,7 +55,7 @@ class ReportGenerationModel(nn.Module):
             obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
 
             # during training, only get the binary classifier loss
-            binary_classifier_loss = self.binary_classifier(
+            binary_classifier_loss = self.binary_classifier_region_selection(
                 top_region_features, class_detected, return_loss=True, region_has_sentence=region_has_sentence
             )
             # to train the decoder, we want to use only the top region features (and corresponding input_ids, attention_mask)
@@ -65,7 +72,7 @@ class ReportGenerationModel(nn.Module):
             # during evaluation, get the binary classifier loss, regions that were selected by the binary classifier (and that were also detected)
             # and the corresponding region features (selected_region_features)
             # this is done to evaluate the decoder under "real-word" conditions, i.e. the binary classifier decides which regions get a sentence
-            binary_classifier_loss, selected_regions, selected_region_features = self.binary_classifier(
+            binary_classifier_loss, selected_regions, selected_region_features = self.binary_classifier_region_selection(
                 top_region_features, class_detected, return_loss=True, region_has_sentence=region_has_sentence
             )
 
@@ -177,7 +184,7 @@ class ReportGenerationModel(nn.Module):
         # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
         # (it has exactly num_regions_selected_in_batch True values)
-        selected_regions, selected_region_features = self.binary_classifier(
+        selected_regions, selected_region_features = self.binary_classifier_region_selection(
             top_region_features, class_detected, return_loss=False
         )
 

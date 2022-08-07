@@ -81,7 +81,7 @@ class CustomCollator:
         batch = dict_with_ii_and_am
 
         # add the remaining keys and values to the batch dict
-        batch["image"] = images_batch
+        batch["images"] = images_batch
         batch["image_targets"] = image_targets
         batch["region_has_sentence"] = region_has_sentence
         batch["region_is_abnormal"] = region_is_abnormal

@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 
-class BinaryClassifier(nn.Module):
+class BinaryClassifierRegionSelection(nn.Module):
     def __init__(self):
         super().__init__()
 
