@@ -27,10 +27,10 @@ class ReportGenerationModel(nn.Module):
 
     def forward(
         self,
-        images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (whole gray-scale images of size 512 x 512)
+        images: torch.FloatTensor,  # images is of shape [batch_size x 1 x 512 x 512] (whole gray-scale images of size 512 x 512)
         image_targets: List[Dict],  # contains a dict for every image with keys "boxes" and "labels"
-        input_ids: torch.LongTensor,  # shape [batch_size x 36 x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
-        attention_mask: torch.FloatTensor,  # shape [batch_size x 36 x seq_len]
+        input_ids: torch.LongTensor,  # shape [(batch_size * 36) x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
+        attention_mask: torch.FloatTensor,  # shape [(batch_size * 36) x seq_len]
         region_has_sentence: torch.BoolTensor,  # shape [batch_size x 36], ground truth boolean mask that indicates if a region has a sentence or not
         return_loss: bool = True,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
@@ -102,48 +102,39 @@ class ReportGenerationModel(nn.Module):
         self,
         class_detected,  # shape [batch_size x 36]
         region_has_sentence,  # shape [batch_size x 36]
-        input_ids,  # shape [batch_size x 36 x seq_len]
-        attention_mask,  # shape [batch_size x 36 x seq_len]
+        input_ids,  # shape [(batch_size * 36) x seq_len]
+        attention_mask,  # shape [(batch_size * 36) x seq_len]
         region_features,  # shape [batch_size x 36 x 1024]
     ):
         """
         We want to train the decoder only on region features (and corresponding input_ids/attention_mask) whose corresponding sentences are non-empty and
         that were detected by the object detector.
-
-        Example:
-            Let's assume region_has_sentence has shape [batch_size x 36] with batch_size = 2, so shape [2 x 36].
-            This means we have boolean values for all 36 regions of the 2 images in the batch, that indicate if the
-            regions have a corresponding sentence in the reference report or not.
-
-            Now, let's assume region_has_sentence is True for the first 3 regions of each image. This means only the first
-            3 regions of each image are described with sentences in the reference report.
-
-            input_ids has shape [batch_size x 36 x seq_len].
-
-            If we run valid_input_ids = input_ids[region_has_sentence], then we get valid_input_ids of shape [6 x seq_len].
-            We thus get the first 3 rows of the first image, and the first 3 rows of the second image concatenated into 1 matrix.
-
-            But we don't only select the input_ids/attention_mask/region_features via region_has_sentence, but also combine it (via logical and)
-            with class_detected to only get the valid inputs to train the decoder.
         """
+        # valid is of shape [batch_size x 36]
         valid = torch.logical_and(class_detected, region_has_sentence)
 
-        valid_input_ids = input_ids[valid]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
-        valid_attention_mask = attention_mask[valid]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
+        # reshape to [(batch_size * 36)], such that we can apply the mask to input_ids and attention_mask
+        valid_reshaped = valid.reshape(-1)
+
+        valid_input_ids = input_ids[valid_reshaped]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
+        valid_attention_mask = attention_mask[valid_reshaped]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
         valid_region_features = region_features[valid]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x 1024]
 
         return valid_input_ids, valid_attention_mask, valid_region_features
 
     def get_valid_decoder_input_for_evaluation(
         self,
-        selected_regions,
-        input_ids,
-        attention_mask
+        selected_regions,  # shape [batch_size x 36]
+        input_ids,  # shape [(batch_size * 36) x seq_len]
+        attention_mask  # shape [(batch_size * 36) x seq_len]
     ):
         """
         For evaluation, we want to evaluate the decoder on the top_region_features selected by the classifier to get a sentence generated.
-        We also have to get out the corresponding input_ids and attention_mask accordingly.
+        We also have to get the corresponding input_ids and attention_mask accordingly.
         """
+        # reshape to [(batch_size * 36)]
+        selected_regions = selected_regions.reshape(-1)
+
         valid_input_ids = input_ids[selected_regions]  # of shape [num_regions_selected_in_batch x seq_len]
         valid_attention_mask = attention_mask[selected_regions]  # of shape [num_regions_selected_in_batch x seq_len]
 

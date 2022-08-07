@@ -2,9 +2,8 @@ import torch
 
 
 class CustomCollator:
-    def __init__(self, tokenizer, padding, is_val):
+    def __init__(self, tokenizer, is_val):
         self.tokenizer = tokenizer
-        self.padding = padding
         self.is_val = is_val
 
     def __call__(self, batch: list[dict[str]]):
@@ -34,14 +33,14 @@ class CustomCollator:
 
         # allocate an empty tensor region_has_sentence that will store all bbox_phrase_exists tensors of the batch
         bbox_phrase_exists_size = batch[0]["bbox_phrase_exists"].size()  # should be torch.Size([36])
-        region_has_sentence = torch.empty(size=(len(batch), *bbox_phrase_exists_size))
+        region_has_sentence = torch.empty(size=(len(batch), *bbox_phrase_exists_size), dtype=torch.bool)
 
         # allocate an empty tensor region_is_abnormal that will store all bbox_is_abnormal tensors of the batch
         bbox_is_abnormal_size = batch[0]["bbox_is_abnormal"].size()  # should be torch.Size([36])
-        region_is_abnormal = torch.empty(size=(len(batch), *bbox_is_abnormal_size))
+        region_is_abnormal = torch.empty(size=(len(batch), *bbox_is_abnormal_size), dtype=torch.bool)
 
         if self.is_val:
-            # for a validation batch, create a list of list of str that hold the reference phrases (i.e. bbox_phrases) to compute BLEU/BERTscores
+            # for a validation batch, create a List[List[str]] that hold the reference phrases (i.e. bbox_phrases) to compute BLEU/BERTscores
             # the inner list will hold all reference phrases for a single image
             bbox_phrases_batch = []
 
@@ -65,47 +64,38 @@ class CustomCollator:
                 bbox_phrases_batch.append(sample_dict.pop("bbox_phrases"))
 
         # batch is now a list that only contains dicts with keys input_ids and attention_mask (both of which are List[List[int]])
+        # i.e. batch is of type List[Dict[str, List[List[int]]]]
+        # each dict specifies the input_ids and attention_mask of a single image, thus the outer list always has 36 elements (i.e. inner lists)
+        # for sentences describing 36 regions
+        # we want to pad all input_ids and attention_mask to the max sequence length in the batch
+        # we can use the pad method of the tokenizer for this, however it requires the input to be of type Dict[str, List[List[int]]
+        # thus we first transform the batch into a dict with keys "input_ids" and "attention_mask", both of which are List[List[int]]
+        # that hold the input_ids and attention_mask of all the regions in the batch (i.e. the outer list will have (batch_size * 36) elements)
+        dict_with_ii_and_am = self.transform_to_dict_with_inputs_ids_and_attention_masks(batch)
 
+        # we can now apply the pad method, which will pad the input_ids and attention_mask to the longest sequence in the batch
+        # the keys "input_ids" and "attention_mask" in dict_with_ii_and_am will each map to a tensor of shape [(batch_size * 36), (longest) seq_len (in batch)]
+        dict_with_ii_and_am = self.tokenizer.pad(dict_with_ii_and_am, padding="longest", return_tensors="pt")
 
+        # treat dict_with_ii_and_am as the batch variable now (since it is a dict, and we can use it to store all the other keys as well)
+        batch = dict_with_ii_and_am
 
+        # add the remaining keys and values to the batch dict
+        batch["image"] = images_batch
+        batch["image_targets"] = image_targets
+        batch["region_has_sentence"] = region_has_sentence
+        batch["region_is_abnormal"] = region_is_abnormal
 
-
-
-
-
-
-        if self.is_val:
-            # for a validation batch, create a list of list of str that hold the reference phrases (i.e. bbox_phrases) to compute BLEU/BERTscores
-            bbox_phrases_batch = []
-
-        # it's possible that the validation set has an additional column called "is_abnormal", that contains boolean variables
-        # that indicate if a region is described as abnormal or not
-        if self.has_is_abnormal_column:
-            is_abnormal_list = []
-
-        for i, sample in enumerate(batch):
-            # remove image_hidden_states vectors from batch and store them in dedicated image_hidden_states_batch tensor
-            image_hidden_states_batch[i] = sample.pop("image_hidden_states")
-
-            if self.is_val:
-                bbox_phrases_batch.append([sample.pop("reference_phrase")])
-            if self.has_is_abnormal_column:
-                is_abnormal_list.append(sample.pop("is_abnormal"))
-
-        # batch now only contains samples with input_ids and attention_mask keys
-        # the tokenizer will turn the batch variable into a single dict with input_ids and attention_mask keys,
-        # that map to tensors of shape [batch_size x (longest) seq_len (in batch)] respectively
-        batch = self.tokenizer.pad(batch, padding=self.padding, return_tensors="pt")
-
-        # add the image_hidden_states_batch tensor to the dict
-        batch["image_hidden_states"] = image_hidden_states_batch
-
-        # add the reference phrases to the dict for a validation batch
         if self.is_val:
             batch["reference_phrases"] = bbox_phrases_batch
 
-        # add the list with the boolean variables to the validation batch
-        if self.has_is_abnormal_column:
-            batch["is_abnormal_list"] = is_abnormal_list
-
         return batch
+
+    def transform_to_dict_with_inputs_ids_and_attention_masks(self, batch):
+        dict_with_ii_and_am = {"input_ids": [], "attention_mask": []}
+        for single_dict in batch:
+            for key, outer_list in single_dict.items():
+                for inner_list in outer_list:
+                    dict_with_ii_and_am[key].append(inner_list)
+
+        return dict_with_ii_and_am
