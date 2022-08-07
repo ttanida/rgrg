@@ -22,8 +22,9 @@ from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
 from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
+from src.full_model.custom_collator import CustomCollator
 from src.full_model.custom_dataset import CustomDataset
-from src.object_detector.object_detector import ObjectDetector
+from src.full_model.report_generation_model import ReportGenerationModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -58,18 +59,21 @@ NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_..
 NUM_SENTENCES_TO_GENERATE = 300
 
 
-def get_data_loaders(train_dataset, val_dataset):
+def get_data_loaders(tokenizer, train_dataset, val_dataset):
     def seed_worker(worker_id):
         """To preserve reproducibility for the randomly shuffled train loader."""
         worker_seed = torch.initial_seed() % 2**32
         np.random.seed(worker_seed)
         random.seed(worker_seed)
 
+    custom_collate_train = CustomCollator(tokenizer=tokenizer, is_val=False)
+    custom_collate_val = CustomCollator(tokenizer=tokenizer, is_val=True)
+
     g = torch.Generator()
     g.manual_seed(seed_val)
 
-    train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, worker_init_fn=seed_worker, generator=g, pin_memory=True)
-    val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+    train_loader = DataLoader(train_dataset, collate_fn=custom_collate_train, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, worker_init_fn=seed_worker, generator=g, pin_memory=True)
+    val_loader = DataLoader(val_dataset, collate_fn=custom_collate_val, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 
     return train_loader, val_loader
 
@@ -285,7 +289,17 @@ def main():
     train_dataset_complete = CustomDataset("train", tokenized_train_dataset, train_transforms)
     val_dataset_complete = CustomDataset("val", tokenized_val_dataset, val_transforms)
 
-    train_loader, val_loader = get_data_loaders(train_dataset_complete, val_dataset_complete)
+    train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
+
+    model = ReportGenerationModel()
+    model.to(device, non_blocking=True)
+    model.train()
+
+    opt = AdamW(model.parameters(), lr=LR)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
+    writer = SummaryWriter(log_dir=tensorboard_folder_path)
+
+    log.info("\nStarting training!\n")
 
 
 if __name__ == "__main__":
