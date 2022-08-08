@@ -9,6 +9,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
 from datasets import Dataset
+import evaluate
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -52,13 +53,10 @@ NUM_WORKERS = 12
 EPOCHS = 20
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE = 80  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 40  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = (
-    5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
-)
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_SENTENCES_TO_GENERATE = 300
 
 
@@ -115,9 +113,146 @@ def write_all_losses_and_scores_to_tensorboard(
     writer.add_scalar("lr", current_lr, overall_steps_taken)
 
 
-def update_region_abnormal_metrics(
-    region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected
-):
+def compute_final_language_model_scores(language_model_scores):
+    for subset, metrics_with_scores in language_model_scores.items():
+        temp = {}
+        for score_name, score in metrics_with_scores.items():
+            if score_name.startswith("bleu"):
+                result = score.compute(max_order=int(score_name[-1]))
+                temp[f"{score_name}"] = result["bleu"]
+            else:  # bert_score
+                result = score.compute(lang="en", device=device)
+                avg_precision = np.array(result["precision"]).mean()
+                avg_recall = np.array(result["recall"]).mean()
+                avg_f1 = np.array(result["f1"]).mean()
+
+                temp["bertscore_precision"] = avg_precision
+                temp["bertscore_recall"] = avg_recall
+                temp["bertscore_f1"] = avg_f1
+
+        language_model_scores[subset] = temp
+
+
+def write_sentences_to_file(
+        gen_and_ref_sentences_to_save_to_file,
+        generated_sentences_folder_path,
+        overall_steps_taken):
+    generated_sentences_txt_file = os.path.join(generated_sentences_folder_path, f"generated_sentences_step_{overall_steps_taken}")
+
+    # generated_sentences is a list of str
+    generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
+
+    # reference_sentences is a list of str
+    reference_sentences = gen_and_ref_sentences_to_save_to_file["reference_sentences"]
+
+    with open(generated_sentences_txt_file, "w") as f:
+        for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
+            f.write(f"Generated sentence: {gen_sent}\n")
+            f.write(f"Reference sentence: {ref_sent}\n\n")
+
+
+def get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
+    # bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
+    selected_region_is_abnormal = region_is_abnormal[selected_regions]
+    selected_region_is_abnormal = selected_region_is_abnormal.detach().cpu().numpy()
+
+    generated_sentences_for_selected_regions = np.asarray(generated_sentences_for_selected_regions)
+    reference_sentences_for_selected_regions = np.asarray(reference_sentences_for_selected_regions)
+
+    gen_sents_for_normal_selected_regions = generated_sentences_for_selected_regions[~selected_region_is_abnormal].tolist()
+    gen_sents_for_abnormal_selected_regions = generated_sentences_for_selected_regions[selected_region_is_abnormal].tolist()
+
+    ref_sents_for_normal_selected_regions = reference_sentences_for_selected_regions[~selected_region_is_abnormal].tolist()
+    ref_sents_for_abnormal_selected_regions = reference_sentences_for_selected_regions[selected_region_is_abnormal].tolist()
+
+    return gen_sents_for_normal_selected_regions, gen_sents_for_abnormal_selected_regions, ref_sents_for_normal_selected_regions, ref_sents_for_abnormal_selected_regions
+
+
+def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions):
+    """
+    Args:
+        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 36 (the inner list holds all reference phrases of a single image)
+        selected_regions ([batch_size x 36]): boolean tensor that has exactly "num_regions_selected_in_batch" True values
+    """
+    # both arrays of shape [batch_size x 36]
+    reference_sentences = np.asarray(reference_sentences)
+    selected_regions = selected_regions.detach().cpu().numpy()
+
+    ref_sentences_for_selected_regions = reference_sentences[selected_regions]
+
+    return ref_sentences_for_selected_regions.tolist()
+
+
+def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path):
+    # compute scores for all, normal and abnormal reference sentences
+    subsets = ["all", "normal", "abnormal"]
+    language_model_scores = {}
+
+    for subset in subsets:
+        language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+        language_model_scores[subset]["bert_score"] = evaluate.load("bertscore")
+
+    gen_and_ref_sentences_to_save_to_file = {
+        "generated_sentences": [],
+        "reference_sentences": []
+    }
+
+    # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
+    # we only generate NUM_SENTENCES_TO_GENERATE sentences
+    num_batches_to_process = NUM_SENTENCES_TO_GENERATE // BATCH_SIZE
+
+    with torch.no_grad():
+        for num_batch, batch in tqdm(enumerate(val_dl), total=num_batches_to_process):
+            if num_batch >= num_batches_to_process:
+                break
+
+            images = batch["image"].to(device, non_blocking=True)  # shape [batch_size x 1 x 512 x 512]
+            region_is_abnormal = batch["region_is_abnormal"]  # boolean tensor of shape [batch_size x 36]
+
+            # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
+            reference_sentences = batch["reference_sentences"]
+
+            beam_search_output, selected_regions, detections, class_detected = model.generate(images, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+
+            # generated_sentences is a List[str] of length "num_regions_selected_in_batch"
+            generated_sentences_for_selected_regions = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+            # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
+            # the new list is a List[str] of length "num_regions_selected_in_batch"
+            reference_sentences_for_selected_regions = get_ref_sentences_for_selected_regions(reference_sentences, selected_regions)
+
+            if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
+                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences_for_selected_regions)
+                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences_for_selected_regions)
+
+            for score in language_model_scores["all"].values():
+                score.add_batch(predictions=generated_sentences_for_selected_regions, references=reference_sentences_for_selected_regions)
+
+            # for computing the scores for the normal and abnormal reference sentences, we have to filter the generated and reference sentences accordingly
+            (
+                gen_sents_for_normal_selected_regions,
+                gen_sents_for_abnormal_selected_regions,
+                ref_sents_for_normal_selected_regions,
+                ref_sents_for_abnormal_selected_regions
+            ) = get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal)
+
+            if len(ref_sents_for_normal_selected_regions) != 0:
+                for score in language_model_scores["normal"].values():
+                    score.add_batch(predictions=gen_sents_for_normal_selected_regions, references=ref_sents_for_normal_selected_regions)
+
+            if len(ref_sents_for_abnormal_selected_regions) != 0:
+                for score in language_model_scores["abnormal"].values():
+                    score.add_batch(predictions=gen_sents_for_abnormal_selected_regions, references=ref_sents_for_abnormal_selected_regions)
+
+    write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken)
+
+    # compute final scores for language model metrics
+    compute_final_language_model_scores(language_model_scores)
+
+    return language_model_scores
+
+
+def update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected):
     """
     Args:
         region_abnormal_scores (Dict)
@@ -224,9 +359,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     # sum up detections for each region
     region_detected_batch = torch.sum(class_detected, dim=0)
 
-    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(
-        detections, image_targets, class_detected
-    )
+    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(detections, image_targets, class_detected)
 
     obj_detector_scores["sum_region_detected"] += region_detected_batch
     obj_detector_scores["sum_intersection_area_per_region"] += intersection_area_per_region_batch
@@ -246,8 +379,6 @@ def get_val_losses_and_other_metrics(model, val_dl):
         region_selection_scores (Dict): holds precision and recall scores for all, normal and abnormal sentences
         region_abnormal_scores (Dict): holds precision and recall scores for all sentences
     """
-    model.eval()
-
     val_losses_dict = {
         "total_loss": 0.0,
         "obj_detector_loss": 0.0,
@@ -294,18 +425,9 @@ def get_val_losses_and_other_metrics(model, val_dl):
       FN: (normal/abnormal) region has sentence (gt), but is not selected by classifier to get sentence (pred)
     """
     region_selection_scores = {}
-    region_selection_scores["all"] = {
-        "precision": torchmetrics.Precision(num_classes=1),
-        "recall": torchmetrics.Recall(num_classes=1),
-    }
-    region_selection_scores["normal"] = {
-        "precision": torchmetrics.Precision(num_classes=1),
-        "recall": torchmetrics.Recall(num_classes=1),
-    }
-    region_selection_scores["abnormal"] = {
-        "precision": torchmetrics.Precision(num_classes=1),
-        "recall": torchmetrics.Recall(num_classes=1),
-    }
+    region_selection_scores["all"] = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
+    region_selection_scores["normal"] = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
+    region_selection_scores["abnormal"] = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
 
     """
     For the binary classifier for region normal/abnormal detection, we want to compute the precision and recall for:
@@ -317,10 +439,7 @@ def get_val_losses_and_other_metrics(model, val_dl):
       TN: region is normal (gt), and is predicted as normal by classifier (pred)
       FN: region is abnormal (gt), but is predicted as normal by classifier (pred)
     """
-    region_abnormal_scores = {
-        "precision": torchmetrics.Precision(num_classes=1),
-        "recall": torchmetrics.Recall(num_classes=1),
-    }
+    region_abnormal_scores = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
 
     with torch.no_grad():
         for batch in tqdm(val_dl):
@@ -367,12 +486,7 @@ def get_val_losses_and_other_metrics(model, val_dl):
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
             # sum up the rest of the losses
-            total_loss = (
-                obj_detector_losses
-                + classifier_loss_region_selection
-                + classifier_loss_region_abnormal
-                + language_model_loss
-            )
+            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal + language_model_loss
 
             list_of_losses = [
                 total_loss,
@@ -390,14 +504,10 @@ def get_val_losses_and_other_metrics(model, val_dl):
             update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected)
 
             # update scores for region selection metrics
-            update_region_selection_metrics(
-                region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal
-            )
+            update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal)
 
             # update scores for region abnormal detection metrics
-            update_region_abnormal_metrics(
-                region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected
-            )
+            update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected)
 
     # normalize the losses
     for loss_type in val_losses_dict:
@@ -415,11 +525,11 @@ def get_val_losses_and_other_metrics(model, val_dl):
     # compute the "micro" average scores for region_selection_scores
     for subset in region_selection_scores:
         for metric, score in region_selection_scores[subset].values():
-            region_selection_scores[subset][metric] = score.compute().item()
+            region_selection_scores[subset][metric] = score.compute()[1].item()  # only report results for the positive class (hence [1])
 
     # compute the "micro" average scores for region_abnormal_scores
     for metric, score in region_abnormal_scores.values():
-        region_abnormal_scores[metric] = score.compute().item()
+        region_abnormal_scores[metric] = score.compute()[1].item()
 
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
@@ -434,22 +544,24 @@ def log_stats_to_console(
     log.info(f"\tVal loss: {val_loss:.3f}")
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, parameters):
-    steps_taken = parameters["steps_taken"]
-    overall_steps_taken = parameters["overall_steps_taken"]
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path):
+    # set the model to evaluation mode
+    model.eval()
 
-    log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
+    overall_steps_taken = run_params["overall_steps_taken"]
 
     # normalize all train losses by steps_taken
     for loss_type in train_losses_dict:
-        train_losses_dict[loss_type] /= steps_taken
+        train_losses_dict[loss_type] /= run_params["steps_taken"]
 
     (
         val_losses_dict,
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
-    ) = get_val_losses_and_other_metrics(model, val_dl, writer, overall_steps_taken)
+    ) = get_val_losses_and_other_metrics(model, val_dl)
+
+    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path)
 
     current_lr = lr_scheduler.get_last_lr()
 
@@ -470,40 +582,20 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, param
     # decrease lr by 1e-1 if total_val_loss has not decreased after certain number of evaluations
     lr_scheduler.step(total_val_loss)
 
-    if total_val_loss < parameters["lowest_val_loss"]:
-        parameters["num_evaluations_without_decrease_val_loss"] = 0
-        lowest_val_loss = total_val_loss
-        best_epoch = parameters["epoch"]
-        best_model_save_path = os.path.join(
-            weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{best_epoch}.pth"
+    if total_val_loss < run_params["lowest_val_loss"]:
+        run_params["lowest_val_loss"] = total_val_loss
+        run_params["best_epoch"] = run_params["epoch"]
+        run_params["best_model_save_path"] = os.path.join(
+            run_params["weights_folder_path"],
+            f"val_loss_{run_params['lowest_val_loss']:.3f}_epoch_{run_params['best_epoch']}.pth",
         )
-        best_model_state = deepcopy(model.state_dict())
-    else:
-        parameters["num_evaluations_without_decrease_val_loss"] += 1
+        run_params["best_model_state"] = deepcopy(model.state_dict())
 
-    if num_evaluations_without_decrease_val_loss >= patience:
-        # save the model with the overall lowest val loss
-        torch.save(best_model_state, best_model_save_path)
-        log.info(f"\nEarly stopping at epoch ({epoch}/{epochs})!")
-        log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
-        return None
-
-    # log to console at the end of an epoch
-    if (num_batch + 1) == len(train_dl):
-        log_stats_to_console(train_total_loss, total_val_loss, epoch)
-
-    # reset values
-    for loss_type in train_losses_dict:
-        train_losses_dict[loss_type] = 0.0
-    steps_taken = 0
-
-    log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
-
-    # set the model back to training
-    model.train()
+    if is_epoch_end:
+        log_stats_to_console(train_total_loss, total_val_loss, run_params["epoch"])
 
 
-def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patience, weights_folder_path, writer):
+def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -522,9 +614,6 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
         The learning rate scheduler to use.
     epochs: int
         Number of epochs to train for.
-    patience: int
-        Number of epochs to wait for val loss to decrease.
-        If patience is exceeded, then training is stopped early.
     weights_folder_path: str
         Path to folder where best weights will be saved.
     writer: torch.utils.tensorboard.SummaryWriter
@@ -534,28 +623,18 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
     -------
     None, but saves model with the overall lowest val loss at the end of every epoch.
     """
-    parameters = {}
-    parameters["epochs"] = epochs
-    parameters["lowest_val_loss"] = np.inf
-    parameters["best_model_state"] = None  # the best_model_state is the one where the val loss is the lowest overall
-    parameters["weights_folder_path"] = weights_folder_path
-    parameters["num_evaluations_without_decrease_val_loss"] = 0  # parameter to determine early stopping
-    parameters["steps_taken"] = 0  # to know when to evaluate model and to normalize losses
-    parameters["overall_steps_taken"] = 0  # for logging to tensorboard
-
-    lowest_val_loss = np.inf
-
-    # the best_model_state is the one where the val loss is the lowest overall
-    best_model_state = None
-
-    # parameter to determine early stopping
-    num_evaluations_without_decrease_val_loss = 0
-
-    overall_steps_taken = 0  # for logging to tensorboard
+    run_params = {}
+    run_params["epochs"] = epochs
+    run_params["weights_folder_path"] = weights_folder_path
+    run_params["lowest_val_loss"] = np.inf
+    run_params["best_epoch"] = None  # the epoch with the lowest val loss overall
+    run_params["best_model_state"] = None  # the best_model_state is the one where the val loss is the lowest overall
+    run_params["best_model_save_path"] = None
+    run_params["overall_steps_taken"] = 0  # for logging to tensorboard
 
     for epoch in range(epochs):
+        run_params["epoch"] = epoch
         log.info(f"\nTraining epoch {epoch}!\n")
-        parameters["epoch"] = epoch
 
         train_losses_dict = {
             "total_loss": 0.0,
@@ -565,7 +644,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
             "language_model_loss": 0.0,
         }
 
-        steps_taken = 0
+        run_params["steps_taken"] = 0  # to know when to evaluate model during epoch and to normalize losses
 
         for num_batch, batch in tqdm(enumerate(train_dl)):
             images = batch["image"]
@@ -596,12 +675,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
             # sum up the rest of the losses
-            total_loss = (
-                obj_detector_losses
-                + classifier_loss_region_selection
-                + classifier_loss_region_abnormal
-                + language_model_loss
-            )
+            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal + language_model_loss
 
             total_loss.backward()
             optimizer.step()
@@ -619,89 +693,33 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, patien
             for loss_type, loss in zip(train_losses_dict, list_of_losses):
                 train_losses_dict[loss_type] += loss.item() * batch_size
 
-            parameters["steps_taken"] += 1
-            parameters["overall_steps_taken"] += 1
+            run_params["steps_taken"] += 1
+            run_params["overall_steps_taken"] += 1
+
+            is_epoch_end = True if (num_batch + 1) == len(train_dl) else False
 
             # evaluate every k steps and also at the end of an epoch
-            if parameters["steps_taken"] >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, parameters)
+            if run_params["steps_taken"] >= EVALUATE_EVERY_K_STEPS or is_epoch_end:
 
+                log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
 
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path)
 
+                log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
 
-
-
-
-
-                log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
-
-                # normalize all train losses by steps_taken
+                # reset values for the next evaluation
                 for loss_type in train_losses_dict:
-                    train_losses_dict[loss_type] /= steps_taken
-
-                (
-                    val_losses_dict,
-                    obj_detector_scores,
-                    region_selection_scores,
-                    region_abnormal_scores,
-                ) = get_val_losses_and_other_metrics(model, val_dl, writer, overall_steps_taken)
-
-                current_lr = lr_scheduler.get_last_lr()
-
-                write_all_losses_and_scores_to_tensorboard(
-                    writer,
-                    overall_steps_taken,
-                    train_losses_dict,
-                    val_losses_dict,
-                    obj_detector_scores,
-                    region_selection_scores,
-                    region_abnormal_scores,
-                    current_lr,
-                )
-
-                log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
+                    train_losses_dict[loss_type] = 0.0
+                run_params["steps_taken"] = 0
 
                 # set the model back to training
                 model.train()
 
-                train_total_loss = train_losses_dict["total_loss"]
-                total_val_loss = val_losses_dict["total_loss"]
-
-                # decrease lr by 1e-1 if total_val_loss has not decreased after certain number of evaluations
-                lr_scheduler.step(total_val_loss)
-
-                if total_val_loss < lowest_val_loss:
-                    num_evaluations_without_decrease_val_loss = 0
-                    lowest_val_loss = total_val_loss
-                    best_epoch = epoch
-                    best_model_save_path = os.path.join(
-                        weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth"
-                    )
-                    best_model_state = deepcopy(model.state_dict())
-                else:
-                    num_evaluations_without_decrease_val_loss += 1
-
-                if num_evaluations_without_decrease_val_loss >= patience:
-                    # save the model with the overall lowest val loss
-                    torch.save(best_model_state, best_model_save_path)
-                    log.info(f"\nEarly stopping at epoch ({epoch}/{epochs})!")
-                    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
-                    return None
-
-                # log to console at the end of an epoch
-                if (num_batch + 1) == len(train_dl):
-                    log_stats_to_console(train_total_loss, total_val_loss, epoch)
-
-                # reset values
-                for loss_type in train_losses_dict:
-                    train_losses_dict[loss_type] = 0.0
-                steps_taken = 0
-
         # save the current best model weights at the end of each epoch
-        torch.save(best_model_state, best_model_save_path)
+        torch.save(run_params["best_model_state"], run_params["best_model_save_path"])
 
     log.info("\nFinished training!")
-    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
+    log.info(f"Lowest overall val loss: {run_params['lowest_val_loss']:.3f} at epoch {run_params['best_epoch']}")
     return None
 
 
@@ -846,23 +864,16 @@ def get_datasets(config_file_path):
         "bbox_is_abnormal": literal_eval,
     }
 
-    datasets_as_dfs = {
-        dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]
-    }
+    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
-    datasets_as_dfs = {
-        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters)
-        for dataset, csv_file_path in datasets_as_dfs.items()
-    }
+    datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     # bbox_phrases is a list of str
     # replace each bbox_phrase that is empty (i.e. "") by "#"
     # this is done such that model learns to generate the "#" symbol instead of "" for empty sentences
     # this is done because generated sentences that are "" (i.e. have len = 0) will cause problems when computing e.g. Bleu scores
     for dataset_df in datasets_as_dfs.values():
-        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(
-            lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases]
-        )
+        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases])
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -923,7 +934,6 @@ def create_run_folder():
         "EPOCHS": EPOCHS,
         "LR": LR,
         "EVALUATE_EVERY_K_STEPS": EVALUATE_EVERY_K_STEPS,
-        "PATIENCE": PATIENCE,
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
@@ -953,9 +963,7 @@ def main():
     tokenizer = get_tokenizer()
 
     # tokenize the raw datasets
-    tokenized_train_dataset, tokenized_val_dataset = get_tokenized_datasets(
-        tokenizer, raw_train_dataset, raw_val_dataset
-    )
+    tokenized_train_dataset, tokenized_val_dataset = get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset)
 
     train_transforms = get_transforms("train")
     val_transforms = get_transforms("val")
@@ -982,8 +990,9 @@ def main():
         optimizer=opt,
         lr_scheduler=lr_scheduler,
         epochs=EPOCHS,
-        patience=PATIENCE,
         weights_folder_path=weights_folder_path,
+        tokenizer=tokenizer,
+        generated_sentences_folder_path=generated_sentences_folder_path,
         writer=writer,
     )
 

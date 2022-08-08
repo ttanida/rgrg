@@ -87,7 +87,7 @@ class CustomCollator:
         batch["region_is_abnormal"] = region_is_abnormal
 
         if self.is_val:
-            batch["reference_phrases"] = bbox_phrases_batch
+            batch["reference_sentences"] = bbox_phrases_batch
 
         return batch
 
