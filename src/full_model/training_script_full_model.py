@@ -68,6 +68,7 @@ def write_all_losses_and_scores_to_tensorboard(
     obj_detector_scores,
     region_selection_scores,
     region_abnormal_scores,
+    language_model_scores,
     current_lr,
 ):
     def write_losses(writer, overall_steps_taken, train_losses_dict, val_losses_dict):
@@ -98,17 +99,23 @@ def write_all_losses_and_scores_to_tensorboard(
 
     def write_region_selection_scores(writer, overall_steps_taken, region_selection_scores):
         for subset in region_selection_scores:
-            for metric, score in region_selection_scores[subset].values():
+            for metric, score in region_selection_scores[subset].items():
                 writer.add_scalar(f"region_select_{subset}_{metric}", score, overall_steps_taken)
 
     def write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores):
-        for metric, score in region_abnormal_scores.values():
+        for metric, score in region_abnormal_scores.items():
             writer.add_scalar(f"region_abnormal_{metric}", score, overall_steps_taken)
+
+    def write_language_model_scores(writer, overall_steps_taken, language_model_scores):
+        for subset in language_model_scores:
+            for metric, score in language_model_scores[subset].items():
+                writer.add_scalar(f"language_model_{subset}_{metric}", score, overall_steps_taken)
 
     write_losses(writer, overall_steps_taken, train_losses_dict, val_losses_dict)
     write_obj_detector_scores(writer, overall_steps_taken, obj_detector_scores)
     write_region_selection_scores(writer, overall_steps_taken, region_selection_scores)
     write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores)
+    write_language_model_scores(writer, overall_steps_taken, language_model_scores)
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
 
@@ -152,7 +159,7 @@ def write_sentences_to_file(
 
 
 def get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
-    # bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
+    # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
     selected_region_is_abnormal = region_is_abnormal[selected_regions]
     selected_region_is_abnormal = selected_region_is_abnormal.detach().cpu().numpy()
 
@@ -573,6 +580,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, token
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
+        language_model_scores,
         current_lr,
     )
 
