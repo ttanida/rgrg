@@ -56,7 +56,9 @@ EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validatio
 PATIENCE_LR_SCHEDULER = 40  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = (
+    5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+)
 NUM_SENTENCES_TO_GENERATE = 300
 
 
@@ -121,12 +123,12 @@ def write_all_losses_and_scores_to_tensorboard(
 
 
 def compute_final_language_model_scores(language_model_scores):
-    for subset, metrics_with_scores in language_model_scores.items():
+    for subset in language_model_scores:
         temp = {}
-        for score_name, score in metrics_with_scores.items():
-            if score_name.startswith("bleu"):
-                result = score.compute(max_order=int(score_name[-1]))
-                temp[f"{score_name}"] = result["bleu"]
+        for metric, score in language_model_scores[subset].items():
+            if metric.startswith("bleu"):
+                result = score.compute(max_order=int(metric[-1]))
+                temp[f"{metric}"] = result["bleu"]
             else:  # bert_score
                 result = score.compute(lang="en", device=device)
                 avg_precision = np.array(result["precision"]).mean()
@@ -140,10 +142,7 @@ def compute_final_language_model_scores(language_model_scores):
         language_model_scores[subset] = temp
 
 
-def write_sentences_to_file(
-        gen_and_ref_sentences_to_save_to_file,
-        generated_sentences_folder_path,
-        overall_steps_taken):
+def write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken):
     generated_sentences_txt_file = os.path.join(generated_sentences_folder_path, f"generated_sentences_step_{overall_steps_taken}")
 
     # generated_sentences is a list of str
@@ -158,7 +157,9 @@ def write_sentences_to_file(
             f.write(f"Reference sentence: {ref_sent}\n\n")
 
 
-def get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
+def get_sents_for_normal_abnormal_selected_regions(
+    generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal
+):
     # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
     selected_region_is_abnormal = region_is_abnormal[selected_regions]
     selected_region_is_abnormal = selected_region_is_abnormal.detach().cpu().numpy()
@@ -172,7 +173,37 @@ def get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selec
     ref_sents_for_normal_selected_regions = reference_sentences_for_selected_regions[~selected_region_is_abnormal].tolist()
     ref_sents_for_abnormal_selected_regions = reference_sentences_for_selected_regions[selected_region_is_abnormal].tolist()
 
-    return gen_sents_for_normal_selected_regions, gen_sents_for_abnormal_selected_regions, ref_sents_for_normal_selected_regions, ref_sents_for_abnormal_selected_regions
+    return (
+        gen_sents_for_normal_selected_regions,
+        gen_sents_for_abnormal_selected_regions,
+        ref_sents_for_normal_selected_regions,
+        ref_sents_for_abnormal_selected_regions,
+    )
+
+
+def update_language_model_scores(
+    language_model_scores, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal
+):
+    for score in language_model_scores["all"].values():
+        score.add_batch(predictions=generated_sentences_for_selected_regions, references=reference_sentences_for_selected_regions)
+
+    # for computing the scores for the normal and abnormal reference sentences, we have to filter the generated and reference sentences accordingly
+    (
+        gen_sents_for_normal_selected_regions,
+        gen_sents_for_abnormal_selected_regions,
+        ref_sents_for_normal_selected_regions,
+        ref_sents_for_abnormal_selected_regions,
+    ) = get_sents_for_normal_abnormal_selected_regions(
+        generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal
+    )
+
+    if len(ref_sents_for_normal_selected_regions) != 0:
+        for score in language_model_scores["normal"].values():
+            score.add_batch(predictions=gen_sents_for_normal_selected_regions, references=ref_sents_for_normal_selected_regions)
+
+    if len(ref_sents_for_abnormal_selected_regions) != 0:
+        for score in language_model_scores["abnormal"].values():
+            score.add_batch(predictions=gen_sents_for_abnormal_selected_regions, references=ref_sents_for_abnormal_selected_regions)
 
 
 def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions):
@@ -199,10 +230,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
         language_model_scores[subset]["bert_score"] = evaluate.load("bertscore")
 
-    gen_and_ref_sentences_to_save_to_file = {
-        "generated_sentences": [],
-        "reference_sentences": []
-    }
+    gen_and_ref_sentences_to_save_to_file = {"generated_sentences": [], "reference_sentences": []}
 
     # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
     # we only generate NUM_SENTENCES_TO_GENERATE sentences
@@ -219,10 +247,14 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             reference_sentences = batch["reference_sentences"]
 
-            beam_search_output, selected_regions, detections, class_detected = model.generate(images, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+            beam_search_output, selected_regions, detections, class_detected = model.generate(
+                images, max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True
+            )
 
             # generated_sentences is a List[str] of length "num_regions_selected_in_batch"
-            generated_sentences_for_selected_regions = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            generated_sentences_for_selected_regions = tokenizer.batch_decode(
+                beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            )
 
             # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
             # the new list is a List[str] of length "num_regions_selected_in_batch"
@@ -232,24 +264,13 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
                 gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences_for_selected_regions)
                 gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences_for_selected_regions)
 
-            for score in language_model_scores["all"].values():
-                score.add_batch(predictions=generated_sentences_for_selected_regions, references=reference_sentences_for_selected_regions)
-
-            # for computing the scores for the normal and abnormal reference sentences, we have to filter the generated and reference sentences accordingly
-            (
-                gen_sents_for_normal_selected_regions,
-                gen_sents_for_abnormal_selected_regions,
-                ref_sents_for_normal_selected_regions,
-                ref_sents_for_abnormal_selected_regions
-            ) = get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal)
-
-            if len(ref_sents_for_normal_selected_regions) != 0:
-                for score in language_model_scores["normal"].values():
-                    score.add_batch(predictions=gen_sents_for_normal_selected_regions, references=ref_sents_for_normal_selected_regions)
-
-            if len(ref_sents_for_abnormal_selected_regions) != 0:
-                for score in language_model_scores["abnormal"].values():
-                    score.add_batch(predictions=gen_sents_for_abnormal_selected_regions, references=ref_sents_for_abnormal_selected_regions)
+            update_language_model_scores(
+                language_model_scores,
+                generated_sentences_for_selected_regions,
+                reference_sentences_for_selected_regions,
+                selected_regions,
+                region_is_abnormal,
+            )
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken)
 
@@ -366,7 +387,9 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     # sum up detections for each region
     region_detected_batch = torch.sum(class_detected, dim=0)
 
-    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(detections, image_targets, class_detected)
+    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(
+        detections, image_targets, class_detected
+    )
 
     obj_detector_scores["sum_region_detected"] += region_detected_batch
     obj_detector_scores["sum_intersection_area_per_region"] += intersection_area_per_region_batch
@@ -432,9 +455,18 @@ def get_val_losses_and_other_metrics(model, val_dl):
       FN: (normal/abnormal) region has sentence (gt), but is not selected by classifier to get sentence (pred)
     """
     region_selection_scores = {}
-    region_selection_scores["all"] = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
-    region_selection_scores["normal"] = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
-    region_selection_scores["abnormal"] = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
+    region_selection_scores["all"] = {
+        "precision": torchmetrics.Precision(num_classes=2, average=None),
+        "recall": torchmetrics.Recall(num_classes=2, average=None),
+    }
+    region_selection_scores["normal"] = {
+        "precision": torchmetrics.Precision(num_classes=2, average=None),
+        "recall": torchmetrics.Recall(num_classes=2, average=None),
+    }
+    region_selection_scores["abnormal"] = {
+        "precision": torchmetrics.Precision(num_classes=2, average=None),
+        "recall": torchmetrics.Recall(num_classes=2, average=None),
+    }
 
     """
     For the binary classifier for region normal/abnormal detection, we want to compute the precision and recall for:
@@ -446,7 +478,10 @@ def get_val_losses_and_other_metrics(model, val_dl):
       TN: region is normal (gt), and is predicted as normal by classifier (pred)
       FN: region is abnormal (gt), but is predicted as normal by classifier (pred)
     """
-    region_abnormal_scores = {"precision": torchmetrics.Precision(num_classes=2, average=None), "recall": torchmetrics.Recall(num_classes=2, average=None)}
+    region_abnormal_scores = {
+        "precision": torchmetrics.Precision(num_classes=2, average=None),
+        "recall": torchmetrics.Recall(num_classes=2, average=None),
+    }
 
     with torch.no_grad():
         for batch in tqdm(val_dl):
@@ -711,7 +746,9 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
                 log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
 
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path)
+                evaluate_model(
+                    model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path
+                )
 
                 log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
 
@@ -874,14 +911,18 @@ def get_datasets(config_file_path):
 
     datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
-    datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
+    datasets_as_dfs = {
+        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()
+    }
 
     # bbox_phrases is a list of str
     # replace each bbox_phrase that is empty (i.e. "") by "#"
     # this is done such that model learns to generate the "#" symbol instead of "" for empty sentences
     # this is done because generated sentences that are "" (i.e. have len = 0) will cause problems when computing e.g. Bleu scores
     for dataset_df in datasets_as_dfs.values():
-        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases])
+        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(
+            lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases]
+        )
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
