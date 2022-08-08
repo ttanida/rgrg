@@ -10,9 +10,9 @@ from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
 # from torchinfo import summary
 import torchxrayvision as xrv
 
-from custom_roi_heads import CustomRoIHeads
-from custom_rpn import CustomRegionProposalNetwork
-from image_list import ImageList
+from .custom_roi_heads import CustomRoIHeads
+from .custom_rpn import CustomRegionProposalNetwork
+from .image_list import ImageList
 
 
 class ObjectDetector(nn.Module):

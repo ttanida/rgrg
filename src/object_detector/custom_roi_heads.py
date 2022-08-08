@@ -226,7 +226,7 @@ class CustomRoIHeads(RoIHeads):
             labels = None
             regression_targets = None
 
-        # box_features_after_roi_pool has shape [overall_num_proposals_for_all_images x 1024 x 8 x 8]
+        # box_features_after_roi_pool has shape [overall_num_proposals_for_all_images x 2048 x 8 x 8]
         box_features_after_roi_pool = self.box_roi_pool(features, proposals, image_shapes)
 
         # box_features has shape [overall_num_proposals_for_all_images x 1024]
@@ -247,7 +247,7 @@ class CustomRoIHeads(RoIHeads):
         # if we evaluate the object detector (in isolation or as part of the full model), we need the "detections"
         # if we do either of them, we always need "class_detected" (see doc_string of method for details)
         if self.return_feature_vectors or not self.training:
-            # take the box features after the roi pool and transform from [num_proposals, 1024, 8, 8] to [num_proposals, 1024, 1, 1]
+            # take the box features after the roi pool and transform from [num_proposals, 2048, 8, 8] to [num_proposals, 2048, 1, 1]
             box_features_after_roi_pool = self.avg_pool(box_features_after_roi_pool)
 
             # remove all dims of size 1

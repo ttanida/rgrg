@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -30,7 +31,7 @@ class BinaryClassifierRegionSelection(nn.Module):
             # only compute loss for logits that correspond to a class that was detected
             detected_logits = logits[class_detected]
             detected_region_has_sentence = region_has_sentence[class_detected]
-            loss = self.loss_fn(detected_logits, detected_region_has_sentence)
+            loss = self.loss_fn(detected_logits, detected_region_has_sentence.type(torch.float32))
 
         if self.training:
             return loss

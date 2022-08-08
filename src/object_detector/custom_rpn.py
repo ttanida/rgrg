@@ -8,7 +8,7 @@ from torchvision.models.detection.rpn import (
     concat_box_prediction_layers,
 )
 
-from image_list import ImageList
+from .image_list import ImageList
 
 
 class CustomRegionProposalNetwork(RegionProposalNetwork):

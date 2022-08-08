@@ -44,20 +44,18 @@ RUN = 0
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Train full model on small dataset"""
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.0005
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.00005
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.004
-BATCH_SIZE = 16
+BATCH_SIZE = 4
 NUM_WORKERS = 12
-EPOCHS = 20
+EPOCHS = 100
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE_LR_SCHEDULER = 40  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+PATIENCE_LR_SCHEDULER = 20  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = (
-    5  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
-)
-NUM_SENTENCES_TO_GENERATE = 300
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 2  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+NUM_SENTENCES_TO_GENERATE = 10
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
@@ -68,10 +66,7 @@ def get_title(region_set, region_indices, region_colors, class_detected_img):
 
     # add color_code to region name (e.g. "(r)" for red)
     # also add nd to the brackets if region was not detected (e.g. "(r, nd)" if red region was not detected)
-    region_set = [
-        region + f" ({color})" if cls_detect else region + f" ({color}, nd)"
-        for region, color, cls_detect in zip(region_set, region_colors, class_detected)
-    ]
+    region_set = [region + f" ({color})" if cls_detect else region + f" ({color}, nd)" for region, color, cls_detect in zip(region_set, region_colors, class_detected)]
 
     # add a line break to the title, as to not make it too long
     return ", ".join(region_set[:3]) + "\n" + ", ".join(region_set[3:])
@@ -107,9 +102,7 @@ def transform_sentence_to_fit_under_image(ref_sent_region):
     return transformed_sent
 
 
-def update_region_set_text(
-    region_set_text, color, reference_sentences_img, generated_sentences_for_selected_regions, region_index, selected_regions, num_img
-):
+def update_region_set_text(region_set_text, color, reference_sentences_img, generated_sentences_for_selected_regions, region_index, selected_regions, num_img):
     region_set_text += f"({color}):  \n"
     reference_sentence_region = reference_sentences_img[region_index]
     reference_sentence_region = transform_sentence_to_fit_under_image(reference_sentence_region)
@@ -119,9 +112,7 @@ def update_region_set_text(
     if not box_region_selected:
         region_set_text += "  generated: [REGION NOT SELECTED]\n\n"
     else:
-        generated_sentence_region = get_generated_sentence_for_region(
-            generated_sentences_for_selected_regions, selected_regions, num_img, region_index
-        )
+        generated_sentence_region = get_generated_sentence_for_region(generated_sentences_for_selected_regions, selected_regions, num_img, region_index)
         generated_sentence_region = transform_sentence_to_fit_under_image(generated_sentence_region)
         region_set_text += f"  generated: {generated_sentence_region}\n\n"
 
@@ -163,22 +154,8 @@ def plot_detections_and_sentences_to_tensorboard(
     # plot 6 regions at a time, as to not overload the image with boxes
     # the region_sets were chosen as to minimize overlap between the contained regions (i.e. better visibility)
     region_set_1 = ["right lung", "right costophrenic angle", "left lung", "left costophrenic angle", "cardiac silhouette", "spine"]
-    region_set_2 = [
-        "right upper lung zone",
-        "right mid lung zone",
-        "right lower lung zone",
-        "left upper lung zone",
-        "left mid lung zone",
-        "left lower lung zone",
-    ]
-    region_set_3 = [
-        "right hilar structures",
-        "right apical zone",
-        "right cardiophrenic angle",
-        "left hilar structures",
-        "left apical zone",
-        "left cardiophrenic angle",
-    ]
+    region_set_2 = ["right upper lung zone", "right mid lung zone", "right lower lung zone", "left upper lung zone", "left mid lung zone", "left lower lung zone"]
+    region_set_3 = ["right hilar structures", "right apical zone", "right cardiophrenic angle", "left hilar structures", "left apical zone", "left cardiophrenic angle"]
     region_set_4 = ["right hemidiaphragm", "left hemidiaphragm", "trachea", "right clavicle", "left clavicle", "aortic arch"]
     region_set_5 = ["mediastinum", "left upper abdomen", "right upper abdomen", "svc", "cavoatrial junction", "carina"]
     region_set_6 = ["right atrium", "descending aorta", "left cardiac silhouette", "upper mediastinum", "right cardiac silhouette", "abdomen"]
@@ -324,9 +301,7 @@ def write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sen
             f.write(f"Reference sentence: {ref_sent}\n\n")
 
 
-def get_sents_for_normal_abnormal_selected_regions(
-    generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal
-):
+def get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
     # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
     selected_region_is_abnormal = region_is_abnormal[selected_regions]
     selected_region_is_abnormal = selected_region_is_abnormal.detach().cpu().numpy()
@@ -348,9 +323,7 @@ def get_sents_for_normal_abnormal_selected_regions(
     )
 
 
-def update_language_model_scores(
-    language_model_scores, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal
-):
+def update_language_model_scores(language_model_scores, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
     for score in language_model_scores["all"].values():
         score.add_batch(predictions=generated_sentences_for_selected_regions, references=reference_sentences_for_selected_regions)
 
@@ -360,9 +333,7 @@ def update_language_model_scores(
         gen_sents_for_abnormal_selected_regions,
         ref_sents_for_normal_selected_regions,
         ref_sents_for_abnormal_selected_regions,
-    ) = get_sents_for_normal_abnormal_selected_regions(
-        generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal
-    )
+    ) = get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal)
 
     if len(ref_sents_for_normal_selected_regions) != 0:
         for score in language_model_scores["normal"].values():
@@ -420,9 +391,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
             )
 
             # generated_sentences is a List[str] of length "num_regions_selected_in_batch"
-            generated_sentences_for_selected_regions = tokenizer.batch_decode(
-                beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True
-            )
+            generated_sentences_for_selected_regions = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
             # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
             # reference_sentences_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
@@ -569,9 +538,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     # sum up detections for each region
     region_detected_batch = torch.sum(class_detected, dim=0)
 
-    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(
-        detections, image_targets, class_detected
-    )
+    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(detections, image_targets, class_detected)
 
     obj_detector_scores["sum_region_detected"] += region_detected_batch
     obj_detector_scores["sum_intersection_area_per_region"] += intersection_area_per_region_batch
@@ -670,7 +637,7 @@ def get_val_losses_and_other_metrics(model, val_dl):
             # "image_targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
             # "boxes" maps to a tensor of shape [36 x 4] and "labels" maps to a tensor of shape [36]
             # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 36] (starting at 1, since 0 is background)
-            images = batch["image"]
+            images = batch["images"]
             image_targets = batch["image_targets"]
             input_ids = batch["input_ids"]
             attention_mask = batch["attention_mask"]
@@ -704,7 +671,7 @@ def get_val_losses_and_other_metrics(model, val_dl):
                 class_detected,
                 selected_regions,
                 predicted_abnormal_regions,
-            ) = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            ) = model(log, images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
             # sum up all 4 losses from the object detector
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
@@ -872,7 +839,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
         run_params["steps_taken"] = 0  # to know when to evaluate model during epoch and to normalize losses
 
         for num_batch, batch in tqdm(enumerate(train_dl)):
-            images = batch["image"]
+            images = batch["images"]
             image_targets = batch["image_targets"]
             input_ids = batch["input_ids"]
             attention_mask = batch["attention_mask"]
@@ -894,7 +861,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
                 classifier_loss_region_selection,
                 classifier_loss_region_abnormal,
                 language_model_loss,
-            ) = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            ) = model(epoch, images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
             # sum up all 4 losses from the object detector
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
@@ -928,9 +895,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
                 log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
 
-                evaluate_model(
-                    model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path
-                )
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path)
 
                 log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
 
@@ -967,7 +932,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         train_dataset,
         collate_fn=custom_collate_train,
         batch_size=BATCH_SIZE,
-        shuffle=True,
+        shuffle=False,  # TODO: set shuffle back to True
         num_workers=NUM_WORKERS,
         worker_init_fn=seed_worker,
         generator=g,
@@ -1093,18 +1058,14 @@ def get_datasets(config_file_path):
 
     datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
-    datasets_as_dfs = {
-        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()
-    }
+    datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     # bbox_phrases is a list of str
     # replace each bbox_phrase that is empty (i.e. "") by "#"
     # this is done such that model learns to generate the "#" symbol instead of "" for empty sentences
     # this is done because generated sentences that are "" (i.e. have len = 0) will cause problems when computing e.g. Bleu scores
     for dataset_df in datasets_as_dfs.values():
-        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(
-            lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases]
-        )
+        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases])
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -1217,7 +1178,7 @@ def main():
     train_model(
         model=model,
         train_dl=train_loader,
-        val_dl=val_loader,
+        val_dl=train_loader,  # TODO: change back to val_loader
         optimizer=opt,
         lr_scheduler=lr_scheduler,
         epochs=EPOCHS,

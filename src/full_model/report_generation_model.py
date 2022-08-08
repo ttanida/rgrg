@@ -3,8 +3,8 @@ from typing import List, Dict, Optional, Tuple
 import torch
 import torch.nn as nn
 
-from binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
-from binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
+from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
+from src.binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
 from src.object_detector.object_detector import ObjectDetector
 from src.decoder.gpt2 import DecoderModel
 
@@ -21,18 +21,25 @@ class ReportGenerationModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.object_detector = ObjectDetector(return_feature_vectors=True)
-        path_to_best_object_detector_weights = "..."
+        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
         self.language_model = DecoderModel()
-        path_to_best_detector_weights = "..."
+        path_to_best_detector_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
         self.language_model.load_state_dict(torch.load(path_to_best_detector_weights))
+
+        self.small_nn_to_get_from_2048_to_1024 = nn.Sequential(
+            nn.Linear(in_features=2048, out_features=1024),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1024)
+        )
 
     def forward(
         self,
+        epoch,
         images: torch.FloatTensor,  # images is of shape [batch_size x 1 x 512 x 512] (whole gray-scale images of size 512 x 512)
         image_targets: List[Dict],  # contains a dict for every image with keys "boxes" and "labels"
         input_ids: torch.LongTensor,  # shape [(batch_size * 36) x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
@@ -51,8 +58,21 @@ class ReportGenerationModel(nn.Module):
         # top_region_features of shape [batch_size, 36, 1024] (i.e. 1 feature vector for every region for every image in batch)
         # class_detected is a boolean tensor of shape [batch_size, 36]. Its value is True for a class if the object detector detected the class/region in the image
 
+        log.info(input_ids)
+        log.info(attention_mask)
+
         if self.training:
             obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
+
+            log.info(obj_detector_loss_dict)
+            log.info(top_region_features.shape)
+            log.info(class_detected)
+            log.info(class_detected.shape)
+            log.info(region_has_sentence)
+
+            top_region_features = self.small_nn_to_get_from_2048_to_1024(top_region_features)
+
+            log.info(top_region_features.shape)
 
             # during training, only get the two losses for the two binary classifiers
 
@@ -75,12 +95,25 @@ class ReportGenerationModel(nn.Module):
             # during evaluation, also return detections (i.e. detected bboxes)
             obj_detector_loss_dict, detections, top_region_features, class_detected = self.object_detector(images, image_targets)
 
+            log.info(obj_detector_loss_dict)
+            log.info(top_region_features.shape)
+            log.info(class_detected)
+            log.info(class_detected.shape)
+            log.info(region_has_sentence)
+
+            top_region_features = self.small_nn_to_get_from_2048_to_1024(top_region_features)
+
+            log.info(top_region_features.shape)
+
             # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
             # (and that were also detected) and the corresponding region features (selected_region_features)
             # this is done to evaluate the decoder under "real-word" conditions, i.e. the binary classifier decides which regions get a sentence
             classifier_loss_region_selection, selected_regions, selected_region_features = self.binary_classifier_region_selection(
                 top_region_features, class_detected, return_loss=True, region_has_sentence=region_has_sentence
             )
+
+            log.info(selected_regions)
+            log.info(selected_regions.shape)
 
             # for the binary classifier for abnormal/normal detection, get the loss and the predicted abnormal regions
             classifier_loss_region_abnormal, predicted_abnormal_regions = self.binary_classifier_region_abnormal(
@@ -90,6 +123,11 @@ class ReportGenerationModel(nn.Module):
             # use the selected_regions mask to filter the inputs_ids and attention_mask to those that correspond to regions that were selected
             valid_input_ids, valid_attention_mask = self.get_valid_decoder_input_for_evaluation(selected_regions, input_ids, attention_mask)
             valid_region_features = selected_region_features
+
+        log.info(valid_input_ids)
+        log.info(valid_input_ids.shape)
+        log.info(valid_attention_mask)
+        log.info(valid_attention_mask.shape)
 
         language_model_loss = self.language_model(
             valid_input_ids,
