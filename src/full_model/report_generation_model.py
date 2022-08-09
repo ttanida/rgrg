@@ -13,7 +13,7 @@ class ReportGenerationModel(nn.Module):
     """
     Full model consisting of:
         - object detector encoder
-        - binary classifier for selecting regions for sentence generation
+        - binary classifier for selecting regions for sentence genneration
         - binary classifier for detecting if a region is abnormal or normal (to encode this information in the region feature vectors)
         - language model decoder
     """
@@ -21,7 +21,7 @@ class ReportGenerationModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.object_detector = ObjectDetector(return_feature_vectors=True)
-        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
+        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_3/weights/val_loss_35.577_epoch_1.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
@@ -30,12 +30,6 @@ class ReportGenerationModel(nn.Module):
         self.language_model = DecoderModel()
         path_to_best_detector_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
         self.language_model.load_state_dict(torch.load(path_to_best_detector_weights))
-
-        self.small_nn_to_get_from_2048_to_1024 = nn.Sequential(
-            nn.Linear(in_features=2048, out_features=1024),
-            nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=1024)
-        )
 
     def forward(
         self,
@@ -62,8 +56,6 @@ class ReportGenerationModel(nn.Module):
 
             del images
             del image_targets
-
-            top_region_features = self.small_nn_to_get_from_2048_to_1024(top_region_features)
 
             # during training, only get the two losses for the two binary classifiers
 
@@ -95,8 +87,6 @@ class ReportGenerationModel(nn.Module):
 
             del images
             del image_targets
-
-            top_region_features = self.small_nn_to_get_from_2048_to_1024(top_region_features)
 
             # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
             # (and that were also detected) and the corresponding region features (selected_region_features)

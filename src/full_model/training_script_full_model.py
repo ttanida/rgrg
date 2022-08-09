@@ -43,10 +43,10 @@ torch.cuda.manual_seed_all(seed_val)
 RUN = 0
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Train full model on small dataset"""
-IMAGE_INPUT_SIZE = 512
+IMAGE_INPUT_SIZE = 224
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
-BATCH_SIZE = 4
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
+BATCH_SIZE = 2
 NUM_WORKERS = 12
 EPOCHS = 20
 LR = 1e-4
@@ -605,16 +605,16 @@ def get_val_losses_and_other_metrics(model, val_dl):
     """
     region_selection_scores = {}
     region_selection_scores["all"] = {
-        "precision": torchmetrics.Precision(num_classes=2, average=None),
-        "recall": torchmetrics.Recall(num_classes=2, average=None),
+        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
+        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
     }
     region_selection_scores["normal"] = {
-        "precision": torchmetrics.Precision(num_classes=2, average=None),
-        "recall": torchmetrics.Recall(num_classes=2, average=None),
+        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
+        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
     }
     region_selection_scores["abnormal"] = {
-        "precision": torchmetrics.Precision(num_classes=2, average=None),
-        "recall": torchmetrics.Recall(num_classes=2, average=None),
+        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
+        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
     }
 
     """
@@ -628,8 +628,8 @@ def get_val_losses_and_other_metrics(model, val_dl):
       FN: region is abnormal (gt), but is predicted as normal by classifier (pred)
     """
     region_abnormal_scores = {
-        "precision": torchmetrics.Precision(num_classes=2, average=None),
-        "recall": torchmetrics.Recall(num_classes=2, average=None),
+        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
+        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
     }
 
     with torch.no_grad():
@@ -932,7 +932,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         train_dataset,
         collate_fn=custom_collate_train,
         batch_size=BATCH_SIZE,
-        shuffle=False,  # TODO: set shuffle back to True
+        shuffle=True,
         num_workers=NUM_WORKERS,
         worker_init_fn=seed_worker,
         generator=g,
@@ -1178,7 +1178,7 @@ def main():
     train_model(
         model=model,
         train_dl=train_loader,
-        val_dl=train_loader,  # TODO: change back to val_loader
+        val_dl=val_loader,
         optimizer=opt,
         lr_scheduler=lr_scheduler,
         epochs=EPOCHS,
