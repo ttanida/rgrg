@@ -44,18 +44,18 @@ RUN = 0
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Train full model on small dataset"""
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.00005
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.004
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
 BATCH_SIZE = 4
 NUM_WORKERS = 12
-EPOCHS = 100
-LR = 1e-3
-EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE_LR_SCHEDULER = 20  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+EPOCHS = 20
+LR = 1e-4
+EVALUATE_EVERY_K_STEPS = 1000  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
+PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 2  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
-NUM_SENTENCES_TO_GENERATE = 10
+NUM_SENTENCES_TO_GENERATE = 100
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
@@ -671,7 +671,7 @@ def get_val_losses_and_other_metrics(model, val_dl):
                 class_detected,
                 selected_regions,
                 predicted_abnormal_regions,
-            ) = model(log, images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            ) = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
             # sum up all 4 losses from the object detector
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
@@ -861,7 +861,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
                 classifier_loss_region_selection,
                 classifier_loss_region_abnormal,
                 language_model_loss,
-            ) = model(epoch, images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            ) = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
             # sum up all 4 losses from the object detector
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
