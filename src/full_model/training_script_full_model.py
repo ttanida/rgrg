@@ -42,20 +42,21 @@ torch.cuda.manual_seed_all(seed_val)
 # define configurations for training run
 RUN = 0
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train full model on small dataset"""
+RUN_COMMENT = """Train full model with ResNet object detector"""
 IMAGE_INPUT_SIZE = 224
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
 BATCH_SIZE = 2
 NUM_WORKERS = 12
 EPOCHS = 20
 LR = 1e-4
-EVALUATE_EVERY_K_STEPS = 1000  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
+EVALUATE_EVERY_K_STEPS = 5000  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 2  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
-NUM_SENTENCES_TO_GENERATE = 100
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 6  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
+NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION = 300  # for evaluation of BLEU/BERTScore
+NUM_IMAGES_TO_PLOT = 4
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
@@ -140,7 +141,6 @@ def plot_detections_and_sentences_to_tensorboard(
     class_detected,
     reference_sentences,
     generated_sentences_for_selected_regions,
-    num_images_to_plot=3,
 ):
     # pred_boxes_batch is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
     # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
@@ -163,8 +163,10 @@ def plot_detections_and_sentences_to_tensorboard(
     regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5, region_set_6]
     region_colors = ["b", "g", "r", "c", "m", "y"]
 
-    for num_img in range(num_images_to_plot):
-        image = images[num_img].numpy().transpose(1, 2, 0)
+    # put channel dimension (1st dim) last (0-th dim is batch-dim)
+    images = images.numpy().transpose(0, 2, 3, 1)
+
+    for num_img, image in enumerate(images):
 
         gt_boxes_img = gt_boxes_batch[num_img]
         pred_boxes_img = pred_boxes_batch[num_img]
@@ -298,7 +300,8 @@ def write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sen
     with open(generated_sentences_txt_file, "w") as f:
         for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
             f.write(f"Generated sentence: {gen_sent}\n")
-            f.write(f"Reference sentence: {ref_sent}\n\n")
+            # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
+            f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
 
 def get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
@@ -372,14 +375,17 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
 
     # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
     # we only generate NUM_SENTENCES_TO_GENERATE sentences
-    num_batches_to_process = NUM_SENTENCES_TO_GENERATE // BATCH_SIZE
+    num_batches_to_process_for_sentence_generation = NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION // BATCH_SIZE
+
+    # we also want to plot a couple of images
+    num_batches_to_process_for_image_plotting = NUM_IMAGES_TO_PLOT // BATCH_SIZE
 
     with torch.no_grad():
-        for num_batch, batch in tqdm(enumerate(val_dl), total=num_batches_to_process):
-            if num_batch >= num_batches_to_process:
+        for num_batch, batch in tqdm(enumerate(val_dl), total=num_batches_to_process_for_sentence_generation):
+            if num_batch >= num_batches_to_process_for_sentence_generation:
                 break
 
-            images = batch["image"]  # shape [batch_size x 1 x 512 x 512]
+            images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
             image_targets = batch["image_targets"]
             region_is_abnormal = batch["region_is_abnormal"]  # boolean tensor of shape [batch_size x 36]
 
@@ -409,7 +415,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
                 region_is_abnormal,
             )
 
-            if num_batch == 0:
+            if num_batch < num_batches_to_process_for_image_plotting:
                 plot_detections_and_sentences_to_tensorboard(
                     writer,
                     overall_steps_taken,
@@ -420,7 +426,6 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
                     class_detected,
                     reference_sentences,
                     generated_sentences_for_selected_regions,
-                    num_images_to_plot=3,
                 )
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken)
@@ -715,11 +720,11 @@ def get_val_losses_and_other_metrics(model, val_dl):
 
     # compute the "micro" average scores for region_selection_scores
     for subset in region_selection_scores:
-        for metric, score in region_selection_scores[subset].values():
+        for metric, score in region_selection_scores[subset].items():
             region_selection_scores[subset][metric] = score.compute()[1].item()  # only report results for the positive class (hence [1])
 
     # compute the "micro" average scores for region_abnormal_scores
-    for metric, score in region_abnormal_scores.values():
+    for metric, score in region_abnormal_scores.items():
         region_abnormal_scores[metric] = score.compute()[1].item()
 
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
@@ -735,7 +740,7 @@ def log_stats_to_console(
     log.info(f"\tVal loss: {val_loss:.3f}")
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path):
     # set the model to evaluation mode
     model.eval()
 
@@ -754,7 +759,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, token
 
     language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path)
 
-    current_lr = lr_scheduler.get_last_lr()
+    current_lr = float(optimizer.param_groups[0]["lr"])
 
     write_all_losses_and_scores_to_tensorboard(
         writer,
@@ -895,7 +900,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
                 log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
 
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path)
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path)
 
                 log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
 
@@ -1056,7 +1061,7 @@ def get_datasets(config_file_path):
         "bbox_is_abnormal": literal_eval,
     }
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
+    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid"]}
 
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
@@ -1130,7 +1135,8 @@ def create_run_folder():
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
         "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
-        "NUM_SENTENCES_TO_GENERATE": NUM_SENTENCES_TO_GENERATE,
+        "NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION": NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION,
+        "NUM_IMAGES_TO_PLOT": NUM_IMAGES_TO_PLOT
     }
 
     with open(config_file_path, "w") as f:
@@ -1170,7 +1176,7 @@ def main():
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
-    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=0.05)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     log.info("\nStarting training!\n")
