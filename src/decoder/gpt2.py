@@ -228,7 +228,7 @@ class DecoderModel(nn.Module):
 
         # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
         self.feature_space_transformation_nn = nn.Sequential(
-            nn.Linear(in_features=1024, out_features=1024),
+            nn.Linear(in_features=2048, out_features=1024),
             nn.ReLU(),
             nn.Linear(in_features=1024, out_features=1024)
         )
@@ -665,7 +665,7 @@ def print_model_summary(batch_size, seq_len, verbose):
     inputs = {}
     inputs["input_ids"] = torch.randint(low=0, high=50257, size=(batch_size, seq_len))
     inputs["attention_mask"] = torch.randint(low=0, high=2, size=(batch_size, seq_len))
-    inputs["image_hidden_states"] = torch.rand(batch_size, 1024)
+    inputs["image_hidden_states"] = torch.rand(batch_size, 2048)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

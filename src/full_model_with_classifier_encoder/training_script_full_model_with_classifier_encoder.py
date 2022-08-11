@@ -36,13 +36,14 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 3
+RUN = 4
+RUN_COMMENT = "Run to train decoder that can handle input images with dim 2048. Only decoder weights are saved, such that it can be used in the full model."
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1
 PERCENTAGE_OF_VAL_SET_TO_USE = 1
 BATCH_SIZE = 16
 NUM_WORKERS = 12
 EPOCHS = 30
-LR = 1e-2
+LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 3500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 10  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 3  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
@@ -350,7 +351,7 @@ def train_model(
                     best_model_save_path = os.path.join(
                         weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth"
                     )
-                    best_model_state = deepcopy(model.state_dict())
+                    best_model_state = deepcopy(model.decoder.state_dict())
                 else:
                     num_evaluations_without_decrease_val_loss += 1
 
@@ -419,8 +420,8 @@ def get_transforms(dataset: str):
     mean = 0.471
     std = 0.302
 
-    # pre-trained DenseNet121 model expects images to be of size 224x224
-    IMAGE_INPUT_SIZE = 224
+    # pre-trained ResNet model expects images to be of size 512x512
+    IMAGE_INPUT_SIZE = 512
 
     # note: transforms are applied to the already cropped images (see __getitem__ method of CustomImageDataset class)!
 
@@ -560,6 +561,7 @@ def create_run_folder():
 
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
     config_parameters = {
+        "COMMENT": RUN_COMMENT,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
         "BATCH_SIZE": BATCH_SIZE,
@@ -612,7 +614,7 @@ def main():
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
-    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=0.05)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     log.info("\nStarting training!\n")

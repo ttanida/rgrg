@@ -14,12 +14,10 @@ class ReportGenerationModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.encoder = ClassificationModel(return_feature_vectors=True)
-        path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_2/val_loss_53.536_epoch_11.pth"
-        self.encoder.load_state_dict(torch.load(path_to_best_weights))
         self.decoder = DecoderModel()
 
     def forward(self,
-                images: torch.FloatTensor,  # images is of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
+                images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (gray-scale images of size 512 x 512)
                 input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
                 attention_mask: torch.FloatTensor,  # shape (batch_size x seq_len)
                 return_loss: bool = True,
@@ -27,7 +25,7 @@ class ReportGenerationModel(nn.Module):
                 position_ids: Optional[torch.LongTensor] = None,
                 use_cache: Optional[bool] = False
                 ):
-        image_features = self.encoder(images)  # image features of shape [batch_size, 1024]
+        image_features = self.encoder(images)  # image features of shape [batch_size, 2048]
 
         loss = self.decoder(
             input_ids,
@@ -43,7 +41,7 @@ class ReportGenerationModel(nn.Module):
 
     @torch.no_grad()
     def generate(self,
-                 images: torch.FloatTensor,  # images is of shape [batch_size, 1, 224, 224] (gray-scale images of size 224 x 224)
+                 images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (gray-scale images of size 512 x 512)
                  max_length: int = None,
                  num_beams: int = 1,
                  num_beam_groups: int = 1,
@@ -55,7 +53,7 @@ class ReportGenerationModel(nn.Module):
         Generates output ids for a batch of images.
         These output ids can then be decoded by the tokenizer to get the generated sentences.
         """
-        image_features = self.encoder(images)  # image features of shape [batch_size, 1024]
+        image_features = self.encoder(images)  # image features of shape [batch_size, 2048]
         output_ids = self.decoder.generate(
             image_features,
             max_length,
