@@ -2,7 +2,7 @@
 RUN = 1
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Train full model with ResNet object detector"""
-IMAGE_INPUT_SIZE = 224
+IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
 BATCH_SIZE = 2

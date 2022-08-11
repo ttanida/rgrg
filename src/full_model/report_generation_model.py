@@ -31,6 +31,12 @@ class ReportGenerationModel(nn.Module):
         path_to_best_detector_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
         self.language_model.load_state_dict(torch.load(path_to_best_detector_weights))
 
+        self.nn_for_modifying_region_features_dimension = nn.Sequential(
+            nn.Linear(in_features=2048, out_features=1024),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1024)
+        )
+
     def forward(
         self,
         images: torch.FloatTensor,  # images is of shape [batch_size x 1 x 512 x 512] (whole gray-scale images of size 512 x 512)
@@ -57,6 +63,8 @@ class ReportGenerationModel(nn.Module):
             # delete tensors that we don't need anymore to free up GPU resources
             del images
             del image_targets
+
+            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
             # during training, only get the two losses for the two binary classifiers
 
@@ -88,6 +96,8 @@ class ReportGenerationModel(nn.Module):
 
             del images
             del image_targets
+
+            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
             # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
             # (and that were also detected) and the corresponding region features (selected_region_features)
@@ -121,6 +131,10 @@ class ReportGenerationModel(nn.Module):
             position_ids,
             use_cache,
         )
+
+        del valid_input_ids
+        del valid_attention_mask
+        del valid_region_features
 
         if self.training:
             return obj_detector_loss_dict, classifier_loss_region_selection, classifier_loss_region_abnormal, language_model_loss
@@ -217,12 +231,16 @@ class ReportGenerationModel(nn.Module):
         # top_region_features of shape [batch_size, 36, 1024]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
+        top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+
         # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
         # (it has exactly num_regions_selected_in_batch True values)
         selected_regions, selected_region_features = self.binary_classifier_region_selection(
             top_region_features, class_detected, return_loss=False
         )
+
+        del top_region_features
 
         # TODO: handle case where selected_regions is False for all regions, i.e. torch.any(selected_regions) = False
         # because then selected_region_features would be an empty tensor
@@ -237,5 +255,7 @@ class ReportGenerationModel(nn.Module):
             num_return_sequences,
             early_stopping,
         )
+
+        del selected_region_features
 
         return output_ids, selected_regions, detections, class_detected

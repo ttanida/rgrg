@@ -50,11 +50,12 @@ class ObjectDetector(nn.Module):
 
         # use only the feature extractor of the pre-trained classification model
         # (i.e. use all children but the last 2, which are AdaptiveAvgPool2d and Linear)
-        self.backbone = xrv.models.DenseNet(weights="densenet121-res224-all").features
+        resnet = xrv.models.ResNet(weights="resnet50-res512-all")
+        self.backbone = nn.Sequential(*list(resnet.model.children())[:-2])
 
         # FasterRCNN needs to know the number of output channels of the backbone
         # for ResNet-50, it's 2048 (with feature maps of size 16x16)
-        self.backbone.out_channels = 1024
+        self.backbone.out_channels = 2048
 
         self.rpn = self._create_rpn()
         self.roi_heads = self._create_roi_heads()
@@ -71,8 +72,8 @@ class ObjectDetector(nn.Module):
 
         # since the input image size is 512 x 512, we choose the sizes accordingly
         anchor_generator = AnchorGenerator(
-            sizes=((10, 20, 30, 40, 50, 60, 70, 80, 90, 150),),
-            aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 8.0),),
+            sizes=((20, 40, 60, 80, 100, 120, 140, 160, 180, 300),),
+            aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 5.0, 8.0),),
             # sizes=((32, 64, 128, 256, 512),),
             # aspect_ratios=((0.5, 1.0, 2.0),),
         )
@@ -100,7 +101,7 @@ class ObjectDetector(nn.Module):
         # if the backbone returns a Tensor, featmap_names is expected to be [0]
         # (uniform) size of feature maps after roi pooling layer is defined in output_size
         # TODO: try different roi pool output sizes
-        roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=["0"], output_size=7, sampling_ratio=2)
+        roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=["0"], output_size=8, sampling_ratio=2)
 
         resolution = roi_pooler.output_size[0]
         representation_size = 1024
