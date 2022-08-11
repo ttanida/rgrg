@@ -40,7 +40,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 0
+RUN = 1
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Train full model with ResNet object detector"""
 IMAGE_INPUT_SIZE = 224
@@ -107,7 +107,7 @@ def update_region_set_text(region_set_text, color, reference_sentences_img, gene
     region_set_text += f"({color}):  \n"
     reference_sentence_region = reference_sentences_img[region_index]
     reference_sentence_region = transform_sentence_to_fit_under_image(reference_sentence_region)
-    region_set_text += f"  reference: {reference_sentence_region}\n"
+    region_set_text += f"  reference: {reference_sentence_region if reference_sentence_region != '#' else ''}\n"
 
     box_region_selected = selected_regions[num_img][region_index]
     if not box_region_selected:
@@ -179,7 +179,7 @@ def plot_detections_and_sentences_to_tensorboard(
             ax = plt.gca()
 
             plt.imshow(image, cmap="gray")
-            plt.axis("off")
+            plt.axis("on")
 
             region_indices = [ANATOMICAL_REGIONS[region] for region in region_set]
 
