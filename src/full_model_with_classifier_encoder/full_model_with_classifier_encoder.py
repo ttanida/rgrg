@@ -66,38 +66,3 @@ class ReportGenerationModel(nn.Module):
             early_stopping)
 
         return output_ids  # shape (batch_size x longest_generated_sequence_length)
-
-
-# from transformers import GPT2Tokenizer
-
-# checkpoint = "healx/gpt-2-pubmed-medium"
-
-# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-# tokenizer.pad_token_id = tokenizer.eos_token_id
-
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# model = ReportGenerationModel()
-# model.to(device)
-
-
-# greedy_output = model.generate(images=torch.rand(3, 1, 224, 224).to(device), max_length=30, num_beams=3, early_stopping=True)
-# decoded_output = tokenizer.batch_decode(greedy_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
-# for sent in decoded_output:
-#     print(len(sent), sent)
-
-# batch_size = 2
-# seq_len = 60
-
-# inputs = {}
-# inputs["images"] = torch.rand(batch_size, 1, 224, 224)
-# inputs["input_ids"] = torch.randint(low=0, high=50257, size=(batch_size, seq_len))
-# inputs["attention_mask"] = torch.randint(low=0, high=2, size=(batch_size, seq_len))
-
-# inputs = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}
-# inputs["return_loss"] = True
-
-# output = model(**inputs)
-# print(output)
-# print(output.shape)

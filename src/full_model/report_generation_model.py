@@ -21,7 +21,7 @@ class ReportGenerationModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.object_detector = ObjectDetector(return_feature_vectors=True)
-        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_3/weights/val_loss_35.577_epoch_1.pth"
+        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
