@@ -18,9 +18,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
-from custom_image_word_dataset_full_model import CustomImageWordDatasetFullModel
-from custom_collator_full_model_with_classifier_encoder import CustomCollatorWithPaddingFullModel
-from full_model_with_classifier_encoder import ReportGenerationModel
+from src.full_model_with_classifier_encoder.custom_image_word_dataset_full_model import CustomImageWordDatasetFullModel
+from src.full_model_with_classifier_encoder.custom_collator_full_model_with_classifier_encoder import CustomCollatorWithPaddingFullModel
+from src.full_model_with_classifier_encoder.full_model_with_classifier_encoder import ReportGenerationModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
