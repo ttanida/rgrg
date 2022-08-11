@@ -54,6 +54,7 @@ class ReportGenerationModel(nn.Module):
         if self.training:
             obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
 
+            # delete tensors that we don't need anymore to free up GPU resources
             del images
             del image_targets
 
@@ -222,6 +223,9 @@ class ReportGenerationModel(nn.Module):
         selected_regions, selected_region_features = self.binary_classifier_region_selection(
             top_region_features, class_detected, return_loss=False
         )
+
+        # TODO: handle case where selected_regions is False for all regions, i.e. torch.any(selected_regions) = False
+        # because then selected_region_features would be an empty tensor
 
         # output_ids of shape (num_regions_selected_in_batch x longest_generated_sequence_length)
         output_ids = self.language_model.generate(
