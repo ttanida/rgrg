@@ -13,20 +13,20 @@ class Conv1DWithTrainedWeights(nn.Module):
     Same functionality as Conv1D class of transformers.pytorch_utils but allows initialization with trained weights.
 
     Conv1D has the same functionality as a linear layer.
-    It transforms the inputted hidden_states from shape (batch x sequence_len x hidden_dim) to (batch x sequence_len x 3*hidden_dim),
+    It transforms the inputted hidden_states from shape [batch x sequence_len x hidden_dim] to [batch x sequence_len x 3*hidden_dim],
     thus allowing the retrieval of the query, key and value matrices
     """
 
     def __init__(self, trained_weight, trained_bias):
         super(Conv1DWithTrainedWeights, self).__init__()
-        self.weight = nn.Parameter(trained_weight, requires_grad=False)  # of shape (hidden_dim x 3*hidden_dim) for c_attn, of shape (hidden_dim x hidden_dim) for c_proj
-        self.bias = nn.Parameter(trained_bias, requires_grad=False)  # of shape (3 * hidden_dim) for c_attn, of shape (hidden_dim) for c_proj
+        self.weight = nn.Parameter(trained_weight, requires_grad=False)  # of shape [hidden_dim x 3*hidden_dim] for c_attn, of shape [hidden_dim x hidden_dim] for c_proj
+        self.bias = nn.Parameter(trained_bias, requires_grad=False)  # of shape [3 * hidden_dim] for c_attn, of shape [hidden_dim] for c_proj
 
-    def forward(self, x):  # x has shape (batch x sequence_len x hidden_dim)
+    def forward(self, x):  # x has shape [batch x sequence_len x hidden_dim]
         size_out = x.size()[:-1] + (self.weight.size(-1),)
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         x = x.view(size_out)
-        return x  # x has shape (batch x sequence_len x 3*hidden_dim) for c_attn, shape (batch x sequence_len x hidden_dim) for c_proj
+        return x  # x has shape [batch x sequence_len x 3*hidden_dim] for c_attn, shape [batch x sequence_len x hidden_dim] for c_proj
 
 
 class GPT2PseudoAttention(nn.Module):
@@ -82,7 +82,7 @@ class GPT2PseudoAttention(nn.Module):
         return tensor.permute(0, 2, 1, 3)  # (batch_size, num_heads, seq_len, head_dim)
 
     def _attn(self, query_word, key_image_word, value_image_word, attention_mask):
-        attn_weights = torch.matmul(query_word, key_image_word.transpose(-1, -2))  # shape (batch_size x num_heads x seq_len x 1+seq_len)
+        attn_weights = torch.matmul(query_word, key_image_word.transpose(-1, -2))  # shape [batch_size x num_heads x seq_len x 1+seq_len]
 
         # scale attention weights
         attn_weights = attn_weights / (value_image_word.size(-1) ** 0.5)
@@ -98,7 +98,7 @@ class GPT2PseudoAttention(nn.Module):
         # select the attention weights where the causal mask has True values, select -1e4 where the causal mask has False values
         attn_weights = torch.where(causal_mask, attn_weights, self.mask_out_value.to(attn_weights.dtype))
 
-        # apply the attention mask of shape (batch_size, 1, 1, 1+seq_len) for masking out padding tokens
+        # apply the attention mask of shape [batch_size, 1, 1, 1+seq_len] for masking out padding tokens
         # there is an additional column of zeros for the attention weights corresponding to the image,
         # such that these are not masked out
         attn_weights = attn_weights + attention_mask
@@ -109,7 +109,7 @@ class GPT2PseudoAttention(nn.Module):
         attn_weights = attn_weights.type(value_image_word.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
-        attn_output = torch.matmul(attn_weights, value_image_word)  # shape (batch_size x num_heads x seq_len x head_dim)
+        attn_output = torch.matmul(attn_weights, value_image_word)  # shape [batch_size x num_heads x seq_len x head_dim]
 
         return attn_output
 
@@ -122,23 +122,23 @@ class GPT2PseudoAttention(nn.Module):
         return tensor.view(new_shape)
 
     def forward(self,
-                word_hidden_states,  # shape (batch_size x seq_len x hidden_dim)
-                image_hidden_states,  # shape (batch_size x hidden_dim)
-                attention_mask,  # shape (batch_size, 1, 1, 1+seq_len)
+                word_hidden_states,  # shape [batch_size x seq_len x hidden_dim]
+                image_hidden_states,  # shape [batch_size x hidden_dim]
+                attention_mask,  # shape [batch_size, 1, 1, 1+seq_len]
                 layer_past,
                 use_cache):
 
-        # query, key, value matrices each have shape (batch_size x seq_len x hidden_dim)
+        # query, key, value matrices each have shape [batch_size x seq_len x hidden_dim]
         q_word, k_word, v_word = self.c_attn(word_hidden_states).split(self.split_size, dim=2)
 
         # if layer_past is None, we are either training the model or generating the first token in text generation mode
         if layer_past is None:
             # add an addition dimension to the image_hidden_states
-            image_hidden_states = image_hidden_states[:, None, :]  # shape (batch_size x 1 x hidden_dim)
+            image_hidden_states = image_hidden_states[:, None, :]  # shape [batch_size x 1 x hidden_dim]
 
             # get the key and value matrices for the image hidden states
-            k_image = self.uk(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
-            v_image = self.uv(image_hidden_states)  # shape (batch_size x 1 x hidden_dim)
+            k_image = self.uk(image_hidden_states)  # shape [batch_size x 1 x hidden_dim]
+            v_image = self.uv(image_hidden_states)  # shape [batch_size x 1 x hidden_dim]
 
             # if the batch_size is different, then we are in beam search generation mode (adjust k and v image matrices accordingly)
             if k_image.size(0) != k_word.size(0):
@@ -146,24 +146,24 @@ class GPT2PseudoAttention(nn.Module):
                 k_image = k_image.repeat_interleave(num_beams, dim=0)
                 v_image = v_image.repeat_interleave(num_beams, dim=0)
 
-            k_image_word = torch.cat((k_image, k_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
-            v_image_word = torch.cat((v_image, v_word), dim=1)  # shape (batch_size x 1+seq_len x hidden_dim)
+            k_image_word = torch.cat((k_image, k_word), dim=1)  # shape [batch_size x 1+seq_len x hidden_dim]
+            v_image_word = torch.cat((v_image, v_word), dim=1)  # shape [batch_size x 1+seq_len x hidden_dim]
 
-            q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x seq_len x head_dim)
-            k_image_word = self._split_heads(k_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
-            v_image_word = self._split_heads(v_image_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1+seq_len x head_dim)
+            q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape [batch_size x num_heads x seq_len x head_dim]
+            k_image_word = self._split_heads(k_image_word, self.num_heads, self.head_dim)  # shape [batch_size x num_heads x 1+seq_len x head_dim]
+            v_image_word = self._split_heads(v_image_word, self.num_heads, self.head_dim)  # shape [batch_size x num_heads x 1+seq_len x head_dim]
 
             if use_cache is True:
                 present = (k_image_word, v_image_word)
             else:
                 present = None
 
-            attn_output = self._attn(q_word, k_image_word, v_image_word, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
+            attn_output = self._attn(q_word, k_image_word, v_image_word, attention_mask)  # shape [batch_size x num_heads x seq_len x head_dim]
         else:
             # if there is a layer_past (which stores key and value tensors of past tokens), then this means we are in text generation mode
-            q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
-            k_word = self._split_heads(k_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
-            v_word = self._split_heads(v_word, self.num_heads, self.head_dim)  # shape (batch_size x num_heads x 1 x head_dim)
+            q_word = self._split_heads(q_word, self.num_heads, self.head_dim)  # shape [batch_size x num_heads x 1 x head_dim]
+            k_word = self._split_heads(k_word, self.num_heads, self.head_dim)  # shape [batch_size x num_heads x 1 x head_dim]
+            v_word = self._split_heads(v_word, self.num_heads, self.head_dim)  # shape [batch_size x num_heads x 1 x head_dim]
 
             past_key, past_value = layer_past
             k = torch.cat((past_key, k_word), dim=-2)
@@ -171,11 +171,11 @@ class GPT2PseudoAttention(nn.Module):
 
             present = (k, v)
 
-            attn_output = self._attn(q_word, k, v, attention_mask)  # shape (batch_size x num_heads x seq_len x head_dim)
+            attn_output = self._attn(q_word, k, v, attention_mask)  # shape [batch_size x num_heads x seq_len x head_dim]
 
-        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)  # shape (batch_size x seq_len x hidden_dim)
+        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)  # shape [batch_size x seq_len x hidden_dim]
         attn_output = self.c_proj(attn_output)
-        attn_output = self.resid_dropout(attn_output)  # shape (batch_size x seq_len x hidden_dim)
+        attn_output = self.resid_dropout(attn_output)  # shape [batch_size x seq_len x hidden_dim]
 
         return attn_output, present
 
@@ -256,9 +256,9 @@ class DecoderModel(nn.Module):
             self.gpt_with_lm_head.transformer.h[i].attn = GPT2PSA
 
     def forward(self,
-                input_ids: torch.LongTensor,  # shape (batch_size x seq_len)
-                attention_mask: torch.FloatTensor,  # shape (batch_size x seq_len)
-                image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim) (with image_hidden_dim = 1024, so same as word_hidden_dim)
+                input_ids: torch.LongTensor,  # shape [batch_size x seq_len]
+                attention_mask: torch.FloatTensor,  # shape [batch_size x seq_len]
+                image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim] (with image_hidden_dim = 2048)
                 return_loss: bool = False,
                 past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
                 position_ids: Optional[torch.LongTensor] = None,
@@ -281,7 +281,7 @@ class DecoderModel(nn.Module):
         mask_to_ignore_padding_tokens_for_loss_computation = ~(attention_mask.to(torch.bool))
 
         # transform image_hidden_states from image feature space to text feature space
-        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape (batch_size x word_hidden_dim)
+        image_hidden_states = self.feature_space_transformation_nn(image_hidden_states)  # shape [batch_size x word_hidden_dim], with word_hidden_dim = 1024
 
         # from now, word_hidden_dim will just be called hidden_dim
 
@@ -290,7 +290,7 @@ class DecoderModel(nn.Module):
         batch_size = input_ids.shape[0]
 
         # pass the token ids through the word embedding layer to get the word embeddings
-        inputs_embeds = self.wte(input_ids)  # shape (batch_size x seq_len x hidden_dim)
+        inputs_embeds = self.wte(input_ids)  # shape [batch_size x seq_len x hidden_dim]
 
         # position_ids is a tensor that specifies the position of each token in the input (necessary to create positional embeddings)
         if position_ids is not None:
@@ -303,20 +303,20 @@ class DecoderModel(nn.Module):
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=self.device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])  # shape (1 x seq_len)
+            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])  # shape [1 x seq_len]
 
         # pass the position ids through the positional embedding layer to get the positional embeddings
-        position_embeds = self.wte(position_ids)  # shape (1 x seq_len x hidden_dim)
+        position_embeds = self.wte(position_ids)  # shape [1 x seq_len x hidden_dim]
 
         # addition is broadcasted around batch_size dimension
-        word_hidden_states = inputs_embeds + position_embeds  # shape (batch_size x seq_len x hidden_dim)
+        word_hidden_states = inputs_embeds + position_embeds  # shape [batch_size x seq_len x hidden_dim]
 
         word_hidden_states = self.drop(word_hidden_states)
 
         output_shape = input_shape + (word_hidden_states.size(-1),)
 
-        # we change the attention_mask shape to (batch_size, 1, 1, seq_len), since the attention_mask is later applied to the last dimension of
-        # the attention weights that are of shape (batch_size x num_heads x seq_len x 1+seq_len)
+        # we change the attention_mask shape to [batch_size, 1, 1, seq_len], since the attention_mask is later applied to the last dimension of
+        # the attention weights that are of shape [batch_size x num_heads x seq_len x 1+seq_len]
         attention_mask = attention_mask.view(batch_size, -1)
         attention_mask = attention_mask[:, None, None, :]
 
@@ -324,8 +324,8 @@ class DecoderModel(nn.Module):
         # of the image hidden states (see forward method of GPT2PseudoAttention), we have to shift the attention mask "one to the right" and add a column of ones
         # to the left such that the attention weights corresponding to the image are not masked out
         attention_mask_size = attention_mask.size()
-        ones_column = torch.ones(attention_mask_size[:-1] + (1,), dtype=torch.int64, device=self.device)  # shape (batch_size, 1, 1, 1)
-        attention_mask = torch.cat((ones_column, attention_mask), dim=-1)  # shape (batch_size, 1, 1, 1+seq_len)
+        ones_column = torch.ones(attention_mask_size[:-1] + (1,), dtype=torch.int64, device=self.device)  # shape [batch_size, 1, 1, 1]
+        attention_mask = torch.cat((ones_column, attention_mask), dim=-1)  # shape [batch_size, 1, 1, 1+seq_len]
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -365,7 +365,7 @@ class DecoderModel(nn.Module):
 
         word_hidden_states = word_hidden_states.view(output_shape)
 
-        lm_logits = self.lm_head(word_hidden_states)  # shape (batch_size x seq_len x vocab_size), with vocab_size = 50257
+        lm_logits = self.lm_head(word_hidden_states)  # shape [batch_size x seq_len x vocab_size], with vocab_size = 50257
 
         if return_loss:
             # use input_ids as ground_truth labels
@@ -382,14 +382,14 @@ class DecoderModel(nn.Module):
             # since the previous token should predict the next token
 
             # discard the last lm_logit corresponding to the last token
-            shift_logits = lm_logits[:, :-1, :].contiguous()  # shape (batch_size x seq_len-1 x vocab_size)
+            shift_logits = lm_logits[:, :-1, :].contiguous()  # shape [batch_size x seq_len-1 x vocab_size]
 
             # discard the first token in the sequence
-            shift_labels = labels[:, 1:].contiguous()  # shape (batch_size x seq_len-1)
+            shift_labels = labels[:, 1:].contiguous()  # shape [batch_size x seq_len-1]
 
             # flatten the tokens
-            shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # shape (batch_size*seq_len-1 x vocab_size)
-            shift_labels = shift_labels.view(-1)  # shape (batch_size * seq_len-1)
+            shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # shape [batch_size*seq_len-1 x vocab_size]
+            shift_labels = shift_labels.view(-1)  # shape [batch_size * seq_len-1]
 
             # padding tokens are ignored for loss computation, and loss is averaged over non-ignored targets
             loss_fct = CrossEntropyLoss(ignore_index=-100)
@@ -402,14 +402,14 @@ class DecoderModel(nn.Module):
 
     @torch.no_grad()
     def generate(self,
-                 image_hidden_states: torch.FloatTensor,  # shape (batch_size x image_hidden_dim)
+                 image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim]
                  max_length: int = None,
                  num_beams: int = 1,
                  num_beam_groups: int = 1,
                  do_sample: bool = False,
                  num_return_sequences: int = 1,
                  early_stopping: bool = False
-                 ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
+                 ) -> torch.LongTensor:  # shape [batch_size x longest_generated_sequence_length]
         """
         Generates output ids for a batch of image features.
         These output ids can then be decoded by the tokenizer to get the generated sentences.
@@ -610,11 +610,11 @@ class DecoderModel(nn.Module):
         return sequence_outputs["sequences"]
 
     def greedy_search(self,
-                      input_ids,  # shape (batch_size x seq_len)
-                      image_hidden_states,  # shape (batch_size x image_hidden_dim)
+                      input_ids,  # shape [batch_size x seq_len]
+                      image_hidden_states,  # shape [batch_size x image_hidden_dim]
                       max_length,
                       **model_kwargs
-                      ) -> torch.LongTensor:  # shape (batch_size x longest_generated_sequence_length)
+                      ) -> torch.LongTensor:  # shape [batch_size x longest_generated_sequence_length]
         batch_size = input_ids.size(0)
         seq_len = input_ids.size(1)
 
@@ -629,10 +629,10 @@ class DecoderModel(nn.Module):
 
             lm_logits, presents = self.forward(**model_inputs, image_hidden_states=image_hidden_states, return_loss=False)
 
-            next_token_logits = lm_logits[:, -1, :]  # of shape (batch_size x vocab_size)
+            next_token_logits = lm_logits[:, -1, :]  # of shape [batch_size x vocab_size]
 
             # no need to convert logits into probabilities first (via softmax), argmax can be directly applied to logits
-            next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape (batch_size)
+            next_tokens = torch.argmax(next_token_logits, dim=-1)  # of shape [batch_size]
 
             # convert next token to padding token if given sentence has already finished (denoted by a 0 in unfinished_sequences)
             # padding tokens are ignored when decoding, if skip_special_tokens=True is set
@@ -678,97 +678,3 @@ def print_model_summary(batch_size, seq_len, verbose):
         summary(model)
     else:
         summary(model, input_data=dict(inputs), verbose=verbose)
-
-
-# batch_size = 32
-# seq_len = 60
-# print_model_summary(batch_size, seq_len, verbose=1)
-
-# TODO: Implement generate function for DecoderModel
-
-# from transformers import GPT2Tokenizer
-
-# checkpoint = "healx/gpt-2-pubmed-medium"
-# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-# tokenizer.pad_token_id = tokenizer.eos_token_id
-
-# # use a batch of 3 phrases
-# raw_inputs = [
-#     "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
-#     "<|endoftext|>I like this!<|endoftext|>",
-#     "<|endoftext|><|endoftext|>"]
-
-# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-# print(inputs)
-
-# # add a batch of 3 image hidden states
-# inputs["image_hidden_states"] = torch.rand(3, 1024)
-
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# model = DecoderModel()
-# model.to(device)
-# inputs = {k: v.to(device) for k, v in inputs.items()}
-
-# loss, lm_logits = model(**inputs, return_loss=True)
-# print(loss)
-# print(lm_logits)
-# print(lm_logits.shape)
-
-#############################################
-#############################################
-#############################################
-
-# from transformers import GPT2Tokenizer, GPT2LMHeadModel
-#
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#
-# checkpoint = "healx/gpt-2-pubmed-medium"
-#
-# tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-# tokenizer.pad_token_id = tokenizer.eos_token_id
-#
-# # model = GPT2LMHeadModel.from_pretrained(checkpoint)
-# model = DecoderModel()
-# model.to(device)
-
-# raw_inputs = [
-#     "<|endoftext|>I've been waiting my whole life.<|endoftext|>",
-#     "<|endoftext|>I like this!<|endoftext|>",
-#     "<|endoftext|><|endoftext|>"]
-# raw_inputs = ["<|endoftext|>The new drugs are"]
-# raw_inputs = [
-#     "<|endoftext|>",
-#     "<|endoftext|>"]
-
-# inputs = tokenizer(raw_inputs, padding="longest", truncation=True, max_length=1024, return_tensors="pt")
-# input_ids = inputs["input_ids"].to(device)
-# attention_mask = inputs["attention_mask"].to(device)
-# model(**inputs, image_hidden_states=image_hidden_states, return_loss=True)
-# print(input_ids)
-
-# greedy_output = model.generate(inputs=input_ids, pad_token_id=tokenizer.eos_token_id, max_length=30, num_beams=3, early_stopping=True)
-# greedy_output = model.generate(image_hidden_states=torch.rand(2, 1024).to(device), max_length=30, num_beams=3, early_stopping=True)
-# decoded_output = tokenizer.batch_decode(greedy_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-#
-# for sent in decoded_output:
-#     print(len(sent), sent)
-#
-#
-
-# blue_scores = {f"bleu_score_{i}": evaluate.load("bleu") for i in range(1, 5)}
-
-# predictions = [["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"], ["hello there general kenobi", "foo bar foobar"]]
-# references = [[["hello there general yoda"], ["boo bar foobar"]], [["hello there yoda"], ["boo bar"]], [["hello yoda"], ["boo foobar"]]]
-# predictions = [["hello there general kenobi"], ["hello there general kenobi"]]
-# references = [[["hello there general yoda"]], [["hello there captain yoda"]]]
-# predictions = [["hello there general kenobi"]]
-# references = [[["hello there general yoda"]]]
-
-# for prediction, reference in zip(predictions, references):
-#     for blue_score in blue_scores.values():
-#         blue_score.add_batch(predictions=prediction, references=reference)
-
-# for blue_score_name, blue_score in blue_scores.items():
-#     result = blue_score.compute(max_order=int(blue_score_name[-1]))
-#     print(f"{blue_score_name}: {result['bleu']}")
