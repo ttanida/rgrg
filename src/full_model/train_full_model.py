@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from src.full_model.custom_collator import CustomCollator
 from src.full_model.custom_dataset import CustomDataset
-from src.full_model.evaluate_full_model import evaluate_model
+from src.full_model.evaluate_full_model.evaluate_model import evaluate_model
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.run_configurations import (
     RUN,
