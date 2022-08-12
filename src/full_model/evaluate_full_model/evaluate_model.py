@@ -8,7 +8,7 @@ The K is specified by the EVALUATE_EVERY_K_STEPS variable in run_configurations.
 
 evaluate_model and its sub-functions evaluate among other things:
 
-    - total val loss as well as the val losses of each individual module
+    - total val loss as well as the val losses of each individual module (i.e. model component)
     - object detector:
         - average IoU of region (ideally 1.0 for every region)
         - average num detected regions per image (ideally 36.0)

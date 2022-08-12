@@ -75,6 +75,10 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
         Number of epochs to train for.
     weights_folder_path: str
         Path to folder where best weights will be saved.
+    tokenizer: transformers.GPT2Tokenizer
+        Used for decoding the generated ids into tokens in evaluate_model (more specifically evaluate_language_model)
+    generated_sentences_folder_path:
+        Path to folder where generated sentences will be saved as a txt file.
     writer: torch.utils.tensorboard.SummaryWriter
         Writer for logging values to tensorboard.
 
@@ -162,6 +166,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
                 log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
 
+                # evaluate the model and write the scores (among other things) to tensorboard
                 evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log)
 
                 log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
@@ -218,7 +223,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
 
 
 def get_transforms(dataset: str):
-    # see compute_mean_std_dataset.py in src/dataset_bounding_boxes
+    # see compute_mean_std_dataset.py in src/dataset
     mean = 0.471
     std = 0.302
 

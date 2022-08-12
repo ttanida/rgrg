@@ -3,15 +3,16 @@ This module contains all functions used to evaluate the language model.
 
 The (main) function evaluate_language_model of this module is called by the function evaluate_model in evaluate_model.py.
 
-evaluate_language_model returns language_model_scores which include the BLEU 1-4 and BertScore for all generated sentences,
-generated sentences with gt = normal (i.e. the region was considered normal by the radiologist) and generated sentences with gt = abnormal
-(i.e. the region was considered abnormal by the radiologist).
+evaluate_language_model returns language_model_scores which include:
+    - the BLEU 1-4 and BertScore for all generated sentences
+    - the BLEU 1-4 and BertScore for all generated sentences with gt = normal (i.e. the region was considered normal by the radiologist)
+    - the BLEU 1-4 and BertScore for all generated sentences with gt = abnormal (i.e. the region was considered abnormal by the radiologist).
 
 It also calls subfunctions which:
     - save NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated sentences as a txt file
     (for manual verification what the model generates)
-    - save NUM_IMAGES_TO_PLOT (see run_configurations.py) images to tensorboard where gt and predicted bboxes for every region
-        are depicted, as well as the generated sentences (if they exist) and reference sentences for every region
+    - save NUM_IMAGES_TO_PLOT (see run_configurations.py) images to tensorboard where gt and predicted bboxes for every region are depicted,
+    as well as the generated sentences (if they exist) and reference sentences for every region
 """
 import os
 
@@ -34,9 +35,52 @@ from src.full_model.run_configurations import (
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def get_plot_title(region_set, region_indices, region_colors, class_detected_img):
-    # region_set always contains 6 region names
+def compute_final_language_model_scores(language_model_scores):
+    for subset in language_model_scores:
+        temp = {}
+        for metric, score in language_model_scores[subset].items():
+            if metric.startswith("bleu"):
+                result = score.compute(max_order=int(metric[-1]))
+                temp[f"{metric}"] = result["bleu"]
+            else:  # bert_score
+                result = score.compute(lang="en", device=device)
+                avg_precision = np.array(result["precision"]).mean()
+                avg_recall = np.array(result["recall"]).mean()
+                avg_f1 = np.array(result["f1"]).mean()
 
+                temp["bertscore_precision"] = avg_precision
+                temp["bertscore_recall"] = avg_recall
+                temp["bertscore_f1"] = avg_f1
+
+        language_model_scores[subset] = temp
+
+
+def write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken):
+    generated_sentences_txt_file = os.path.join(generated_sentences_folder_path, f"generated_sentences_step_{overall_steps_taken}")
+
+    # generated_sentences is a list of str
+    generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
+
+    # reference_sentences is a list of str
+    reference_sentences = gen_and_ref_sentences_to_save_to_file["reference_sentences"]
+
+    with open(generated_sentences_txt_file, "w") as f:
+        for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
+            f.write(f"Generated sentence: {gen_sent}\n")
+            # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
+            f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
+
+
+def get_plot_title(region_set, region_indices, region_colors, class_detected_img) -> str:
+    """
+    Get a plot title like in the below example.
+    1 region_set always contains 6 regions.
+    The characters in the brackets represent the colors of the corresponding bboxes (e.g. b = blue),
+    "nd" stands for "not detected" in case the region was not detected by the object detector.
+
+    right lung (b), right costophrenic angle (g, nd), left lung (r)
+    left costophrenic angle (c), cardiac silhouette (m), spine (y, nd)
+    """
     # get a list of 6 boolean values that specify if that region was detected
     class_detected = [class_detected_img[region_index] for region_index in region_indices]
 
@@ -48,22 +92,78 @@ def get_plot_title(region_set, region_indices, region_colors, class_detected_img
     return ", ".join(region_set[:3]) + "\n" + ", ".join(region_set[3:])
 
 
-def get_generated_sentence_for_region(generated_sentences_for_selected_regions, selected_regions, num_img, region_index):
-    index = 0
-    for num in range(num_img):
-        index += torch.sum(selected_regions[num, :]).item()
+def get_generated_sentence_for_region(generated_sentences_for_selected_regions, selected_regions, num_img, region_index) -> str:
+    """
+    Args:
+        generated_sentences_for_selected_regions (List[str]): holds the generated sentences for all regions that were selected in the batch, i.e. of length "num_regions_selected_in_batch"
+        selected_regions (Tensor[bool]): of shape [batch_size x 36], specifies for each region if it was selected to get a sentences generated (True) or not by the binary classifier for region selection.
+        Ergo has exactly "num_regions_selected_in_batch" True values.
+        num_img (int): specifies the image we are currently processing in the batch, its value is in the range [0, batch_size-1]
+        region_index (int): specifies the region we are currently processing of a single image, its value is in the range [0, 35]
 
-    index += torch.sum(selected_regions[num_img, :region_index]).item()
+    Returns:
+        str: generated sentence for region specified by num_img and region_index
+
+    Implementation is not too easy to understand, so here is a toy example to explain.
+
+    generated_sentences_for_selected_regions = ["Heart is ok.", "Spine is ok."]
+    selected_regions = [
+        [False, False, True],
+        [True, False, False]
+    ]
+    num_img = 0
+    region_index = 2
+
+    In this toy example, the batch_size = 2 and there are only 3 regions in total for simplicity (instead of the 36).
+    The generated_sentences_for_selected_regions is of len 2, meaning num_regions_selected_in_batch = 2.
+    Therefore, the selected_regions boolean tensor also has exactly 2 True values.
+
+    (1) Flatten selected_regions:
+        selected_regions_flat = [False, False, True, True, False, False]
+
+    (2) Compute cumsum (to get an incrementation each time there is a True value):
+        cum_sum_true_values = [0, 0, 1, 2, 2, 2]
+
+    (3) Reshape cum_sum_true_values to shape of selected_regions
+        cum_sum_true_values = [
+            [0, 0, 1],
+            [2, 2, 2]
+        ]
+
+    (4) Subtract 1 from tensor, such that 1st True value in selected_regions has the index value 0 in cum_sum_true_values
+        cum_sum_true_values = [
+            [-1, -1, 0],
+            [1, 1, 1]
+        ]
+
+    (5) Index cum_sum_true_values with num_img and region_index to get the final index for the generated sentence list
+        index = cum_sum_true_values[num_img][region_index] = cum_sum_true_values[0][2] = 0
+
+    (6) Get generated sentence:
+        generated_sentences_for_selected_regions[index] = "Heart is ok."
+    """
+    selected_regions_flat = selected_regions.reshape(-1)
+    cum_sum_true_values = torch.cumsum(selected_regions_flat, dim=0)
+
+    cum_sum_true_values = cum_sum_true_values.reshape(selected_regions.shape)
+    cum_sum_true_values -= 1
+
+    index = cum_sum_true_values[num_img][region_index]
 
     return generated_sentences_for_selected_regions[index]
 
 
-def transform_sentence_to_fit_under_image(ref_sent_region):
+def transform_sentence_to_fit_under_image(sentence):
+    """
+    Adds line breaks and whitespaces such that long reference or generated sentence
+    fits under the plotted image.
+    Values like max_line_length and prefix_for_alignment were found by trial-and-error.
+    """
     max_line_length = 50
-    if len(ref_sent_region) < max_line_length:
-        return ref_sent_region
+    if len(sentence) < max_line_length:
+        return sentence
 
-    words = ref_sent_region.split()
+    words = sentence.split()
     transformed_sent = ""
     current_line_length = 0
     prefix_for_alignment = "\n" + " " * 20
@@ -79,9 +179,34 @@ def transform_sentence_to_fit_under_image(ref_sent_region):
 
 
 def update_region_set_text(region_set_text, color, reference_sentences_img, generated_sentences_for_selected_regions, region_index, selected_regions, num_img):
-    region_set_text += f"({color}):  \n"
+    """
+    Create a single string region_set_text like in the example below.
+    Each update creates 1 paragraph for 1 region/bbox.
+    The (b), (r) and (y) represent the colors of the bounding boxes (in this case blue, red and yellow).
+
+    Example:
+
+    (b):
+      reference: Normal cardiomediastinal silhouette, hila, and pleura.
+      generated: The mediastinal and hilar contours are unremarkable.
+
+    (r):
+      reference:
+      generated: [REGION NOT SELECTED]
+
+    (y):
+      reference:
+      generated: There is no pleural effusion or pneumothorax.
+
+    (... continues for 3 more regions/bboxes, for a total of 6 per region_set)
+    """
+    region_set_text += f"({color}):\n"
     reference_sentence_region = reference_sentences_img[region_index]
+
+    # in case sentence is too long
     reference_sentence_region = transform_sentence_to_fit_under_image(reference_sentence_region)
+
+    # replace empty reference sentences (symbolized by #) by an empty string
     region_set_text += f"  reference: {reference_sentence_region if reference_sentence_region != '#' else ''}\n"
 
     box_region_selected = selected_regions[num_img][region_index]
@@ -141,12 +266,13 @@ def plot_detections_and_sentences_to_tensorboard(
     # put channel dimension (1st dim) last (0-th dim is batch-dim)
     images = images.numpy().transpose(0, 2, 3, 1)
 
+    selected_regions = selected_regions.detach().cpu()
+
     for num_img, image in enumerate(images):
 
         gt_boxes_img = gt_boxes_batch[num_img]
         pred_boxes_img = pred_boxes_batch[num_img]
         class_detected_img = class_detected[num_img].tolist()
-        selected_regions = selected_regions.detach().cpu()
         reference_sentences_img = reference_sentences[num_img]
 
         for num_region_set, region_set in enumerate(regions_sets):
@@ -161,6 +287,7 @@ def plot_detections_and_sentences_to_tensorboard(
             region_set_text = ""
 
             for region_index, color in zip(region_indices, region_colors):
+                # box_gt and box_pred are both [List[float]] of len 4
                 box_gt = gt_boxes_img[region_index].tolist()
                 box_pred = pred_boxes_img[region_index].tolist()
                 box_region_detected = class_detected_img[region_index]
@@ -183,65 +310,29 @@ def plot_detections_and_sentences_to_tensorboard(
             writer.add_figure(f"img_{num_img}_region_set_{num_region_set}", fig, overall_steps_taken)
 
 
-def compute_final_language_model_scores(language_model_scores):
-    for subset in language_model_scores:
-        temp = {}
-        for metric, score in language_model_scores[subset].items():
-            if metric.startswith("bleu"):
-                result = score.compute(max_order=int(metric[-1]))
-                temp[f"{metric}"] = result["bleu"]
-            else:  # bert_score
-                result = score.compute(lang="en", device=device)
-                avg_precision = np.array(result["precision"]).mean()
-                avg_recall = np.array(result["recall"]).mean()
-                avg_f1 = np.array(result["f1"]).mean()
-
-                temp["bertscore_precision"] = avg_precision
-                temp["bertscore_recall"] = avg_recall
-                temp["bertscore_f1"] = avg_f1
-
-        language_model_scores[subset] = temp
-
-
-def write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken):
-    generated_sentences_txt_file = os.path.join(generated_sentences_folder_path, f"generated_sentences_step_{overall_steps_taken}")
-
-    # generated_sentences is a list of str
-    generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
-
-    # reference_sentences is a list of str
-    reference_sentences = gen_and_ref_sentences_to_save_to_file["reference_sentences"]
-
-    with open(generated_sentences_txt_file, "w") as f:
-        for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
-            f.write(f"Generated sentence: {gen_sent}\n")
-            # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
-            f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
-
-
-def get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
-    # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
-    selected_region_is_abnormal = region_is_abnormal[selected_regions]
-    selected_region_is_abnormal = selected_region_is_abnormal.detach().cpu().numpy()
-
-    generated_sentences_for_selected_regions = np.asarray(generated_sentences_for_selected_regions)
-    reference_sentences_for_selected_regions = np.asarray(reference_sentences_for_selected_regions)
-
-    gen_sents_for_normal_selected_regions = generated_sentences_for_selected_regions[~selected_region_is_abnormal].tolist()
-    gen_sents_for_abnormal_selected_regions = generated_sentences_for_selected_regions[selected_region_is_abnormal].tolist()
-
-    ref_sents_for_normal_selected_regions = reference_sentences_for_selected_regions[~selected_region_is_abnormal].tolist()
-    ref_sents_for_abnormal_selected_regions = reference_sentences_for_selected_regions[selected_region_is_abnormal].tolist()
-
-    return (
-        gen_sents_for_normal_selected_regions,
-        gen_sents_for_abnormal_selected_regions,
-        ref_sents_for_normal_selected_regions,
-        ref_sents_for_abnormal_selected_regions,
-    )
-
-
 def update_language_model_scores(language_model_scores, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
+    def get_sents_for_normal_abnormal_selected_regions():
+        selected_region_is_abnormal = region_is_abnormal[selected_regions]
+        # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
+
+        selected_region_is_abnormal = selected_region_is_abnormal.detach().cpu().numpy()
+
+        gen_sents_for_selected_regions = np.asarray(generated_sentences_for_selected_regions)
+        ref_sents_for_selected_regions = np.asarray(reference_sentences_for_selected_regions)
+
+        gen_sents_for_normal_selected_regions = gen_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
+        gen_sents_for_abnormal_selected_regions = gen_sents_for_selected_regions[selected_region_is_abnormal].tolist()
+
+        ref_sents_for_normal_selected_regions = ref_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
+        ref_sents_for_abnormal_selected_regions = ref_sents_for_selected_regions[selected_region_is_abnormal].tolist()
+
+        return (
+            gen_sents_for_normal_selected_regions,
+            gen_sents_for_abnormal_selected_regions,
+            ref_sents_for_normal_selected_regions,
+            ref_sents_for_abnormal_selected_regions,
+        )
+
     for score in language_model_scores["all"].values():
         score.add_batch(predictions=generated_sentences_for_selected_regions, references=reference_sentences_for_selected_regions)
 
@@ -251,7 +342,7 @@ def update_language_model_scores(language_model_scores, generated_sentences_for_
         gen_sents_for_abnormal_selected_regions,
         ref_sents_for_normal_selected_regions,
         ref_sents_for_abnormal_selected_regions,
-    ) = get_sents_for_normal_abnormal_selected_regions(generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal)
+    ) = get_sents_for_normal_abnormal_selected_regions()
 
     if len(ref_sents_for_normal_selected_regions) != 0:
         for score in language_model_scores["normal"].values():
@@ -315,7 +406,8 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
             generated_sentences_for_selected_regions = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
             # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
-            # reference_sentences_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
+            # reference_sentences_for_selected_regions will therefore be a List[str] of length "num_regions_selected_in_batch"
+            # (i.e. same length as generated_sentences_for_selected_regions)
             reference_sentences_for_selected_regions = get_ref_sentences_for_selected_regions(reference_sentences, selected_regions)
 
             if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
