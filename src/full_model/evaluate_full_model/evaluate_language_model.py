@@ -104,7 +104,7 @@ def get_generated_sentence_for_region(generated_sentences_for_selected_regions, 
     Returns:
         str: generated sentence for region specified by num_img and region_index
 
-    Implementation is not too easy to understand, so here is a toy example to explain.
+    Implementation is not too easy to understand, so here is a toy example with some toy values to explain.
 
     generated_sentences_for_selected_regions = ["Heart is ok.", "Spine is ok."]
     selected_regions = [
@@ -130,7 +130,8 @@ def get_generated_sentence_for_region(generated_sentences_for_selected_regions, 
             [2, 2, 2]
         ]
 
-    (4) Subtract 1 from tensor, such that 1st True value in selected_regions has the index value 0 in cum_sum_true_values
+    (4) Subtract 1 from tensor, such that 1st True value in selected_regions has the index value 0 in cum_sum_true_values,
+        the 2nd True value has index value 1 and so on.
         cum_sum_true_values = [
             [-1, -1, 0],
             [1, 1, 1]
