@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from src.encoder.classification_model import ClassificationModel
-from src.decoder.gpt2 import DecoderModel
+from src.language_model.language_model import LanguageModel
 
 
 class ReportGenerationModel(nn.Module):
@@ -14,7 +14,7 @@ class ReportGenerationModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.encoder = ClassificationModel(return_feature_vectors=True)
-        self.decoder = DecoderModel()
+        self.decoder = LanguageModel()
 
     def forward(self,
                 images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (gray-scale images of size 512 x 512)

@@ -15,9 +15,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
-from custom_collator import CustomCollatorWithPadding
-from custom_image_word_dataset import CustomImageWordDataset
-from gpt2 import DecoderModel
+from src.language_model.custom_collator import CustomCollatorWithPadding
+from src.language_model.custom_image_word_dataset import CustomImageWordDataset
+from src.language_model.language_model import LanguageModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -511,7 +511,7 @@ def main():
 
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    model = DecoderModel()
+    model = LanguageModel()
     model.to(device, non_blocking=True)
     model.train()
 

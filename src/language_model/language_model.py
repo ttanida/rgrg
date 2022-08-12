@@ -180,7 +180,7 @@ class GPT2PseudoAttention(nn.Module):
         return attn_output, present
 
 
-class DecoderModel(nn.Module):
+class LanguageModel(nn.Module):
     """
     GPT2 model with a language modeling head and pseudo self-attention.
 
@@ -669,7 +669,7 @@ def print_model_summary(batch_size, seq_len, verbose):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = DecoderModel()
+    model = LanguageModel()
     model.to(device, non_blocking=True)
 
     inputs = {k: v.to(device, non_blocking=True) for k, v in inputs.items()}

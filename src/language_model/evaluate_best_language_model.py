@@ -9,9 +9,9 @@ from torch.utils.data import DataLoader
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
-from gpt2 import DecoderModel
-from custom_image_word_dataset import CustomImageWordDataset
-from custom_collator import CustomCollatorWithPadding
+from src.language_model.language_model import LanguageModel
+from src.language_model.custom_image_word_dataset import CustomImageWordDataset
+from src.language_model.custom_collator import CustomCollatorWithPadding
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 path_to_best_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
@@ -281,7 +281,7 @@ def get_datasets_with_phrases_and_is_abnormal():
 
 
 def main():
-    model = DecoderModel()
+    model = LanguageModel()
     model.load_state_dict(torch.load(path_to_best_weights))
     model.eval()
     model.to(device, non_blocking=True)

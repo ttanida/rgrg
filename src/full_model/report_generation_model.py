@@ -6,7 +6,7 @@ import torch.nn as nn
 from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
 from src.binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
 from src.object_detector.object_detector import ObjectDetector
-from src.decoder.gpt2 import DecoderModel
+from src.language_model.language_model import LanguageModel
 
 
 class ReportGenerationModel(nn.Module):
@@ -27,9 +27,9 @@ class ReportGenerationModel(nn.Module):
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
-        self.language_model = DecoderModel()
-        path_to_best_detector_weights = "/u/home/tanida/runs/full_model_with_classification_encoder/run_4/weights/..."
-        self.language_model.load_state_dict(torch.load(path_to_best_detector_weights))
+        self.language_model = LanguageModel()
+        path_to_best_language_model_weights = "/u/home/tanida/runs/full_model_with_classification_encoder/run_4/weights/..."
+        self.language_model.load_state_dict(torch.load(path_to_best_language_model_weights))
 
         # self.nn_for_modifying_region_features_dimension = nn.Sequential(
         #     nn.Linear(in_features=2048, out_features=1024),
