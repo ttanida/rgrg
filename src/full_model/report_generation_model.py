@@ -28,14 +28,14 @@ class ReportGenerationModel(nn.Module):
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
         self.language_model = DecoderModel()
-        path_to_best_detector_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
+        path_to_best_detector_weights = "/u/home/tanida/runs/full_model_with_classification_encoder/run_4/weights/..."
         self.language_model.load_state_dict(torch.load(path_to_best_detector_weights))
 
-        self.nn_for_modifying_region_features_dimension = nn.Sequential(
-            nn.Linear(in_features=2048, out_features=1024),
-            nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=1024)
-        )
+        # self.nn_for_modifying_region_features_dimension = nn.Sequential(
+        #     nn.Linear(in_features=2048, out_features=1024),
+        #     nn.ReLU(),
+        #     nn.Linear(in_features=1024, out_features=1024)
+        # )
 
     def forward(
         self,
@@ -64,7 +64,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+            # top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
             # during training, only get the two losses for the two binary classifiers
 
@@ -84,11 +84,12 @@ class ReportGenerationModel(nn.Module):
                 class_detected, region_has_sentence, input_ids, attention_mask, top_region_features
             )
 
-            del class_detected
+            del top_region_features
             del region_has_sentence
+            del region_is_abnormal
+            del class_detected
             del input_ids
             del attention_mask
-            del top_region_features
 
         else:
             # during evaluation, also return detections (i.e. detected bboxes)
@@ -97,7 +98,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+            # top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
             # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
             # (and that were also detected) and the corresponding region features (selected_region_features)
@@ -211,7 +212,7 @@ class ReportGenerationModel(nn.Module):
         """
         In inference mode, we usually input 1 image (with 36 regions) at a time.
 
-        The object detector first find the region features for all 36 regions.
+        The object detector first finds the region features for all 36 regions.
 
         The binary classifier takes the region_features of shape [batch_size=1, 36, 1024] and returns:
             - selected_region_features: shape [num_regions_selected_in_batch, 1024],
@@ -231,7 +232,7 @@ class ReportGenerationModel(nn.Module):
         # top_region_features of shape [batch_size, 36, 1024]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
-        top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+        # top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
         # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
