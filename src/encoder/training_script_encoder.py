@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from classification_model import ClassificationModel
 from custom_image_dataset import CustomImageDataset
-from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
+from src.dataset.constants import ANATOMICAL_REGIONS
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"We use: {device}")

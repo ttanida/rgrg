@@ -1,6 +1,26 @@
 """
-Script creates train.csv, valid.csv and test.csv for the full model.
+Script for creating custom train, valid, test csv files.
+
+Each row in the csv files specifies information about a single bbox (i.e. single anatomical region) of a single image.
+
+These dataset csv files were used to train classifiers and classifiers + language models early on in the master thesis to evaluate the performance
+of the language model, since it would later be an integral part of the full model (the classifier was used to extract features of the bboxes,
+which were used to train the language model).
+
+The specific information of each row are:
+    - subject_id: id of the patient whose image is used
+    - study_id: id of the study of that patient (since a patient can have several studies done to document the progression of a disease etc.)
+    - image_id: id of the single image
+    - mimic_image_file_path: file path to the jpg of the single image on the workstation
+    - bbox_name: name of one of the anatomical region that is specified by the row
+    - x1 / y1 / x2 / y2 : bbox coordinates of said anatomical region in the single image
+    - is_abnormal: boolean variable that specifies if anatomical region is abnormal.
+    The value of the variable (True/False) is derived from the report corresponding to the single image (see determine_if_abnormal function).
+
+The custom train, valid, test csv files contain the bbox information of the images specified in the train, valid, test csv files of the
+chest-imagenome-dataset-1.0.0/silver_dataset/splits/ folder.
 """
+
 import csv
 import json
 import logging
@@ -10,9 +30,9 @@ import re
 import imagesize
 from tqdm import tqdm
 
-from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
+from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_full_dataset = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -27,13 +47,13 @@ NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
-    new_csv_file_path = os.path.join(path_to_full_dataset, dataset)
+    new_csv_file_path = os.path.join(path_to_chest_imagenome_customized, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
 
-        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
+        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
@@ -194,7 +214,7 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     return phrases
 
 
-def get_attributes_dict(image_scene_graph: dict) -> dict[tuple]:
+def get_attributes_dict(image_scene_graph: dict) -> dict[list]:
     attributes_dict = {}
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
@@ -206,7 +226,7 @@ def get_attributes_dict(image_scene_graph: dict) -> dict[tuple]:
         phrases = convert_phrases_to_single_string(attribute["phrases"])
         is_abnormal = determine_if_abnormal(attribute["attributes"])
 
-        attributes_dict[bbox_name] = (phrases, is_abnormal)
+        attributes_dict[bbox_name] = [phrases, is_abnormal]
 
     return attributes_dict
 
@@ -227,13 +247,15 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
         path_csv_file (str): path to one of the csv files in the folder silver_dataset/splits of the chest-imagenome-dataset
 
     Returns:
-        new_rows (list[list]): inner list contains information about a single image:
+        new_rows (list[list]): inner list contains information about a single bbox:
             - subject_id
             - study_id
             - image_id
             - file path to image in mimic-cxr-jpg dataset on workstation
-            - bbox coordinates as a list of lists, where each inner list contains 4 bbox coordinates
-            - labels as a list, with class labels for each ground-truth box
+            - bbox_name
+            - bbox coordinates
+            - phrases describing region inside bbox (if those phrases exist, else None)
+            - is_abnormal, boolean variable specifying if region inside bbox is normal or abnormal
     """
     new_rows = []
     index = 0
@@ -285,32 +307,23 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
             width, height = imagesize.get(mimic_image_file_path)
 
-            new_image_row = [index, subject_id, study_id, image_id, mimic_image_file_path]
-            bbox_coordinates = []
-            bbox_labels = []
-            bbox_phrases = []
-            bbox_phrase_exist_vars = []
-            bbox_is_abnormal_vars = []
-
-            # counter to make sure that all 36 regions are processed in for loop
-            num_regions = 0
-
             # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
 
-                # get the bbox coordinates for the region
+                # filter out regions with empty sentences
+                if not anatomical_region_attributes.get(bbox_name, False):
+                    continue
+
                 x1 = anatomical_region["original_x1"]
                 y1 = anatomical_region["original_y1"]
                 x2 = anatomical_region["original_x2"]
                 y2 = anatomical_region["original_y2"]
 
-                # check if any bbox coordinates are faulty (of all 36 regions)
-                # if there is at least 1 region with faulty bbox coordinates, then break out of loop
-                # this will ensure that num_regions counter will not reach 36, and thus:
-                # -> only images with correct bbox coordinates for all 36 regions will be added to dataset
+                # check if bbox coordinates are faulty
+                # if so, skip the anatomical region/bbox
                 if coordinates_faulty(height, width, x1, y1, x2, y2):
-                    break
+                    continue
 
                 # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
                 # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
@@ -320,32 +333,18 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 x2 = check_coordinate(x2, width)
                 y2 = check_coordinate(y2, height)
 
-                bbox_coords = [x1, y1, x2, y2]
+                new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2]
 
-                # since background has class label 0 for object detection, shift the remaining class labels by 1
-                class_label = ANATOMICAL_REGIONS[bbox_name] + 1
+                # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
+                # if there is no phrase, then the region inside bbox is normal and the new_row is extended with "" for phrases (empty phrase) and False for is_abnormal
+                new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False]))
 
-                # get bbox_phrase (describing the region inside bbox) and bbox_is_abnormal boolean variable (indicating if region inside bbox is abnormal)
-                # if there is no phrase, then the region inside bbox is normal and thus has "" for bbox_phrase (empty phrase) and False for bbox_is_abnormal
-                bbox_phrase, bbox_is_abnormal = anatomical_region_attributes.get(bbox_name, ("", False))
-                bbox_phrase_exist = True if bbox_phrase != "" else False
+                new_rows.append(new_row)
 
-                bbox_coordinates.append(bbox_coords)
-                bbox_labels.append(class_label)
-                bbox_phrases.append(bbox_phrase)
-                bbox_phrase_exist_vars.append(bbox_phrase_exist)
-                bbox_is_abnormal_vars.append(bbox_is_abnormal)
-
-                num_regions += 1
-
-            if num_regions == 36:
-                # only add image information to dataset if information of all 36 regions is included
-                new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
-                new_rows.append(new_image_row)
                 index += 1
 
-            if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
-                return new_rows
+                if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
+                    return new_rows
 
     return new_rows
 
@@ -354,7 +353,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
     log.info(f"Creating new {dataset}.csv file...")
 
     # get rows to create new csv_file
-    # new_rows is a list of lists, where an inner list specifies all information about a single image
+    # new_rows is a list of lists, where an inner list specifies all information about a single bbox of a single image
     new_rows = get_rows(path_csv_file, image_ids_to_avoid)
 
     # write those rows into a new csv file
@@ -363,13 +362,13 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
-def create_new_dataframes(csv_files_dict, image_ids_to_avoid):
-    if os.path.exists(path_to_full_dataset):
-        log.error(f"Full dataset folder already exists at {path_to_full_dataset}.")
+def create_new_csv_files(csv_files_dict, image_ids_to_avoid):
+    if os.path.exists(path_to_chest_imagenome_customized):
+        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
         log.error("Delete dataset folder before running script to create new folder!")
         return None
 
-    os.mkdir(path_to_full_dataset)
+    os.mkdir(path_to_chest_imagenome_customized)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file, image_ids_to_avoid)
 
@@ -406,7 +405,7 @@ def main():
     # from model training and validation
     image_ids_to_avoid = get_images_to_avoid()
 
-    create_new_dataframes(csv_files_dict, image_ids_to_avoid)
+    create_new_csv_files(csv_files_dict, image_ids_to_avoid)
 
 
 if __name__ == "__main__":

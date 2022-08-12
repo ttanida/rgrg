@@ -19,7 +19,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
+from src.dataset.constants import ANATOMICAL_REGIONS
 from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
 from src.object_detector.object_detector import ObjectDetector
 

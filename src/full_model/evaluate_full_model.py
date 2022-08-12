@@ -36,7 +36,7 @@ import torch
 import torchmetrics
 from tqdm import tqdm
 
-from src.dataset_bounding_boxes.constants import ANATOMICAL_REGIONS
+from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.run_configurations import (
     BATCH_SIZE,
     NUM_BEAMS,
