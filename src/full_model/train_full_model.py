@@ -33,6 +33,7 @@ from src.full_model.run_configurations import (
     LR,
     EVALUATE_EVERY_K_STEPS,
     PATIENCE_LR_SCHEDULER,
+    THRESHOLD_LR_SCHEDULER,
     NUM_BEAMS,
     MAX_NUM_TOKENS_GENERATE,
     NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
@@ -399,6 +400,7 @@ def create_run_folder():
         "LR": LR,
         "EVALUATE_EVERY_K_STEPS": EVALUATE_EVERY_K_STEPS,
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
+        "THRESHOLD_LR_SCHEDULER": THRESHOLD_LR_SCHEDULER,
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
         "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
@@ -443,7 +445,7 @@ def main():
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
-    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=0.05)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     log.info("\nStarting training!\n")
