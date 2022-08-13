@@ -16,4 +16,4 @@ NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 6  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION = 300  # for evaluation of BLEU/BERTScore
-NUM_IMAGES_TO_PLOT = 4
+NUM_IMAGES_TO_PLOT = 6

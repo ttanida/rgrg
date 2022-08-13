@@ -236,6 +236,7 @@ def plot_box(box, ax, clr, linestyle, region_detected=True):
 
 def plot_detections_and_sentences_to_tensorboard(
     writer,
+    num_batch,
     overall_steps_taken,
     images,
     image_targets,
@@ -321,7 +322,8 @@ def plot_detections_and_sentences_to_tensorboard(
             im = Image.open(buf)
             im = np.asarray(im)[..., :3]
 
-            writer.add_image(f"img_{num_img}_region_set_{num_region_set}", im, global_step=overall_steps_taken, dataformats="HWC")
+            writer_image_num = num_batch * BATCH_SIZE + num_img
+            writer.add_image(f"img_{writer_image_num}_region_set_{num_region_set}", im, global_step=overall_steps_taken, dataformats="HWC")
 
 
 def update_language_model_scores(language_model_scores, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
@@ -439,6 +441,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
             if num_batch < num_batches_to_process_for_image_plotting:
                 plot_detections_and_sentences_to_tensorboard(
                     writer,
+                    num_batch,
                     overall_steps_taken,
                     images,
                     image_targets,
