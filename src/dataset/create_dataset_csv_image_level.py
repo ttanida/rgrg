@@ -27,6 +27,7 @@ import os
 import re
 
 import imagesize
+import spacy
 from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
@@ -117,17 +118,19 @@ def determine_if_abnormal(attributes_list: list[list]) -> bool:
     return False
 
 
-def convert_phrases_to_single_string(phrases: list[str]) -> str:
+def convert_phrases_to_single_string(phrases: list[str], sentence_tokenizer) -> str:
     """
     Takes a list of phrases describing the region of a single bbox and returns a single string.
 
     Also performs operations to clean the single string, such as:
         - removes irrelevant substrings (like "PORTABLE UPRIGHT AP VIEW OF THE CHEST:")
         - removes whitespace characters (e.g. \n or \t) and redundant whitespaces
+        - capitalizes the first word in each sentence
         - removes duplicate sentences
 
     Args:
         phrases (list[str]): in the attribute dictionary, phrases is originally a list of strings
+        sentence_tokenizer (spacy sentence tokenizer): used in capitalize_first_word_in_sentence function
 
     Returns:
         phrases (str): a single string, with the list of strings concatenated
@@ -164,27 +167,16 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
         return phrases
 
     def remove_whitespace(phrases):
-        """Remove white space and capitalize words that come after a period."""
-        # new_phrases collects all words
-        new_phrases = ""
+        phrases = " ".join(phrases.split())
+        return phrases
 
-        # set the previous word as a period, such that the first word in new_phrases is capitalized
-        prev_word = "."
+    def capitalize_first_word_in_sentence(phrases, sentence_tokenizer):
+        sentences = sentence_tokenizer(phrases).sents
 
-        for word in phrases.split():
-            if prev_word[-1] == ".":
-                new_phrases += (word[0].upper() + word[1:])  # capitalize the word
-            else:
-                new_phrases += word
+        # capitalize the first letter of each sentence
+        phrases = " ".join(sent.text[0].upper() + sent.text[1:] for sent in sentences)
 
-            # add a space for the next word
-            new_phrases += " "
-
-            # set current word as previous word for the next word
-            prev_word = word
-
-        # remove the trailing whitespace
-        return new_phrases.rstrip()
+        return phrases
 
     def remove_duplicate_sentences(phrases):
         # remove the last period
@@ -208,12 +200,15 @@ def convert_phrases_to_single_string(phrases: list[str]) -> str:
     # remove all whitespace characters (multiple whitespaces, newlines, tabs etc.)
     phrases = remove_whitespace(phrases)
 
+    # for consistency, capitalize the 1st word in each sentence
+    phrases = capitalize_first_word_in_sentence(phrases, sentence_tokenizer)
+
     phrases = remove_duplicate_sentences(phrases)
 
     return phrases
 
 
-def get_attributes_dict(image_scene_graph: dict) -> dict[tuple]:
+def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[tuple]:
     attributes_dict = {}
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
@@ -222,7 +217,7 @@ def get_attributes_dict(image_scene_graph: dict) -> dict[tuple]:
         if bbox_name not in ANATOMICAL_REGIONS:
             continue
 
-        phrases = convert_phrases_to_single_string(attribute["phrases"])
+        phrases = convert_phrases_to_single_string(attribute["phrases"], sentence_tokenizer)
         is_abnormal = determine_if_abnormal(attribute["attributes"])
 
         attributes_dict[bbox_name] = (phrases, is_abnormal)
@@ -258,6 +253,9 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
     index = 0
 
     total_num_rows = get_total_num_rows(path_csv_file)
+
+    # used in function convert_phrases_to_single_string
+    sentence_tokenizer = spacy.load("en_core_web_trf")
 
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
@@ -300,7 +298,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
             # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
-            anatomical_region_attributes = get_attributes_dict(image_scene_graph)
+            anatomical_region_attributes = get_attributes_dict(image_scene_graph, sentence_tokenizer)
 
             width, height = imagesize.get(mimic_image_file_path)
 
