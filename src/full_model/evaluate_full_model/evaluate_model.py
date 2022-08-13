@@ -335,23 +335,26 @@ def get_val_losses_and_other_metrics(model, val_dl):
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
+            output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+
+            # if something went wrong in the forward pass (see forward method for details)
+            if output == -1:
+                continue
+            else:
+                (
+                    obj_detector_loss_dict,
+                    classifier_loss_region_selection,
+                    classifier_loss_region_abnormal,
+                    language_model_loss,
+                    detections,
+                    class_detected,  # bool tensor of shape [batch_size x 36]
+                    selected_regions,  # bool tensor of shape [batch_size x 36]
+                    predicted_abnormal_regions,  # bool tensor of shape [batch_size x 36]
+                ) = output
+
             # detections is a dict with keys "top_region_boxes" and "top_scores"
             # "top_region_boxes" maps to a tensor of shape [batch_size x 36 x 4]
             # "top_scores" maps to a tensor of shape [batch_size x 36]
-            #
-            # class_detected is a tensor of shape [batch_size x 36]
-            # selected_regions is a tensor of shape [batch_size x 36]
-            # predicted_abnormal_regions is a tensor of shape [batch_size x 36]
-            (
-                obj_detector_loss_dict,
-                classifier_loss_region_selection,
-                classifier_loss_region_abnormal,
-                language_model_loss,
-                detections,
-                class_detected,
-                selected_regions,
-                predicted_abnormal_regions,
-            ) = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
             # sum up all 4 losses from the object detector
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())

@@ -128,12 +128,19 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
-            (
-                obj_detector_loss_dict,
-                classifier_loss_region_selection,
-                classifier_loss_region_abnormal,
-                language_model_loss,
-            ) = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+
+            # if something went wrong in the forward pass (see forward method for details)
+            if output == -1:
+                optimizer.zero_grad()
+                continue
+            else:
+                (
+                    obj_detector_loss_dict,
+                    classifier_loss_region_selection,
+                    classifier_loss_region_abnormal,
+                    language_model_loss,
+                ) = output
 
             # sum up all 4 losses from the object detector
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
