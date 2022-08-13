@@ -1,7 +1,7 @@
 # define configurations for training run
-RUN = 1
+RUN = 2
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train full model with ResNet object detector and newly trained decoder that can handle input dimension 2048"""
+RUN_COMMENT = """Train full model with ResNet object detector and decoder that can only handle 1024 input dimension. Therefore use nn_for_modifying_region_features_dimension to bridge the gap."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2

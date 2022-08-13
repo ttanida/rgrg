@@ -28,14 +28,15 @@ class ReportGenerationModel(nn.Module):
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
         self.language_model = LanguageModel()
-        path_to_best_language_model_weights = "/u/home/tanida/runs/full_model_with_classification_encoder/run_4/weights/val_loss_24.705_epoch_3.pth"
+        # path_to_best_language_model_weights = "/u/home/tanida/runs/full_model_with_classification_encoder/run_4/weights/val_loss_24.705_epoch_3.pth"
+        path_to_best_language_model_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
         self.language_model.load_state_dict(torch.load(path_to_best_language_model_weights))
 
-        # self.nn_for_modifying_region_features_dimension = nn.Sequential(
-        #     nn.Linear(in_features=2048, out_features=1024),
-        #     nn.ReLU(),
-        #     nn.Linear(in_features=1024, out_features=1024)
-        # )
+        self.nn_for_modifying_region_features_dimension = nn.Sequential(
+            nn.Linear(in_features=2048, out_features=1024),
+            nn.ReLU(),
+            nn.Linear(in_features=1024, out_features=1024)
+        )
 
     def forward(
         self,
@@ -64,7 +65,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            # top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
             # during training, only get the two losses for the two binary classifiers
 
@@ -98,7 +99,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            # top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
             # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
             # (and that were also detected) and the corresponding region features (selected_region_features)
@@ -245,7 +246,7 @@ class ReportGenerationModel(nn.Module):
         # top_region_features of shape [batch_size, 36, 1024]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
-        # top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+        top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
         # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
