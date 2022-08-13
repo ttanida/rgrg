@@ -14,11 +14,13 @@ It also calls subfunctions which:
     - save NUM_IMAGES_TO_PLOT (see run_configurations.py) images to tensorboard where gt and predicted bboxes for every region are depicted,
     as well as the generated sentences (if they exist) and reference sentences for every region
 """
+import io
 import os
 
 import evaluate
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 import torch
 from tqdm import tqdm
 
@@ -160,7 +162,7 @@ def transform_sentence_to_fit_under_image(sentence):
     fits under the plotted image.
     Values like max_line_length and prefix_for_alignment were found by trial-and-error.
     """
-    max_line_length = 50
+    max_line_length = 60
     if len(sentence) < max_line_length:
         return sentence
 
@@ -308,7 +310,18 @@ def plot_detections_and_sentences_to_tensorboard(
 
             plt.xlabel(region_set_text, loc="left")
 
-            writer.add_figure(f"img_{num_img}_region_set_{num_region_set}", fig, overall_steps_taken)
+            # using writer.add_figure does not correctly display the region_set_text in tensorboard
+            # so instead, fig is first saved as a png file to memory via BytesIO
+            # (this also saves the region_set_text correctly in the png when bbox_inches="tight" is set)
+            # then the png is loaded from memory and the 4th channel (alpha channel) is discarded
+            # finally, writer.add_image is used to display the image in tensorboard
+            buf = io.BytesIO()
+            fig.savefig(buf, bbox_inches="tight")
+            buf.seek(0)
+            im = Image.open(buf)
+            im = np.asarray(im)[..., :3]
+
+            writer.add_image(f"img_{num_img}_region_set_{num_region_set}", im, global_step=overall_steps_taken, dataformats="HWC")
 
 
 def update_language_model_scores(language_model_scores, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions, selected_regions, region_is_abnormal):
