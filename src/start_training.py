@@ -21,18 +21,7 @@ while free_memory < 45000:
     gpus = GPUtil.getGPUs()
     free_memory = gpus[0].memoryFree
 
-variable_size = 128
-try:
-    while free_memory < 45000:
-        x = torch.rand(1024, 1024, variable_size, device=device)
-        variable_size += 128
-
-        gpus = GPUtil.getGPUs()
-        free_memory = gpus[0].memoryFree
-except Exception:
-    variable_size -= 128
-    x = torch.rand(1024, 1024, variable_size, device=device)
-
+x = torch.rand(1024, 1024, 1024 * 11, device=device)
 del x
 
 main()
