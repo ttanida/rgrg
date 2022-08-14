@@ -1,7 +1,7 @@
 # define configurations for training run
-RUN = 2
+RUN = 3
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train full model with ResNet object detector and decoder that can only handle 1024 input dimension. Therefore use nn_for_modifying_region_features_dimension to bridge the gap."""
+RUN_COMMENT = """Redo run 2 because of early stopping due to OOM error."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
