@@ -22,17 +22,17 @@ NORMALITY_POOL_SIZE = 5
 
 path_normality_pool_csv = f"/u/home/tanida/datasets/normality-pool/normality-pool-{NORMALITY_POOL_SIZE}.csv"
 path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_.../..."
-path_to_parent_folder = f"/u/home/tanida/normality_pool_size_{NORMALITY_POOL_SIZE}_image_features"
+path_to_parent_folder = "/u/home/tanida/normality_pool_image_features"
 
 
 def save_normality_image_features(model, normality_dl_for_every_region):
-    os.mkdir(path_to_parent_folder)
+    region_normality_image_features = []
+    file_saving_path = os.path.join(path_to_parent_folder, f"normality_image_features_pool_size_{NORMALITY_POOL_SIZE}")
 
-    for region, region_dl in normality_dl_for_every_region:
-        file_saving_path = os.path.join(path_to_parent_folder, f"normality_image_features_{region}")
+    for region_dl in normality_dl_for_every_region.values():
 
-        size_of_overall_tensor = (NORMALITY_POOL_SIZE, IMAGE_HIDDEN_DIM)
-        image_features = torch.empty(size=size_of_overall_tensor, dtype=torch.float32, device=torch.device("cpu"))
+        size_of_region_tensor = (NORMALITY_POOL_SIZE, IMAGE_HIDDEN_DIM)
+        image_features = torch.empty(size=size_of_region_tensor, dtype=torch.float32, device=torch.device("cpu"))
 
         with torch.no_grad():
             for i, batch in tqdm(enumerate(region_dl)):
@@ -47,8 +47,14 @@ def save_normality_image_features(model, normality_dl_for_every_region):
                     print(f"Number of samples in last batch: {last_batch_size}")
                     image_features[i * BATCH_SIZE: i * BATCH_SIZE + last_batch_size] = batch_image_features
 
-        print(f"Saving image feature tensor of shape {image_features.shape}")
-        torch.save(image_features, file_saving_path)
+        print(f"Appending image feature tensor of shape {image_features.shape} to list")
+        region_normality_image_features.append(image_features)
+
+    # shape [36 x NORMALITY_POOL_SIZE x 2048]
+    region_normality_image_features = torch.stack(region_normality_image_features, dim=0)
+
+    print(f"Saving normality_image_features of shape {region_normality_image_features.shape}")
+    torch.save(region_normality_image_features, file_saving_path)
 
 
 def create_dataloader(normality_dataset_for_every_region):

@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
 from src.binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
+from src.constrastive_attention.constrastive_attention import ConstrastiveAttention
 from src.object_detector.object_detector import ObjectDetector
 from src.language_model.language_model import LanguageModel
 
@@ -23,6 +24,8 @@ class ReportGenerationModel(nn.Module):
         self.object_detector = ObjectDetector(return_feature_vectors=True)
         path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
+
+        self.constrastive_attention = ConstrastiveAttention()
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
@@ -64,6 +67,8 @@ class ReportGenerationModel(nn.Module):
             # delete tensors that we don't need anymore to free up GPU resources
             del images
             del image_targets
+
+            top_region_features = self.constrastive_attention(top_region_features)
 
             top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
 
