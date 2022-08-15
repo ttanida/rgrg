@@ -28,12 +28,11 @@ import os
 import re
 
 import imagesize
-import spacy
 from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-only-non-empty-ref-phrases"
+path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-10%-of-full-dataset"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -42,7 +41,7 @@ log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
 # if constant is None, then all possible rows are created
-NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
+NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 600000
 
 
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
@@ -54,7 +53,7 @@ def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
 
-        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
+        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2"]
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
@@ -207,7 +206,7 @@ def convert_phrases_to_single_string(phrases: list[str], sentence_tokenizer) -> 
     return phrases
 
 
-def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[list]:
+def get_attributes_dict(image_scene_graph: dict) -> dict[list]:
     attributes_dict = {}
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
@@ -216,10 +215,10 @@ def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[lis
         if bbox_name not in ANATOMICAL_REGIONS:
             continue
 
-        phrases = convert_phrases_to_single_string(attribute["phrases"], sentence_tokenizer)
+        # phrases = convert_phrases_to_single_string(attribute["phrases"], sentence_tokenizer)
         is_abnormal = determine_if_abnormal(attribute["attributes"])
 
-        attributes_dict[bbox_name] = [phrases, is_abnormal]
+        attributes_dict[bbox_name] = [is_abnormal]
 
     return attributes_dict
 
@@ -255,9 +254,6 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
     total_num_rows = get_total_num_rows(path_csv_file)
 
-    # used in function convert_phrases_to_single_string
-    sentence_tokenizer = spacy.load("en_core_web_trf")
-
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
 
@@ -292,23 +288,14 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             with open(chest_imagenome_scene_graph_file_path) as fp:
                 image_scene_graph = json.load(fp)
 
-            # get the attributes specified for the specific image in its image_scene_graph
-            # the attributes contain (among other things) phrases used in the reference report used to describe different bbox regions and
-            # information whether a described bbox region is normal or abnormal
-            #
-            # anatomical_region_attributes is a dict with bbox_names as keys and lists that contain 2 elements as values. The 2 list elements are:
-            # 1. (normalized) phrases, which is a single string that contains the phrases used to describe the region inside the bbox
-            # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
-            anatomical_region_attributes = get_attributes_dict(image_scene_graph, sentence_tokenizer)
-
             width, height = imagesize.get(mimic_image_file_path)
 
             # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
 
-                # filter out regions with empty sentences
-                if not anatomical_region_attributes.get(bbox_name, False):
+                # ignore bbox_names such as "left chest wall" or "right breast" that don't appear in the 36 anatomical regions that have bbox coordiantes
+                if bbox_name not in ANATOMICAL_REGIONS:
                     continue
 
                 x1 = anatomical_region["original_x1"]
@@ -330,10 +317,6 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 y2 = check_coordinate(y2, height)
 
                 new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2]
-
-                # add phrases (describing the region inside bbox) and is_abnormal boolean variable (indicating if region inside bbox is abnormal) to new_row
-                # if there is no phrase, then the region inside bbox is normal and the new_row is extended with "" for phrases (empty phrase) and False for is_abnormal
-                new_row.extend(anatomical_region_attributes.get(bbox_name, ["", False]))
 
                 new_rows.append(new_row)
 
@@ -390,7 +373,7 @@ def get_images_to_avoid():
 def get_train_val_test_csv_files():
     """Return a dict with datasets as keys and paths to the corresponding csv files in the chest-imagenome dataset as values"""
     path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
-    return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
+    return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid"]}
 
 
 def main():
