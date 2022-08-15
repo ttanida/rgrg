@@ -22,10 +22,12 @@ NORMALITY_POOL_SIZE = 5
 
 path_normality_pool_csv = f"/u/home/tanida/datasets/normality-pool/normality-pool-{NORMALITY_POOL_SIZE}.csv"
 path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_.../..."
-path_to_parent_folder = "/u/home/tanida/normality_pool_image_features"
+path_to_parent_folder = f"/u/home/tanida/normality_pool_size_{NORMALITY_POOL_SIZE}_image_features"
 
 
 def save_normality_image_features(model, normality_dl_for_every_region):
+    os.mkdir(path_to_parent_folder)
+
     for region, region_dl in normality_dl_for_every_region:
         file_saving_path = os.path.join(path_to_parent_folder, f"normality_image_features_{region}")
 
