@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
 # normality pool size per region
-NORMALITY_POOL_SIZE = 1000
+NORMALITY_POOL_SIZE = 5
 
 
 def write_rows_in_new_csv_file(new_rows: dict[list[list]]) -> None:
@@ -200,13 +200,6 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
 
 def create_normality_pool_csv_file(path_train_csv: str, image_ids_to_avoid: set) -> None:
-    if os.path.exists(path_to_normality_pool_folder):
-        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_normality_pool_folder}.")
-        log.error("Delete dataset folder before running script to create new folder!")
-        return None
-
-    os.mkdir(path_to_normality_pool_folder)
-
     # get rows to create normality pool csv file
     new_rows = get_rows(path_train_csv, image_ids_to_avoid)
 
