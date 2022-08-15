@@ -39,7 +39,7 @@ RUN = 3
 RUN_COMMENT = """Train ResNet-50 classification model only on classifying regions (i.e. not on classifying normal/abnormal). As dataset use chest-imagenome-dataset-customized-10%-of-full-dataset"""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
 BATCH_SIZE = 64
 NUM_WORKERS = 12
 EPOCHS = 20
@@ -220,7 +220,7 @@ def train_model(
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
 
-                val_stats = evaluate_model(model, val_dl, lr_scheduler, epoch)
+                val_stats = evaluate_model(model, val_dl)
 
                 write_scores_to_tensorboard(writer, train_loss, val_stats, overall_steps_taken)
 
@@ -327,7 +327,9 @@ def get_datasets_as_dfs(config_file_path):
     usecols = ["mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2"]
     dtype = {"x1": "int16", "x2": "int16", "y1": "int16", "y2": "int16", "bbox_name": "category"}
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_classification_model, dataset) + ".csv" for dataset in ["train-600000", "valid-90000"]}
+    datasets_as_dfs = {}
+    datasets_as_dfs["train"] = os.path.join(path_dataset_classification_model, "train-600000.csv")
+    datasets_as_dfs["valid"] = os.path.join(path_dataset_classification_model, "valid-90000.csv")
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, dtype=dtype) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])
