@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from src.constrastive_attention.aggregate_attention import AggregateAttention
+from src.constrastive_attention.differentiate_attention import DifferentiateAttention
 
 
 class ConstrastiveAttention(nn.Module):
