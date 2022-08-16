@@ -51,6 +51,10 @@ def save_normality_image_features(model, normality_dl_for_every_region):
         region_normality_image_features.append(image_features)
 
     # shape [36 x NORMALITY_POOL_SIZE x 2048]
+    # note: region_normality_image_features is ordered in the same way as the regions in src.dataset.constants.ANATOMICAL_REGIONS,
+    # i.e. tensor 0 of shape [NORMALITY_POOL_SIZE x 2048] corresponds to "right lung",
+    # tensor 1 of shape [NORMALITY_POOL_SIZE x 2048] corresponds to "right upper lung zone" etc.
+    # the reason: dict is insertion ordered as of Python 3.7
     region_normality_image_features = torch.stack(region_normality_image_features, dim=0)
 
     print(f"Saving normality_image_features of shape {region_normality_image_features.shape}")

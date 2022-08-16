@@ -3,6 +3,8 @@ RUN = 3
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Redo run 2 because of early stopping due to OOM error."""
 IMAGE_INPUT_SIZE = 512
+NORMALITY_POOL_SIZE = 100
+AGGREGATE_ATTENTION_NUM = 6
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
 BATCH_SIZE = 2
