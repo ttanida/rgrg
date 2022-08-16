@@ -18,10 +18,10 @@ BATCH_SIZE = 128
 NUM_WORKERS = 12
 IMAGE_INPUT_SIZE = 512
 IMAGE_HIDDEN_DIM = 2048
-NORMALITY_POOL_SIZE = 5
+NORMALITY_POOL_SIZE = 1000
 
 path_normality_pool_csv = f"/u/home/tanida/datasets/normality-pool/normality-pool-{NORMALITY_POOL_SIZE}.csv"
-path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_.../..."
+path_to_best_weights = "/u/home/tanida/runs/classification_model/run_3/weights/val_loss_13.468_overall_step_30625.pth"
 path_to_parent_folder = "/u/home/tanida/normality_pool_image_features"
 
 

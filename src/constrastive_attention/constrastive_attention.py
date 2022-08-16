@@ -14,7 +14,10 @@ class ConstrastiveAttention(nn.Module):
         self,
         top_region_features: torch.FloatTensor  # shape [batch_size x 36 x 2048]
     ):
-        closest_normal_region_features = self.aggregate_attention(top_region_features)  # shape [batch_size x 36 x 6 x 2048]
+        # closest_normal_region_features of shape [batch_size x 36 x AGGREGATE_ATTENTION_NUM x 2048], with AGGREGATE_ATTENTION_NUM most likely 6
+        closest_normal_region_features = self.aggregate_attention(top_region_features)
+
+        # top_region_features_with_contrastive_information of shape  [batch_size x 36 x 2048]
         top_region_features_with_contrastive_information = self.differentiate_attention(closest_normal_region_features, top_region_features)
 
-        return top_region_features_with_contrastive_information  # shape [batch_size x 36 x 2048]
+        return top_region_features_with_contrastive_information
