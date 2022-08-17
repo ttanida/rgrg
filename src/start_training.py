@@ -4,7 +4,7 @@ import time
 import GPUtil
 import torch
 
-from src.encoder.training_script_encoder import main
+from src.full_model.train_full_model import main
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -14,6 +14,9 @@ log = logging.getLogger(__name__)
 gpus = GPUtil.getGPUs()
 free_memory = gpus[0].memoryFree
 
+# TODO: delete sleep
+time.sleep(60 * 60 * 6)
+
 while free_memory < 45000:
     time.sleep(10)
     log.info("Sleeping 10 seconds")
@@ -21,7 +24,7 @@ while free_memory < 45000:
     gpus = GPUtil.getGPUs()
     free_memory = gpus[0].memoryFree
 
-# x = torch.rand(1024, 1024, 1024 * 11, device=device)
-# del x
+x = torch.rand(1024, 1024, 1024 * 11, device=device)
+del x
 
 main()
