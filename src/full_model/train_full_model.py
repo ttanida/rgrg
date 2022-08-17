@@ -134,6 +134,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
             # if something went wrong in the forward pass (see forward method for details)
             if output == -1:
+                log.info("Training: output was -1")
                 optimizer.zero_grad()
                 continue
             else:

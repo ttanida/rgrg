@@ -260,8 +260,11 @@ class ReportGenerationModel(nn.Module):
 
         del top_region_features
 
-        # TODO: handle case where selected_regions is False for all regions, i.e. torch.any(selected_regions) = False
-        # because then selected_region_features would be an empty tensor
+        # selected_region_features can be empty if no region was both detected by the object detector and selected
+        # by the binary classifier to get a sentence generated. This can happen especially early on in training
+        # Since this would throw an exception in the language model, we return early
+        if selected_region_features.shape[0] == 0:
+            return -1
 
         # output_ids of shape (num_regions_selected_in_batch x longest_generated_sequence_length)
         output_ids = self.language_model.generate(

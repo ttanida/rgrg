@@ -225,7 +225,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
 
 
-def get_val_losses_and_other_metrics(model, val_dl):
+def get_val_losses_and_other_metrics(model, val_dl, log):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
@@ -339,6 +339,7 @@ def get_val_losses_and_other_metrics(model, val_dl):
 
             # if something went wrong in the forward pass (see forward method for details)
             if output == -1:
+                log.info("Evaluation: output was -1")
                 continue
             else:
                 (
@@ -423,9 +424,9 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
-    ) = get_val_losses_and_other_metrics(model, val_dl)
+    ) = get_val_losses_and_other_metrics(model, val_dl, log)
 
-    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path)
+    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log)
 
     current_lr = float(optimizer.param_groups[0]["lr"])
 

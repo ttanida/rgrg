@@ -58,19 +58,26 @@ def compute_final_language_model_scores(language_model_scores):
 
 
 def write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken):
-    generated_sentences_txt_file = os.path.join(generated_sentences_folder_path, f"generated_sentences_step_{overall_steps_taken}")
+    def write_sentences(generated_sentences, reference_sentences, is_abnormal):
+        txt_file_name = f"generated{'' if not is_abnormal else '_abnormal'}_sentences_step_{overall_steps_taken}"
+        txt_file_name = os.path.join(generated_sentences_folder_path, txt_file_name)
+
+        with open(txt_file_name, "w") as f:
+            for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
+                f.write(f"Generated sentence: {gen_sent}\n")
+                # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
+                f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
     # generated_sentences is a list of str
     generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
+    generated_abnormal_sentences = gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"]
 
     # reference_sentences is a list of str
     reference_sentences = gen_and_ref_sentences_to_save_to_file["reference_sentences"]
+    reference_abnormal_sentences = gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"]
 
-    with open(generated_sentences_txt_file, "w") as f:
-        for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
-            f.write(f"Generated sentence: {gen_sent}\n")
-            # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
-            f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
+    write_sentences(generated_sentences, reference_sentences, is_abnormal=False)
+    write_sentences(generated_abnormal_sentences, reference_abnormal_sentences, is_abnormal=True)
 
 
 def get_plot_title(region_set, region_indices, region_colors, class_detected_img) -> str:
@@ -368,6 +375,8 @@ def update_language_model_scores(language_model_scores, generated_sentences_for_
         for score in language_model_scores["abnormal"].values():
             score.add_batch(predictions=gen_sents_for_abnormal_selected_regions, references=ref_sents_for_abnormal_selected_regions)
 
+    return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
+
 
 def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions):
     """
@@ -384,7 +393,7 @@ def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions
     return ref_sentences_for_selected_regions.tolist()
 
 
-def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path):
+def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log):
     # compute scores for all, normal and abnormal reference sentences
     subsets = ["all", "normal", "abnormal"]
     language_model_scores = {}
@@ -393,7 +402,12 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
         language_model_scores[subset]["bert_score"] = evaluate.load("bertscore")
 
-    gen_and_ref_sentences_to_save_to_file = {"generated_sentences": [], "reference_sentences": []}
+    gen_and_ref_sentences_to_save_to_file = {
+        "generated_sentences": [],
+        "reference_sentences": [],
+        "generated_abnormal_sentences": [],
+        "reference_abnormal_sentences": [],
+    }
 
     # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
     # we only generate NUM_SENTENCES_TO_GENERATE sentences
@@ -414,9 +428,14 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             reference_sentences = batch["reference_sentences"]
 
-            beam_search_output, selected_regions, detections, class_detected = model.generate(
-                images.to(device, non_blocking=True), max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True
-            )
+            output = model.generate(images.to(device, non_blocking=True), max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+
+            # output == -1 if no region was both detected and selected for sentence generation
+            if output == -1:
+                log.info("Sentence generation: output was -1")
+                continue
+            else:
+                beam_search_output, selected_regions, detections, class_detected = output
 
             # generated_sentences is a List[str] of length "num_regions_selected_in_batch"
             generated_sentences_for_selected_regions = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -426,17 +445,19 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
             # (i.e. same length as generated_sentences_for_selected_regions)
             reference_sentences_for_selected_regions = get_ref_sentences_for_selected_regions(reference_sentences, selected_regions)
 
-            if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
-                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences_for_selected_regions)
-                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences_for_selected_regions)
-
-            update_language_model_scores(
+            gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions = update_language_model_scores(
                 language_model_scores,
                 generated_sentences_for_selected_regions,
                 reference_sentences_for_selected_regions,
                 selected_regions,
                 region_is_abnormal,
             )
+
+            if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
+                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences_for_selected_regions)
+                gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"].extend(gen_sents_for_abnormal_selected_regions)
+                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences_for_selected_regions)
+                gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"].extend(ref_sents_for_abnormal_selected_regions)
 
             if num_batch < num_batches_to_process_for_image_plotting:
                 plot_detections_and_sentences_to_tensorboard(
