@@ -25,7 +25,7 @@ class ReportGenerationModel(nn.Module):
         path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
-        self.constrastive_attention = ConstrastiveAttention()
+        self.contrastive_attention = ConstrastiveAttention()
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
@@ -34,12 +34,6 @@ class ReportGenerationModel(nn.Module):
         # path_to_best_language_model_weights = "/u/home/tanida/runs/full_model_with_classification_encoder/run_4/weights/val_loss_24.705_epoch_3.pth"
         path_to_best_language_model_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
         self.language_model.load_state_dict(torch.load(path_to_best_language_model_weights))
-
-        self.nn_for_modifying_region_features_dimension = nn.Sequential(
-            nn.Linear(in_features=2048, out_features=1024),
-            nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=1024)
-        )
 
     def forward(
         self,
@@ -58,7 +52,7 @@ class ReportGenerationModel(nn.Module):
         Forward method is used for training and evaluation of model.
         Generate method is used for inference.
         """
-        # top_region_features of shape [batch_size, 36, 1024] (i.e. 1 feature vector for every region for every image in batch)
+        # top_region_features of shape [batch_size, 36, 2048] (i.e. 1 feature vector for every region for every image in batch)
         # class_detected is a boolean tensor of shape [batch_size, 36]. Its value is True for a class if the object detector detected the class/region in the image
 
         if self.training:
@@ -68,9 +62,8 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            top_region_features = self.constrastive_attention(top_region_features)
-
-            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+            # top_region_features of shape [batch_size, 36, 1024] with contrastive information encoded in them
+            top_region_features = self.contrastive_attention(top_region_features)
 
             # during training, only get the two losses for the two binary classifiers
 
@@ -104,7 +97,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+            top_region_features = self.contrastive_attention(top_region_features)
 
             # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
             # (and that were also detected) and the corresponding region features (selected_region_features)
@@ -248,10 +241,11 @@ class ReportGenerationModel(nn.Module):
         We also return detections, such that we can map each generated sentence to a bounding box.
         We also return class_detected to know which regions were not detected by the object detector (can be plotted).
         """
-        # top_region_features of shape [batch_size, 36, 1024]
+        # top_region_features of shape [batch_size, 36, 2048]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
-        top_region_features = self.nn_for_modifying_region_features_dimension(top_region_features)
+        # top_region_features of shape [batch_size, 36, 1024] after applying contrastive_attention
+        top_region_features = self.contrastive_attention(top_region_features)
 
         # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
