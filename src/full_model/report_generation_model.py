@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
 from src.binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
-from contrastive_attention.contrastive_attention import ContrastiveAttention
+from src.contrastive_attention.contrastive_attention import ContrastiveAttention
 from src.object_detector.object_detector import ObjectDetector
 from src.language_model.language_model import LanguageModel
 
