@@ -38,12 +38,17 @@ class AggregateAttention(nn.Module):
         self,
         top_region_features: torch.FloatTensor  # shape [batch_size x 36 x 2048]
     ):
-        """Forward method implements equations 4 - 6 in paper."""
-        # b ^= batch_size
-        # r ^= region_number (i.e. 36)
-        # a ^= aggregate_attention_num (most likely 6)
-        # d ^= dimensionality (i.e. 2048)
-        # n ^= normality_pool_size (most likely 100 or 1000)
+        """
+        Forward method implements equations 4 - 6 in paper.
+
+        subscripts for einsum notation:
+
+        b = batch_size
+        r = region_number (i.e. 36)
+        a = aggregate_attention_num (i.e. num of closest images by aggregation, most likely 6)
+        d = dimensionality (i.e. 2048)
+        n = normality_pool_size (most likely 100 or 1000)
+        """
         x_wx = torch.einsum("brd, add, d -> brad", top_region_features, self.wx, self.wx_bias)
         y_wy = torch.einsum("rnd, add, d -> nrad", self.normality_pool_image_features, self.wy, self.wy_bias)
 

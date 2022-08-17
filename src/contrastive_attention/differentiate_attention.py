@@ -39,7 +39,16 @@ class DifferentiateAttention(nn.Module):
         closest_normal_region_features: torch.FloatTensor,  # shape [batch_size x 36 x AGGREGATE_ATTENTION_NUM x 2048]
         top_region_features: torch.FloatTensor  # shape [batch_size x 36 x 2048]
     ):
-        """Forward method implements equations 7 - 10 in paper."""
+        """
+        Forward method implements equations 7 - 10 in paper.
+
+        subscripts for einsum notation:
+
+        b = batch_size
+        r = region_number (i.e. 36)
+        a = aggregate_attention_num (i.e. num of closest images by aggregation, most likely 6)
+        d = dimensionality (i.e. 2048)
+        """
         top_region_features = torch.unsqueeze(top_region_features, dim=2)
 
         # v_P of shape [batch_size x 36 x (1 + AGGREGATE_ATTENTION_NUM) x 2048]
@@ -60,7 +69,10 @@ class DifferentiateAttention(nn.Module):
         attn_output = torch.einsum("braa, brad -> brad", M, v_P)
 
         # common_information of shape [batch_size x 36 x 2048]
+        # avg pooling in the 2nd dimension
         common_information = torch.mean(attn_output, dim=2, keepdim=False)
+
+        top_region_features = torch.squeeze(top_region_features)
 
         contrastive_information = top_region_features - common_information
 
