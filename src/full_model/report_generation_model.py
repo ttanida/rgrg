@@ -246,6 +246,8 @@ class ReportGenerationModel(nn.Module):
         # top_region_features of shape [batch_size, 36, 2048]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
+        del images
+
         # top_region_features is of shape [batch_size, 36, 1024] after applying contrastive_attention
         top_region_features = self.contrastive_attention(top_region_features)
 

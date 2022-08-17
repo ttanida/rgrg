@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 gpus = GPUtil.getGPUs()
 free_memory = gpus[0].memoryFree
 
-while free_memory < 46000:
+while free_memory < 48000:
     time.sleep(10)
     log.info("Sleeping 10 seconds")
 

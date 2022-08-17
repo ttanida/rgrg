@@ -72,7 +72,7 @@ class DifferentiateAttention(nn.Module):
         # avg pooling in the 2nd dimension
         common_information = torch.mean(attn_output, dim=2, keepdim=False)
 
-        top_region_features = torch.squeeze(top_region_features)
+        top_region_features = torch.squeeze(top_region_features, dim=2)
 
         contrastive_information = top_region_features - common_information
 
