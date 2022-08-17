@@ -446,8 +446,8 @@ def main():
     train_transforms = get_transforms("train")
     val_transforms = get_transforms("val")
 
-    train_dataset_complete = CustomDataset("train", tokenized_train_dataset, train_transforms)
-    val_dataset_complete = CustomDataset("val", tokenized_val_dataset, val_transforms)
+    train_dataset_complete = CustomDataset("train", tokenized_train_dataset, train_transforms, log)
+    val_dataset_complete = CustomDataset("val", tokenized_val_dataset, val_transforms, log)
 
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 

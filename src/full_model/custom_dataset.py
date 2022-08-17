@@ -4,20 +4,23 @@ from torch.utils.data import Dataset
 
 
 class CustomDataset(Dataset):
-    def __init__(self, dataset_name: str, tokenized_dataset, transforms):
+    def __init__(self, dataset_name: str, tokenized_dataset, transforms, log):
         super().__init__()
         self.dataset_name = dataset_name
         self.tokenized_dataset = tokenized_dataset
         self.transforms = transforms
+        self.log = log
 
     def __len__(self):
         return len(self.tokenized_dataset)
 
     def __getitem__(self, index):
+        # get the image_path for potential logging in except block
+        image_path = self.tokenized_dataset[index]["mimic_image_file_path"]
+
         # if something in __get__item fails, then return None
         # collate_fn in dataloader filters out None values
         try:
-            image_path = self.tokenized_dataset[index]["mimic_image_file_path"]
             bbox_coordinates = self.tokenized_dataset[index]["bbox_coordinates"]  # List[List[int]]
             bbox_labels = self.tokenized_dataset[index]["bbox_labels"]  # List[int]
             input_ids = self.tokenized_dataset[index]["input_ids"]  # List[List[int]]
@@ -53,7 +56,9 @@ class CustomDataset(Dataset):
             if self.dataset_name != "train":
                 sample["bbox_phrases"] = bbox_phrases
 
-        except Exception:
+        except Exception as e:
+            self.log.error(f"__getitem__ failed for: {image_path}")
+            self.log.error(f"Reason: {e}")
             return None
 
         return sample
