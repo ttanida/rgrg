@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
 from src.binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
-from src.constrastive_attention.constrastive_attention import ConstrastiveAttention
+from contrastive_attention.contrastive_attention import ContrastiveAttention
 from src.object_detector.object_detector import ObjectDetector
 from src.language_model.language_model import LanguageModel
 
@@ -16,6 +16,7 @@ class ReportGenerationModel(nn.Module):
         - object detector encoder
         - binary classifier for selecting regions for sentence genneration
         - binary classifier for detecting if a region is abnormal or normal (to encode this information in the region feature vectors)
+        - contrastive attention to get better region features that have the contrastive abnormal information encoded in them
         - language model decoder
     """
 
@@ -25,7 +26,7 @@ class ReportGenerationModel(nn.Module):
         path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
-        self.contrastive_attention = ConstrastiveAttention()
+        self.contrastive_attention = ContrastiveAttention()
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
@@ -62,7 +63,8 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            # top_region_features of shape [batch_size, 36, 1024] with contrastive information encoded in them
+            # top_region_features is of shape [batch_size, 36, 1024] after applying contrastive attention
+            # the features now have contrastive information encoded in them
             top_region_features = self.contrastive_attention(top_region_features)
 
             # during training, only get the two losses for the two binary classifiers
@@ -244,7 +246,7 @@ class ReportGenerationModel(nn.Module):
         # top_region_features of shape [batch_size, 36, 2048]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
-        # top_region_features of shape [batch_size, 36, 1024] after applying contrastive_attention
+        # top_region_features is of shape [batch_size, 36, 1024] after applying contrastive_attention
         top_region_features = self.contrastive_attention(top_region_features)
 
         # selected_region_features is of shape [num_regions_selected_in_batch, 1024]

@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 
-from src.constrastive_attention.aggregate_attention import AggregateAttention
-from src.constrastive_attention.differentiate_attention import DifferentiateAttention
+from src.contrastive_attention.aggregate_attention import AggregateAttention
+from src.contrastive_attention.differentiate_attention import DifferentiateAttention
 
 
-class ConstrastiveAttention(nn.Module):
+class ContrastiveAttention(nn.Module):
     def __init__(self):
         super().__init__()
         self.aggregate_attention = AggregateAttention()
