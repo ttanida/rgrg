@@ -57,7 +57,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 
-def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer):
+def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer, log_file):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -98,6 +98,9 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
     run_params["best_model_save_path"] = None
     run_params["overall_steps_taken"] = 0  # for logging to tensorboard
 
+    # to recover from out of memory error if a batch has a sequence that is too big
+    oom = False
+
     for epoch in range(epochs):
         run_params["epoch"] = epoch
         log.info(f"\nTraining epoch {epoch}!\n")
@@ -130,7 +133,29 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
-            output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            try:
+                output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            except RuntimeError as e:  # out of memory error
+                if "out of memory" in str(e):
+                    oom = True
+
+                    with open(log_file, "w") as f:
+                        overall_steps_taken = run_params['overall_steps_taken']
+                        f.write("Training:\n")
+                        f.write(f"OOM at epoch {epoch}, batch number {num_batch}, {overall_steps_taken} overall steps.\n")
+                        f.write(f"Error message: {str(e)}\n\n")
+                else:
+                    raise e
+
+            if oom:
+                # free up memory
+                for p in model.parameters():
+                    if p.grad is not None:
+                        del p.grad
+                torch.cuda.empty_cache()
+                optimizer.zero_grad()
+                oom = False
+                continue
 
             # if something went wrong in the forward pass (see forward method for details)
             if output == -1:
@@ -178,7 +203,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
                 log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
 
                 # evaluate the model and write the scores (among other things) to tensorboard
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log)
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log, log_file)
 
                 log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
 
@@ -385,6 +410,7 @@ def create_run_folder():
     weights_folder_path = os.path.join(run_folder_path, "weights")
     tensorboard_folder_path = os.path.join(run_folder_path, "tensorboard")
     generated_sentences_folder_path = os.path.join(run_folder_path, "generated_sentences")
+    log_file = os.path.join(run_folder_path, "log_file")
 
     if os.path.exists(run_folder_path):
         log.error(f"Folder to save run {RUN} already exists at {run_folder_path}.")
@@ -425,7 +451,7 @@ def create_run_folder():
         for param_name, param_value in config_parameters.items():
             f.write(f"\t{param_name}: {param_value}\n")
 
-    return weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_folder_path
+    return weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_folder_path, log_file
 
 
 def main():
@@ -434,6 +460,7 @@ def main():
         tensorboard_folder_path,
         config_file_path,
         generated_sentences_folder_path,
+        log_file
     ) = create_run_folder()
 
     # the datasets still contain the untokenized phrases
@@ -473,6 +500,7 @@ def main():
         tokenizer=tokenizer,
         generated_sentences_folder_path=generated_sentences_folder_path,
         writer=writer,
+        log_file=log_file
     )
 
 

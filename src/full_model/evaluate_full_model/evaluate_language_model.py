@@ -393,7 +393,7 @@ def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions
     return ref_sentences_for_selected_regions.tolist()
 
 
-def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log):
+def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log, log_file):
     # compute scores for all, normal and abnormal reference sentences
     subsets = ["all", "normal", "abnormal"]
     language_model_scores = {}
@@ -416,6 +416,9 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
     # we also want to plot a couple of images
     num_batches_to_process_for_image_plotting = NUM_IMAGES_TO_PLOT // BATCH_SIZE
 
+    # to recover from out of memory error if a batch has a sequence that is too big
+    oom = False
+
     with torch.no_grad():
         for num_batch, batch in tqdm(enumerate(val_dl), total=num_batches_to_process_for_sentence_generation):
             if num_batch >= num_batches_to_process_for_sentence_generation:
@@ -428,7 +431,24 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             reference_sentences = batch["reference_sentences"]
 
-            output = model.generate(images.to(device, non_blocking=True), max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+            try:
+                output = model.generate(images.to(device, non_blocking=True), max_length=MAX_NUM_TOKENS_GENERATE, num_beams=NUM_BEAMS, early_stopping=True)
+            except RuntimeError as e:  # out of memory error
+                if "out of memory" in str(e):
+                    oom = True
+
+                    with open(log_file, "w") as f:
+                        f.write("Generation:\n")
+                        f.write(f"OOM at batch number {num_batch}.\n")
+                        f.write(f"Error message: {str(e)}\n\n")
+                else:
+                    raise e
+
+            if oom:
+                # free up memory
+                torch.cuda.empty_cache()
+                oom = False
+                continue
 
             # output == -1 if no region was both detected and selected for sentence generation
             if output == -1:

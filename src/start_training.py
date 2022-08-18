@@ -15,8 +15,8 @@ gpus = GPUtil.getGPUs()
 free_memory = gpus[0].memoryFree
 
 while free_memory < 48000:
-    time.sleep(10)
-    log.info("Sleeping 10 seconds")
+    time.sleep(5)
+    log.info("Sleeping 5 seconds")
 
     gpus = GPUtil.getGPUs()
     free_memory = gpus[0].memoryFree

@@ -225,7 +225,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
 
 
-def get_val_losses_and_other_metrics(model, val_dl, log):
+def get_val_losses_and_other_metrics(model, val_dl, log, log_file):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
@@ -312,8 +312,11 @@ def get_val_losses_and_other_metrics(model, val_dl, log):
         "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
     }
 
+    # to recover from out of memory error if a batch has a sequence that is too big
+    oom = False
+
     with torch.no_grad():
-        for batch in tqdm(val_dl):
+        for num_batch, batch in tqdm(enumerate(val_dl)):
             # "image_targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
             # "boxes" maps to a tensor of shape [36 x 4] and "labels" maps to a tensor of shape [36]
             # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 36] (starting at 1, since 0 is background)
@@ -335,7 +338,24 @@ def get_val_losses_and_other_metrics(model, val_dl, log):
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
-            output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            try:
+                output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+            except RuntimeError as e:  # out of memory error
+                if "out of memory" in str(e):
+                    oom = True
+
+                    with open(log_file, "w") as f:
+                        f.write("Evaluation:\n")
+                        f.write(f"OOM at batch number {num_batch}.\n")
+                        f.write(f"Error message: {str(e)}\n\n")
+                else:
+                    raise e
+
+            if oom:
+                # free up memory
+                torch.cuda.empty_cache()
+                oom = False
+                continue
 
             # if something went wrong in the forward pass (see forward method for details)
             if output == -1:
@@ -409,7 +429,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log):
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log, log_file):
     # set the model to evaluation mode
     model.eval()
 
@@ -424,9 +444,9 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
-    ) = get_val_losses_and_other_metrics(model, val_dl, log)
+    ) = get_val_losses_and_other_metrics(model, val_dl, log, log_file)
 
-    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log)
+    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log, log_file)
 
     current_lr = float(optimizer.param_groups[0]["lr"])
 
