@@ -42,7 +42,8 @@ def compute_final_language_model_scores(language_model_scores):
         temp = {}
         for metric, score in language_model_scores[subset].items():
             if metric.startswith("bleu"):
-                result = score.compute(max_order=int(metric[-1]))
+                bleu_score_type = int(metric[-1])
+                result = score.compute(max_order=bleu_score_type)
                 temp[f"{metric}"] = result["bleu"]
             else:  # bert_score
                 result = score.compute(lang="en", device=device)
@@ -393,7 +394,11 @@ def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions
     return ref_sentences_for_selected_regions.tolist()
 
 
-def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log, log_file):
+def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_folder_path):
+    epoch = run_params["epoch"]
+    overall_steps_taken = run_params["overall_steps_taken"]
+    log_file = run_params["log_file"]
+
     # compute scores for all, normal and abnormal reference sentences
     subsets = ["all", "normal", "abnormal"]
     language_model_scores = {}
@@ -409,14 +414,13 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
         "reference_abnormal_sentences": [],
     }
 
-    # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
-    # we only generate NUM_SENTENCES_TO_GENERATE sentences
+    # since generating sentences takes some time, we only generate NUM_SENTENCES_TO_GENERATE sentences
     num_batches_to_process_for_sentence_generation = NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION // BATCH_SIZE
 
     # we also want to plot a couple of images
     num_batches_to_process_for_image_plotting = NUM_IMAGES_TO_PLOT // BATCH_SIZE
 
-    # to recover from out of memory error if a batch has a sequence that is too big
+    # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
     with torch.no_grad():
@@ -437,9 +441,9 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
                 if "out of memory" in str(e):
                     oom = True
 
-                    with open(log_file, "w") as f:
+                    with open(log_file, "a") as f:
                         f.write("Generation:\n")
-                        f.write(f"OOM at batch number {num_batch}.\n")
+                        f.write(f"OOM at epoch {epoch}, batch number {num_batch}.\n")
                         f.write(f"Error message: {str(e)}\n\n")
                 else:
                     raise e
@@ -450,14 +454,17 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
                 oom = False
                 continue
 
-            # output == -1 if no region was both detected and selected for sentence generation
+            # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
             if output == -1:
-                log.info("Sentence generation: output was -1")
+                with open(log_file, "a") as f:
+                    f.write("Generation:\n")
+                    f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
+
                 continue
             else:
                 beam_search_output, selected_regions, detections, class_detected = output
 
-            # generated_sentences is a List[str] of length "num_regions_selected_in_batch"
+            # generated_sentences_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
             generated_sentences_for_selected_regions = tokenizer.batch_decode(beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
             # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
@@ -495,7 +502,6 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_take
 
     write_sentences_to_file(gen_and_ref_sentences_to_save_to_file, generated_sentences_folder_path, overall_steps_taken)
 
-    # compute final scores for language model metrics
     compute_final_language_model_scores(language_model_scores)
 
     return language_model_scores

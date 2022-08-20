@@ -27,7 +27,6 @@ evaluate_model and its sub-functions evaluate among other things:
         are depicted, as well as the generated sentences (if they exist) and reference sentences for every region
 """
 
-from copy import deepcopy
 import os
 
 import torch
@@ -225,7 +224,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
 
 
-def get_val_losses_and_other_metrics(model, val_dl, log, log_file):
+def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
@@ -312,8 +311,11 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file):
         "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
     }
 
-    # to recover from out of memory error if a batch has a sequence that is too big
+    # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
+
+    # to keep track of number of steps that were skipped because e.g. OOM
+    steps_not_taken = 0
 
     with torch.no_grad():
         for num_batch, batch in tqdm(enumerate(val_dl)):
@@ -344,9 +346,9 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file):
                 if "out of memory" in str(e):
                     oom = True
 
-                    with open(log_file, "w") as f:
+                    with open(log_file, "a") as f:
                         f.write("Evaluation:\n")
-                        f.write(f"OOM at batch number {num_batch}.\n")
+                        f.write(f"OOM at epoch {epoch}, batch number {num_batch}.\n")
                         f.write(f"Error message: {str(e)}\n\n")
                 else:
                     raise e
@@ -355,11 +357,21 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file):
                 # free up memory
                 torch.cuda.empty_cache()
                 oom = False
+
+                num_images -= batch_size
+                steps_not_taken += 1
+
                 continue
 
-            # if something went wrong in the forward pass (see forward method for details)
+            # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
             if output == -1:
-                log.info("Evaluation: output was -1")
+                with open(log_file, "a") as f:
+                    f.write("Evaluation:\n")
+                    f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
+
+                num_images -= batch_size
+                steps_not_taken += 1
+
                 continue
             else:
                 (
@@ -404,9 +416,9 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file):
             # update scores for region abnormal detection metrics
             update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected)
 
-    # normalize the val losses by steps_taken (i.e. len(val_dl))
+    # normalize the val losses by steps_taken
     for loss_type in val_losses_dict:
-        val_losses_dict[loss_type] /= len(val_dl)
+        val_losses_dict[loss_type] /= (len(val_dl) - steps_not_taken)
 
     # compute object detector scores
     sum_intersection = obj_detector_scores["sum_intersection_area_per_region"]
@@ -429,24 +441,26 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file):
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log, log_file):
-    # set the model to evaluation mode
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log):
     model.eval()
 
+    epoch = run_params["epoch"]
+    steps_taken = run_params["steps_taken"]
     overall_steps_taken = run_params["overall_steps_taken"]
+    log_file = run_params["log_file"]
 
     # normalize all train losses by steps_taken
     for loss_type in train_losses_dict:
-        train_losses_dict[loss_type] /= run_params["steps_taken"]
+        train_losses_dict[loss_type] /= steps_taken
 
     (
         val_losses_dict,
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
-    ) = get_val_losses_and_other_metrics(model, val_dl, log, log_file)
+    ) = get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch)
 
-    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, overall_steps_taken, generated_sentences_folder_path, log, log_file)
+    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_folder_path)
 
     current_lr = float(optimizer.param_groups[0]["lr"])
 
@@ -470,12 +484,11 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
 
     if total_val_loss < run_params["lowest_val_loss"]:
         run_params["lowest_val_loss"] = total_val_loss
-        run_params["best_epoch"] = run_params["epoch"]
-        run_params["best_model_save_path"] = os.path.join(
-            run_params["weights_folder_path"],
-            f"val_loss_{run_params['lowest_val_loss']:.3f}_epoch_{run_params['best_epoch']}.pth",
-        )
-        run_params["best_model_state"] = deepcopy(model.state_dict())
+        run_params["best_epoch"] = epoch
+
+        save_path = os.path.join(run_params["weights_folder_path"], f"val_loss_{total_val_loss:.3f}_epoch_{epoch}.pth")
+
+        torch.save(model.state_dict(), save_path)
 
     if is_epoch_end:
-        log_stats_to_console(log, train_total_loss, total_val_loss, run_params["epoch"])
+        log_stats_to_console(log, train_total_loss, total_val_loss, epoch)

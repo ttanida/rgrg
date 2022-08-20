@@ -87,18 +87,17 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
     Returns
     -------
-    None, but saves model with the overall lowest val loss at the end of every epoch.
+    None, but saves model weights every time the val loss has decreased below the last lowest val loss.
     """
     run_params = {}
     run_params["epochs"] = epochs
     run_params["weights_folder_path"] = weights_folder_path
     run_params["lowest_val_loss"] = np.inf
     run_params["best_epoch"] = None  # the epoch with the lowest val loss overall
-    run_params["best_model_state"] = None  # the best_model_state is the one where the val loss is the lowest overall
-    run_params["best_model_save_path"] = None
     run_params["overall_steps_taken"] = 0  # for logging to tensorboard
+    run_params["log_file"] = log_file  # for logging error messages (e.g. OOM)
 
-    # to recover from out of memory error if a batch has a sequence that is too big
+    # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
     for epoch in range(epochs):
@@ -125,7 +124,6 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
             batch_size = images.size(0)
 
-            # put all tensors on the GPU
             images = images.to(device, non_blocking=True)
             image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
             input_ids = input_ids.to(device, non_blocking=True)
@@ -139,10 +137,9 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
                 if "out of memory" in str(e):
                     oom = True
 
-                    with open(log_file, "w") as f:
-                        overall_steps_taken = run_params['overall_steps_taken']
+                    with open(run_params["log_file"], "a") as f:
                         f.write("Training:\n")
-                        f.write(f"OOM at epoch {epoch}, batch number {num_batch}, {overall_steps_taken} overall steps.\n")
+                        f.write(f"OOM at epoch {epoch}, batch number {num_batch}.\n")
                         f.write(f"Error message: {str(e)}\n\n")
                 else:
                     raise e
@@ -157,9 +154,12 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
                 oom = False
                 continue
 
-            # if something went wrong in the forward pass (see forward method for details)
+            # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
             if output == -1:
-                log.info("Training: output was -1")
+                with open(run_params["log_file"], "a") as f:
+                    f.write("Training:\n")
+                    f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
+
                 optimizer.zero_grad()
                 continue
             else:
@@ -203,7 +203,7 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
                 log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
 
                 # evaluate the model and write the scores (among other things) to tensorboard
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log, log_file)
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log)
 
                 log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
 
@@ -214,9 +214,6 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
                 # set the model back to training
                 model.train()
-
-        # save the current best model weights at the end of each epoch
-        torch.save(run_params["best_model_state"], run_params["best_model_save_path"])
 
     log.info("\nFinished training!")
     log.info(f"Lowest overall val loss: {run_params['lowest_val_loss']:.3f} at epoch {run_params['best_epoch']}")
