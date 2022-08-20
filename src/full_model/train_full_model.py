@@ -84,6 +84,8 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
         Path to folder where generated sentences will be saved as a txt file.
     writer: torch.utils.tensorboard.SummaryWriter
         Writer for logging values to tensorboard.
+    log_file: str
+        Path to file where error messages will be logged.
 
     Returns
     -------

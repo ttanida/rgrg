@@ -245,8 +245,6 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
         "language_model_loss": 0.0,
     }
 
-    num_images = 0
-
     """
     For the object detector, besides the obj_detector_val_loss, we also want to compute:
       - the average IoU for each region,
@@ -314,14 +312,13 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    # to keep track of number of steps that were skipped because e.g. OOM
-    steps_not_taken = 0
+    num_images = 0
+
+    # for normalizing the val losses
+    steps_taken = 0
 
     with torch.no_grad():
         for num_batch, batch in tqdm(enumerate(val_dl)):
-            # "image_targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
-            # "boxes" maps to a tensor of shape [36 x 4] and "labels" maps to a tensor of shape [36]
-            # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 36] (starting at 1, since 0 is background)
             images = batch["images"]
             image_targets = batch["image_targets"]
             input_ids = batch["input_ids"]
@@ -359,7 +356,6 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
                 oom = False
 
                 num_images -= batch_size
-                steps_not_taken += 1
 
                 continue
 
@@ -370,7 +366,6 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
                     f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
 
                 num_images -= batch_size
-                steps_not_taken += 1
 
                 continue
             else:
@@ -407,6 +402,8 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
             for loss_type, loss in zip(val_losses_dict, list_of_losses):
                 val_losses_dict[loss_type] += loss.item() * batch_size
 
+            steps_taken += 1
+
             # update scores for object detector metrics
             update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected)
 
@@ -418,7 +415,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
 
     # normalize the val losses by steps_taken
     for loss_type in val_losses_dict:
-        val_losses_dict[loss_type] /= (len(val_dl) - steps_not_taken)
+        val_losses_dict[loss_type] /= steps_taken
 
     # compute object detector scores
     sum_intersection = obj_detector_scores["sum_intersection_area_per_region"]
