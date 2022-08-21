@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class BinaryClassifierRegionSelection(nn.Module):
     def __init__(self):
@@ -16,7 +18,10 @@ class BinaryClassifierRegionSelection(nn.Module):
             nn.Linear(in_features=128, out_features=1)
         )
 
-        self.loss_fn = nn.BCEWithLogitsLoss()
+        # since we have around 3.6x more regions without sentences than regions with sentences (see compute_stats_dataset.py),
+        # we set pos_weight=3.6 to put 3.6 more weight on the loss of regions with sentences
+        pos_weight = torch.tensor([3.6], device=device)
+        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     def forward(
         self,
@@ -34,10 +39,7 @@ class BinaryClassifierRegionSelection(nn.Module):
             detected_logits = logits[class_detected]
             detected_region_has_sentence = region_has_sentence[class_detected]
 
-            # since we have around 3.6x more regions without sentences than regions with sentences (see compute_stats_dataset.py),
-            # we set pos_weight=3.6 to put 3.6 more weight on the loss of regions with sentences
-            pos_weight = torch.tensor([3.6], device=detected_logits.device)
-            loss = self.loss_fn(detected_logits, detected_region_has_sentence.type(torch.float32), pos_weight=pos_weight)
+            loss = self.loss_fn(detected_logits, detected_region_has_sentence.type(torch.float32))
 
         if self.training:
             return loss
