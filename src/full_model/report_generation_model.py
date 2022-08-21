@@ -20,8 +20,11 @@ class ReportGenerationModel(nn.Module):
         - language model decoder
     """
 
-    def __init__(self):
+    def __init__(self, pretrain_without_lm_model=False):
         super().__init__()
+
+        self.pretrain_without_lm_model = pretrain_without_lm_model
+
         self.object_detector = ObjectDetector(return_feature_vectors=True)
         path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
@@ -32,7 +35,6 @@ class ReportGenerationModel(nn.Module):
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
         self.language_model = LanguageModel()
-        # path_to_best_language_model_weights = "/u/home/tanida/runs/full_model_with_classification_encoder/run_4/weights/val_loss_24.705_epoch_3.pth"
         path_to_best_language_model_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
         self.language_model.load_state_dict(torch.load(path_to_best_language_model_weights))
 
@@ -77,6 +79,9 @@ class ReportGenerationModel(nn.Module):
                 top_region_features, class_detected, region_is_abnormal
             )
 
+            if self.pretrain_without_lm_model:
+                return obj_detector_loss_dict, classifier_loss_region_selection, classifier_loss_region_abnormal
+
             # to train the decoder, we want to use only the top region features (and corresponding input_ids, attention_mask)
             # of regions that were both detected by the object detector and have a sentence as the ground truth
             # this is done under the assumption that at inference time, the binary classifier will do an adequate job
@@ -112,6 +117,9 @@ class ReportGenerationModel(nn.Module):
             classifier_loss_region_abnormal, predicted_abnormal_regions = self.binary_classifier_region_abnormal(
                 top_region_features, class_detected, region_is_abnormal
             )
+
+            if self.pretrain_without_lm_model:
+                return obj_detector_loss_dict, classifier_loss_region_selection, classifier_loss_region_abnormal, detections, class_detected, selected_regions, predicted_abnormal_regions
 
             del top_region_features
             del region_has_sentence

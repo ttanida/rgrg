@@ -35,6 +35,7 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.evaluate_language_model import evaluate_language_model
+from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -105,7 +106,9 @@ def write_all_losses_and_scores_to_tensorboard(
     write_obj_detector_scores(writer, overall_steps_taken, obj_detector_scores)
     write_region_selection_scores(writer, overall_steps_taken, region_selection_scores)
     write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores)
-    write_language_model_scores(writer, overall_steps_taken, language_model_scores)
+
+    if not PRETRAIN_WITHOUT_LM_MODEL:
+        write_language_model_scores(writer, overall_steps_taken, language_model_scores)
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
 
@@ -242,8 +245,10 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
         "obj_detector_loss": 0.0,
         "region_selection_loss": 0.0,
         "region_abnormal_loss": 0.0,
-        "language_model_loss": 0.0,
     }
+
+    if not PRETRAIN_WITHOUT_LM_MODEL:
+        val_losses_dict["language_model_loss"] = 0.0
 
     """
     For the object detector, besides the obj_detector_val_loss, we also want to compute:
@@ -321,21 +326,26 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
         for num_batch, batch in tqdm(enumerate(val_dl)):
             images = batch["images"]
             image_targets = batch["image_targets"]
-            input_ids = batch["input_ids"]
-            attention_mask = batch["attention_mask"]
             region_has_sentence = batch["region_has_sentence"]
             region_is_abnormal = batch["region_is_abnormal"]
 
             batch_size = images.size(0)
             num_images += batch_size
 
-            # put all tensors on the GPU
             images = images.to(device, non_blocking=True)
             image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
-            input_ids = input_ids.to(device, non_blocking=True)
-            attention_mask = attention_mask.to(device, non_blocking=True)
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
+
+            if not PRETRAIN_WITHOUT_LM_MODEL:
+                input_ids = batch["input_ids"]
+                attention_mask = batch["attention_mask"]
+
+                input_ids = input_ids.to(device, non_blocking=True)
+                attention_mask = attention_mask.to(device, non_blocking=True)
+            else:
+                input_ids = None
+                attention_mask = None
 
             try:
                 output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
@@ -368,6 +378,17 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
                 num_images -= batch_size
 
                 continue
+
+            if PRETRAIN_WITHOUT_LM_MODEL:
+                (
+                    obj_detector_loss_dict,
+                    classifier_loss_region_selection,
+                    classifier_loss_region_abnormal,
+                    detections,
+                    class_detected,
+                    selected_regions,
+                    predicted_abnormal_regions,
+                ) = output
             else:
                 (
                     obj_detector_loss_dict,
@@ -388,15 +409,20 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
             # sum up the rest of the losses
-            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal + language_model_loss
+            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal
+
+            if not PRETRAIN_WITHOUT_LM_MODEL:
+                total_loss += language_model_loss
 
             list_of_losses = [
                 total_loss,
                 obj_detector_losses,
                 classifier_loss_region_selection,
                 classifier_loss_region_abnormal,
-                language_model_loss,
             ]
+
+            if not PRETRAIN_WITHOUT_LM_MODEL:
+                list_of_losses.append(language_model_loss)
 
             # dicts are insertion ordered since Python 3.7
             for loss_type, loss in zip(val_losses_dict, list_of_losses):
@@ -457,7 +483,10 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
         region_abnormal_scores,
     ) = get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch)
 
-    language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_folder_path)
+    if PRETRAIN_WITHOUT_LM_MODEL:
+        language_model_scores = None
+    else:
+        language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_folder_path)
 
     current_lr = float(optimizer.param_groups[0]["lr"])
 

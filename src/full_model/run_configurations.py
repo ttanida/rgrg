@@ -1,7 +1,8 @@
 # define configurations for training run
-RUN = 4
+RUN = 5
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train with contrastive attention. Increase normality pool size to 1000"""
+RUN_COMMENT = """Testing out stuff."""
+PRETRAIN_WITHOUT_LM_MODEL = True
 IMAGE_INPUT_SIZE = 512
 NORMALITY_POOL_SIZE = 1000
 AGGREGATE_ATTENTION_NUM = 6

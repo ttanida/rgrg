@@ -24,6 +24,7 @@ from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.run_configurations import (
     RUN,
     RUN_COMMENT,
+    PRETRAIN_WITHOUT_LM_MODEL,
     IMAGE_INPUT_SIZE,
     NORMALITY_POOL_SIZE,
     AGGREGATE_ATTENTION_NUM,
@@ -145,25 +146,29 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
+    log.info("Initializing normality pool...")
+    update_normality_pool(model, normality_pool_dl)
+    log.info("Initializing normality pool finished!")
+
     for epoch in range(epochs):
         run_params["epoch"] = epoch
-        log.info(f"\nTraining epoch {epoch}!\n")
+        log.info(f"Training epoch {epoch}!\n")
 
         train_losses_dict = {
             "total_loss": 0.0,
             "obj_detector_loss": 0.0,
             "region_selection_loss": 0.0,
             "region_abnormal_loss": 0.0,
-            "language_model_loss": 0.0,
         }
+
+        if not PRETRAIN_WITHOUT_LM_MODEL:
+            train_losses_dict["language_model_loss"] = 0.0
 
         run_params["steps_taken"] = 0  # to know when to evaluate model during epoch and to normalize losses
 
         for num_batch, batch in tqdm(enumerate(train_dl)):
             images = batch["images"]
             image_targets = batch["image_targets"]
-            input_ids = batch["input_ids"]
-            attention_mask = batch["attention_mask"]
             region_has_sentence = batch["region_has_sentence"]
             region_is_abnormal = batch["region_is_abnormal"]
 
@@ -171,14 +176,18 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
 
             images = images.to(device, non_blocking=True)
             image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
-            input_ids = input_ids.to(device, non_blocking=True)
-            attention_mask = attention_mask.to(device, non_blocking=True)
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
-            log.info("\nUpdating normality pool...\n")
-            update_normality_pool(model, normality_pool_dl)
-            log.info("Updating normality pool finished!\n")
+            if not PRETRAIN_WITHOUT_LM_MODEL:
+                input_ids = batch["input_ids"]
+                attention_mask = batch["attention_mask"]
+
+                input_ids = input_ids.to(device, non_blocking=True)
+                attention_mask = attention_mask.to(device, non_blocking=True)
+            else:
+                input_ids = None
+                attention_mask = None
 
             try:
                 output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
@@ -211,6 +220,13 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
 
                 optimizer.zero_grad()
                 continue
+
+            if PRETRAIN_WITHOUT_LM_MODEL:
+                (
+                    obj_detector_loss_dict,
+                    classifier_loss_region_selection,
+                    classifier_loss_region_abnormal,
+                ) = output
             else:
                 (
                     obj_detector_loss_dict,
@@ -223,7 +239,10 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
             # sum up the rest of the losses
-            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal + language_model_loss
+            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal
+
+            if not PRETRAIN_WITHOUT_LM_MODEL:
+                total_loss += language_model_loss
 
             total_loss.backward()
             optimizer.step()
@@ -234,8 +253,10 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 obj_detector_losses,
                 classifier_loss_region_selection,
                 classifier_loss_region_abnormal,
-                language_model_loss,
             ]
+
+            if not PRETRAIN_WITHOUT_LM_MODEL:
+                list_of_losses.append(language_model_loss)
 
             # dicts are insertion ordered since Python 3.7
             for loss_type, loss in zip(train_losses_dict, list_of_losses):
@@ -246,15 +267,20 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
 
             is_epoch_end = True if (num_batch + 1) == len(train_dl) else False
 
-            # evaluate every k steps and also at the end of an epoch
+            # evaluate every k steps and at the end of each epoch
+            # also update the normality pool
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_STEPS or is_epoch_end:
 
-                log.info(f"\nEvaluating at step {run_params['overall_steps_taken']}!\n")
+                log.info("Updating normality pool...")
+                update_normality_pool(model, normality_pool_dl)
+                log.info("Updating normality pool finished!")
+
+                log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
 
                 # evaluate the model and write the scores (among other things) to tensorboard
                 evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log)
 
-                log.info(f"\nMetrics evaluated at step {run_params['overall_steps_taken']}!\n")
+                log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -264,7 +290,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 # set the model back to training
                 model.train()
 
-    log.info("\nFinished training!")
+    log.info("Finished training!")
     log.info(f"Lowest overall val loss: {run_params['lowest_val_loss']:.3f} at epoch {run_params['best_epoch']}")
     return None
 
@@ -276,8 +302,8 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         np.random.seed(worker_seed)
         random.seed(worker_seed)
 
-    custom_collate_train = CustomCollator(tokenizer=tokenizer, is_val=False)
-    custom_collate_val = CustomCollator(tokenizer=tokenizer, is_val=True)
+    custom_collate_train = CustomCollator(tokenizer=tokenizer, is_val=False, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
+    custom_collate_val = CustomCollator(tokenizer=tokenizer, is_val=True, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
 
     g = torch.Generator()
     g.manual_seed(seed_val)
@@ -482,6 +508,7 @@ def create_run_folder():
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
     config_parameters = {
         "COMMENT": RUN_COMMENT,
+        "PRETRAIN_WITHOUT_LM_MODEL": PRETRAIN_WITHOUT_LM_MODEL,
         "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
         "NORMALITY_POOL_SIZE": NORMALITY_POOL_SIZE,
         "AGGREGATE_ATTENTION_NUM": AGGREGATE_ATTENTION_NUM,
@@ -534,7 +561,7 @@ def main():
 
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    model = ReportGenerationModel()
+    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     model.to(device, non_blocking=True)
     model.train()
 
@@ -542,7 +569,7 @@ def main():
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
-    log.info("\nStarting training!\n")
+    log.info("Starting training!")
 
     train_model(
         model=model,
