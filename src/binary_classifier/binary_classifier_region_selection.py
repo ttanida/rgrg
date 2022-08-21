@@ -33,7 +33,11 @@ class BinaryClassifierRegionSelection(nn.Module):
             # only compute loss for logits that correspond to a class that was detected
             detected_logits = logits[class_detected]
             detected_region_has_sentence = region_has_sentence[class_detected]
-            loss = self.loss_fn(detected_logits, detected_region_has_sentence.type(torch.float32))
+
+            # since we have around 3.6x more regions without sentences than regions with sentences (see compute_stats_dataset.py),
+            # we set pos_weight=3.6 to put 3.6 more weight on the loss of regions with sentences
+            pos_weight = torch.tensor([3.6], device=detected_logits.device)
+            loss = self.loss_fn(detected_logits, detected_region_has_sentence.type(torch.float32), pos_weight=pos_weight)
 
         if self.training:
             return loss

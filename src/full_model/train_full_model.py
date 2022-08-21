@@ -167,6 +167,8 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
         run_params["steps_taken"] = 0  # to know when to evaluate model during epoch and to normalize losses
 
         for num_batch, batch in tqdm(enumerate(train_dl)):
+            log.info(f"Steps taken: {run_params['steps_taken']}")  # TODO: delete
+
             images = batch["images"]
             image_targets = batch["image_targets"]
             region_has_sentence = batch["region_has_sentence"]
@@ -192,6 +194,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             try:
                 output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
             except RuntimeError as e:  # out of memory error
+                log.info(f"Error: {e}")  # TODO: delete
                 if "out of memory" in str(e):
                     oom = True
 
