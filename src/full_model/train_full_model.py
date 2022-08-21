@@ -57,12 +57,11 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 
-def update_normality_pool(model, train_dl):
+def update_normality_pool(model, normality_pool_dl):
     with torch.no_grad():
-        # list of lists to hold NORMALITY_POOL_SIZE number of region features that were both detected and are normal for every region
-        regions_list = [[] for _ in range(36)]
+        region_normality_features = [torch.zeros(size=(0, 2048), device=device) for _ in range(36)]
 
-        for batch in tqdm(train_dl):
+        for batch in normality_pool_dl:
             images = batch["images"]
             image_targets = batch["image_targets"]
             region_is_abnormal = batch["region_is_abnormal"]
@@ -78,20 +77,30 @@ def update_normality_pool(model, train_dl):
             top_region_features = top_region_features.transpose(0, 1)  # of shape [36, batch_size, 2048]
             normal_and_detected = torch.logical_and(~region_is_abnormal, class_detected).transpose(0, 1)  # of shape [36, batch_size]
 
-            for region_features, normal_detected, region_list in zip(top_region_features, normal_and_detected, regions_list):
-                normal_detected_region_features = region_features[normal_detected]
-                if normal_detected_region_features.nelement() != 0:
-                    region_list.append(normal_detected_region_features)
+            region_normality_features_full = True
 
-        # list with 36 tensors of shape [NORMALITY_POOL_SIZE, 2048]
-        regions_list = [torch.cat(region_list, dim=0) for region_list in regions_list]
+            for region_num, (region_features, normal_detected) in enumerate(zip(top_region_features, normal_and_detected)):
+                current_stacked_region_features = region_normality_features[region_num]
 
-        current_normality_pool = torch.stack(regions_list, dim=0)  # of shape [36, NORMALITY_POOL_SIZE, 2048]
+                if current_stacked_region_features.size(0) < NORMALITY_POOL_SIZE:
+                    region_normality_features_full = False
+                    normal_detected_region_features = region_features[normal_detected]
+
+                    if normal_detected_region_features.nelement() != 0:
+                        current_stacked_region_features = torch.cat([current_stacked_region_features, normal_detected_region_features], dim=0)
+                        region_normality_features[region_num] = current_stacked_region_features
+
+            if region_normality_features_full:
+                break
+
+        region_normality_features = [region_tensor[:NORMALITY_POOL_SIZE] for region_tensor in region_normality_features]
+
+        current_normality_pool = torch.stack(region_normality_features, dim=0)  # of shape [36, NORMALITY_POOL_SIZE, 2048]
 
         model.contrastive_attention.aggregate_attention.update_normality_pool(current_normality_pool)
 
 
-def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer, log_file):
+def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer, log_file):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -136,9 +145,6 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    # initialize the normality pool
-    update_normality_pool(model, train_dl)
-
     for epoch in range(epochs):
         run_params["epoch"] = epoch
         log.info(f"\nTraining epoch {epoch}!\n")
@@ -169,6 +175,10 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
             attention_mask = attention_mask.to(device, non_blocking=True)
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
+
+            log.info("\nUpdating normality pool...\n")
+            update_normality_pool(model, normality_pool_dl)
+            log.info("Updating normality pool finished!\n")
 
             try:
                 output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
@@ -290,8 +300,17 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
+    # normality_pool_loader uses train_dataset, but shuffle=False
+    normality_pool_loader = DataLoader(
+        train_dataset,
+        collate_fn=custom_collate_train,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
 
-    return train_loader, val_loader
+    return train_loader, val_loader, normality_pool_loader
 
 
 def get_transforms(dataset: str):
@@ -513,7 +532,7 @@ def main():
     train_dataset_complete = CustomDataset("train", tokenized_train_dataset, train_transforms, log)
     val_dataset_complete = CustomDataset("val", tokenized_val_dataset, val_transforms, log)
 
-    train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
+    train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     model = ReportGenerationModel()
     model.to(device, non_blocking=True)
@@ -529,6 +548,7 @@ def main():
         model=model,
         train_dl=train_loader,
         val_dl=val_loader,
+        normality_pool_dl=normality_pool_loader,
         optimizer=opt,
         lr_scheduler=lr_scheduler,
         epochs=EPOCHS,
