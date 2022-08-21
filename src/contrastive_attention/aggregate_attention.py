@@ -1,10 +1,9 @@
 import math
-import os
 
 import torch
 import torch.nn as nn
 
-from src.full_model.run_configurations import NORMALITY_POOL_SIZE, AGGREGATE_ATTENTION_NUM
+from src.full_model.run_configurations import AGGREGATE_ATTENTION_NUM, NORMALITY_POOL_SIZE
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -13,13 +12,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class AggregateAttention(nn.Module):
     def __init__(self):
         super().__init__()
-        path_to_normality_pool_image_features = os.path.join("/u/home/tanida/normality_pool_image_features", f"normality_image_features_pool_size_{NORMALITY_POOL_SIZE}")
-
-        # shape [36 x NORMALITY_POOL_SIZE x 2048]
-        self.normality_pool_image_features = torch.load(path_to_normality_pool_image_features, map_location=device)
 
         NUM_REGIONS = 36
         HIDDEN_DIM = 2048
+
+        # normality_pool_image_features of shape [NUM_REGIONS x NORMALITY_POOL_SIZE x HIDDEN_DIM]
+        self.register_buffer("normality_pool_image_features", torch.empty(NUM_REGIONS, NORMALITY_POOL_SIZE, HIDDEN_DIM))
 
         self.wx = nn.Parameter(torch.empty(AGGREGATE_ATTENTION_NUM, NUM_REGIONS, HIDDEN_DIM, HIDDEN_DIM), requires_grad=True)
         self.wy = nn.Parameter(torch.empty(NUM_REGIONS, HIDDEN_DIM, HIDDEN_DIM), requires_grad=True)
@@ -29,6 +27,10 @@ class AggregateAttention(nn.Module):
 
         self.reset_parameters(self.wx, self.wx_bias)
         self.reset_parameters(self.wy, self.wy_bias)
+
+    def update_normality_pool(self, current_normality_pool):
+        # overwrite the values of the last normality pool with the newly calculated values
+        self.normality_pool_image_features[:] = current_normality_pool
 
     def reset_parameters(self, weight, bias):
         """Use same weight initialization as for Linear layers (https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear)"""

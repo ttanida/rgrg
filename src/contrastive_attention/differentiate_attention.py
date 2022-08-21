@@ -82,6 +82,7 @@ class DifferentiateAttention(nn.Module):
         # concat_information of shape [b x r x 1 x (d * 2)]
         concat_information = torch.cat([top_region_features, contrastive_information], dim=-1)
 
+        # w of shape [r x (d * 2) x d]
         # top_region_features_with_contrastive_information of shape [b x r x 1 x d]
         top_region_features_with_contrastive_information = F.relu(torch.matmul(concat_information, self.w) + self.w_bias)
 

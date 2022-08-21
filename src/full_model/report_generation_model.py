@@ -53,8 +53,8 @@ class ReportGenerationModel(nn.Module):
         Forward method is used for training and evaluation of model.
         Generate method is used for inference.
         """
-        # top_region_features of shape [batch_size, 36, 2048] (i.e. 1 feature vector for every region for every image in batch)
-        # class_detected is a boolean tensor of shape [batch_size, 36]. Its value is True for a class if the object detector detected the class/region in the image
+        # top_region_features of shape [batch_size x 36 x 2048] (i.e. 1 feature vector for every region for every image in batch)
+        # class_detected is a boolean tensor of shape [batch_size x 36]. Its value is True for a class if the object detector detected the class/region in the image
 
         if self.training:
             obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
@@ -63,7 +63,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            # top_region_features is of shape [batch_size, 36, 1024] after applying contrastive attention
+            # top_region_features is of shape [batch_size x 36 x 1024] after applying contrastive attention
             # the features now have contrastive information encoded in them
             top_region_features = self.contrastive_attention(top_region_features)
 
@@ -215,7 +215,7 @@ class ReportGenerationModel(nn.Module):
     @torch.no_grad()
     def generate(
         self,
-        images: torch.FloatTensor,  # images is of shape [batch_size, 1, 512, 512] (whole gray-scale images of size 512 x 512)
+        images: torch.FloatTensor,  # images is of shape [batch_size x 1 x 512 x 512] (whole gray-scale images of size 512 x 512)
         max_length: int = None,
         num_beams: int = 1,
         num_beam_groups: int = 1,
@@ -243,15 +243,15 @@ class ReportGenerationModel(nn.Module):
         We also return detections, such that we can map each generated sentence to a bounding box.
         We also return class_detected to know which regions were not detected by the object detector (can be plotted).
         """
-        # top_region_features of shape [batch_size, 36, 2048]
+        # top_region_features of shape [batch_size x 36 x 2048]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
         del images
 
-        # top_region_features is of shape [batch_size, 36, 1024] after applying contrastive_attention
+        # top_region_features is of shape [batch_size x 36 x 1024] after applying contrastive_attention
         top_region_features = self.contrastive_attention(top_region_features)
 
-        # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
+        # selected_region_features is of shape [num_regions_selected_in_batch x 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
         # (it has exactly num_regions_selected_in_batch True values)
         selected_regions, selected_region_features = self.binary_classifier_region_selection(

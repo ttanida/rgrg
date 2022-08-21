@@ -57,6 +57,40 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 
+def update_normality_pool(model, train_dl):
+    with torch.no_grad():
+        # list of lists to hold NORMALITY_POOL_SIZE number of region features that were both detected and are normal for every region
+        regions_list = [[] for _ in range(36)]
+
+        for batch in tqdm(train_dl):
+            images = batch["images"]
+            image_targets = batch["image_targets"]
+            region_is_abnormal = batch["region_is_abnormal"]
+
+            images = images.to(device, non_blocking=True)
+            image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
+            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)  # of shape [batch_size, 36]
+
+            # top_region_features of shape [batch_size, 36, 2048]
+            # class_detected of shape [batch_size, 36]
+            _, top_region_features, class_detected = model.object_detector(images, image_targets)
+
+            top_region_features = top_region_features.transpose(0, 1)  # of shape [36, batch_size, 2048]
+            normal_and_detected = torch.logical_and(~region_is_abnormal, class_detected).transpose(0, 1)  # of shape [36, batch_size]
+
+            for region_features, normal_detected, region_list in zip(top_region_features, normal_and_detected, regions_list):
+                normal_detected_region_features = region_features[normal_detected]
+                if normal_detected_region_features.nelement() != 0:
+                    region_list.append(normal_detected_region_features)
+
+        # list with 36 tensors of shape [NORMALITY_POOL_SIZE, 2048]
+        regions_list = [torch.cat(region_list, dim=0) for region_list in regions_list]
+
+        current_normality_pool = torch.stack(regions_list, dim=0)  # of shape [36, NORMALITY_POOL_SIZE, 2048]
+
+        model.contrastive_attention.aggregate_attention.update_normality_pool(current_normality_pool)
+
+
 def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer, log_file):
     """
     Train a model on train set and evaluate on validation set.
@@ -101,6 +135,9 @@ def train_model(model, train_dl, val_dl, optimizer, lr_scheduler, epochs, weight
 
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
+
+    # initialize the normality pool
+    update_normality_pool(model, train_dl)
 
     for epoch in range(epochs):
         run_params["epoch"] = epoch
