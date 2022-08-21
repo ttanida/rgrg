@@ -11,17 +11,21 @@ class DifferentiateAttention(nn.Module):
     def __init__(self):
         super().__init__()
 
-        # wx and wy are the weights in the attention operator
-        self.wx = nn.Parameter(torch.empty(2048, 2048), requires_grad=True)
-        self.wy = nn.Parameter(torch.empty(2048, 2048), requires_grad=True)
+        NUM_REGIONS = 36
+        HIDDEN_DIM = 2048
+        OUTPUT_HIDDEN_DIM = 1024
 
-        self.wx_bias = nn.Parameter(torch.empty(2048), requires_grad=True)
-        self.wy_bias = nn.Parameter(torch.empty(2048), requires_grad=True)
+        # wx and wy are the weights in the attention operator
+        self.wx = nn.Parameter(torch.empty(NUM_REGIONS, HIDDEN_DIM, HIDDEN_DIM), requires_grad=True)
+        self.wy = nn.Parameter(torch.empty(NUM_REGIONS, HIDDEN_DIM, HIDDEN_DIM), requires_grad=True)
+
+        self.wx_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, HIDDEN_DIM), requires_grad=True)
+        self.wy_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, HIDDEN_DIM), requires_grad=True)
 
         # w is the weight for the final linear transformation
-        # (note that final hidden_dim is 1024, since this is what binary classifiers and language model expect)
-        self.w = nn.Parameter(torch.empty(1024, 2048 * 2), requires_grad=True)
-        self.w_bias = nn.Parameter(torch.empty(1024), requires_grad=True)
+        # (note that output_hidden_dim is 1024, since this is what binary classifiers and language model expect)
+        self.w = nn.Parameter(torch.empty(NUM_REGIONS, HIDDEN_DIM * 2, OUTPUT_HIDDEN_DIM), requires_grad=True)
+        self.w_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, OUTPUT_HIDDEN_DIM), requires_grad=True)
 
         self.reset_parameters(self.wx, self.wx_bias)
         self.reset_parameters(self.wy, self.wy_bias)
@@ -36,28 +40,30 @@ class DifferentiateAttention(nn.Module):
 
     def forward(
         self,
-        closest_normal_region_features: torch.FloatTensor,  # shape [batch_size x 36 x AGGREGATE_ATTENTION_NUM x 2048]
-        top_region_features: torch.FloatTensor  # shape [batch_size x 36 x 2048]
+        closest_normal_region_features: torch.FloatTensor,
+        top_region_features: torch.FloatTensor
     ):
         """
         Forward method implements equations 7 - 10 in paper.
-
-        subscripts for einsum notation:
 
         b = batch_size
         r = region_number (i.e. 36)
         a = aggregate_attention_num (i.e. num of closest images by aggregation, most likely 6)
         d = dimensionality (i.e. 2048)
         """
+        # top_region_features of shape [b x r x 1 x d] after unsqueeze
         top_region_features = torch.unsqueeze(top_region_features, dim=2)
 
-        # v_P of shape [batch_size x 36 x (1 + AGGREGATE_ATTENTION_NUM) x 2048]
+        # closest_normal_region_features of shape [b x r x a x d]
+        # v_P of shape [b x r x (1 + a) x d]
         v_P = torch.cat([top_region_features, closest_normal_region_features], dim=2)
 
-        x_wx = torch.einsum("brad, dd, d -> brad", v_P, self.wx, self.wx_bias)
-        y_wy = torch.einsum("brad, dd, d -> brad", v_P, self.wy, self.wy_bias)
+        # wx and wy of shape [r x d x d]
+        # x_wx and y_wy of shape [b x r x (1 + a) x d]
+        x_wx = torch.matmul(v_P, self.wx) + self.wx_bias
+        y_wy = torch.matmul(v_P, self.wy) + self.wy_bias
 
-        # M of shape [batch_size x 36 x (1 + AGGREGATE_ATTENTION_NUM) x (1 + AGGREGATE_ATTENTION_NUM)]
+        # M are the attention weights of shape [b x r x (1 + a) x (1 + a)]
         M = torch.matmul(x_wx, y_wy.transpose(-1, -2))
 
         # scale attention weights
@@ -65,20 +71,18 @@ class DifferentiateAttention(nn.Module):
 
         M = nn.functional.softmax(M, dim=-1)
 
-        # attn_output of shape [batch_size x 36 x (1 + AGGREGATE_ATTENTION_NUM) x 2048]
-        attn_output = torch.einsum("braa, brad -> brad", M, v_P)
+        # attn_output of shape [b x r x (1 + a) x d]
+        attn_output = torch.matmul(M, v_P)
 
-        # common_information of shape [batch_size x 36 x 2048]
-        # avg pooling in the 2nd dimension
-        common_information = torch.mean(attn_output, dim=2, keepdim=False)
-
-        top_region_features = torch.squeeze(top_region_features, dim=2)
+        # common_information of shape [b x r x 1 x d]
+        common_information = torch.mean(attn_output, dim=2, keepdim=True)
 
         contrastive_information = top_region_features - common_information
 
-        # concat_information of shape [batch_size x 36 x (2048 * 2)]
-        concat_information = torch.cat([top_region_features, contrastive_information], dim=2)
+        # concat_information of shape [b x r x 1 x (d * 2)]
+        concat_information = torch.cat([top_region_features, contrastive_information], dim=-1)
 
-        top_region_features_with_contrastive_information = F.relu(F.linear(concat_information, self.w, self.w_bias))
+        # top_region_features_with_contrastive_information of shape [b x r x 1 x d]
+        top_region_features_with_contrastive_information = F.relu(torch.matmul(concat_information, self.w) + self.w_bias)
 
-        return top_region_features_with_contrastive_information  # shape [batch_size x 36 x 1024]
+        return top_region_features_with_contrastive_information.squeeze(dim=2)

@@ -76,5 +76,7 @@ class AggregateAttention(nn.Module):
         # closest_normal_region_features of shape [b, a, r, 1, d]
         closest_normal_region_features = torch.matmul(M, self.normality_pool_image_features)
 
-        # return the AGGREGATE_ATTENTION_NUM closest normal image features for all 36 regions of a single image
+        closest_normal_region_features = closest_normal_region_features.squeeze(dim=3).transpose(1, 2)
+
+        # closest_normal_region_features of shape [b, r, a, d]
         return closest_normal_region_features
