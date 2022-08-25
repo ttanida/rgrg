@@ -212,6 +212,41 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
 
             try:
                 output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+
+                # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
+                if output == -1:
+                    with open(run_params["log_file"], "a") as f:
+                        f.write("Training:\n")
+                        f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
+
+                    optimizer.zero_grad()
+                    continue
+
+                if PRETRAIN_WITHOUT_LM_MODEL:
+                    (
+                        obj_detector_loss_dict,
+                        classifier_loss_region_selection,
+                        classifier_loss_region_abnormal,
+                    ) = output
+                else:
+                    (
+                        obj_detector_loss_dict,
+                        classifier_loss_region_selection,
+                        classifier_loss_region_abnormal,
+                        language_model_loss,
+                    ) = output
+
+                # sum up all 4 losses from the object detector
+                obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
+
+                # sum up the rest of the losses
+                total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal
+
+                if not PRETRAIN_WITHOUT_LM_MODEL:
+                    total_loss += language_model_loss
+
+                total_loss.backward()
+
             except RuntimeError as e:  # out of memory error
                 log.info(f"Error: {e}")
                 if "out of memory" in str(e):
@@ -233,40 +268,6 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 optimizer.zero_grad()
                 oom = False
                 continue
-
-            # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
-            if output == -1:
-                with open(run_params["log_file"], "a") as f:
-                    f.write("Training:\n")
-                    f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
-
-                optimizer.zero_grad()
-                continue
-
-            if PRETRAIN_WITHOUT_LM_MODEL:
-                (
-                    obj_detector_loss_dict,
-                    classifier_loss_region_selection,
-                    classifier_loss_region_abnormal,
-                ) = output
-            else:
-                (
-                    obj_detector_loss_dict,
-                    classifier_loss_region_selection,
-                    classifier_loss_region_abnormal,
-                    language_model_loss,
-                ) = output
-
-            # sum up all 4 losses from the object detector
-            obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
-
-            # sum up the rest of the losses
-            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal
-
-            if not PRETRAIN_WITHOUT_LM_MODEL:
-                total_loss += language_model_loss
-
-            total_loss.backward()
 
             if (num_batch + 1) % ACCUMULATION_STEPS == 0:
                 optimizer.step()
