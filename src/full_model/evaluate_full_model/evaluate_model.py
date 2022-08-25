@@ -40,17 +40,6 @@ from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def log_stats_to_console(
-    log,
-    train_loss,
-    val_loss,
-    epoch,
-):
-    log.info(f"Epoch: {epoch}:")
-    log.info(f"\tTrain loss: {train_loss:.3f}")
-    log.info(f"\tVal loss: {val_loss:.3f}")
-
-
 def write_all_losses_and_scores_to_tensorboard(
     writer,
     overall_steps_taken,
@@ -464,7 +453,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path, log):
     model.eval()
 
     epoch = run_params["epoch"]
@@ -502,12 +491,12 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
         current_lr,
     )
 
-    train_total_loss = train_losses_dict["total_loss"]
     total_val_loss = val_losses_dict["total_loss"]
 
     # decrease lr by 1e-1 if total_val_loss has not decreased after certain number of evaluations
     lr_scheduler.step(total_val_loss)
 
+    # save model every time the val loss has decreased
     if total_val_loss < run_params["lowest_val_loss"]:
         run_params["lowest_val_loss"] = total_val_loss
         run_params["best_epoch"] = epoch
@@ -515,6 +504,3 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
         save_path = os.path.join(run_params["weights_folder_path"], f"val_loss_{total_val_loss:.3f}_epoch_{epoch}.pth")
 
         torch.save(model.state_dict(), save_path)
-
-    if is_epoch_end:
-        log_stats_to_console(log, train_total_loss, total_val_loss, epoch)

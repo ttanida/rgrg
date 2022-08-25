@@ -10,21 +10,20 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DifferentiateAttention(nn.Module):
     def __init__(self):
         super().__init__()
-
         NUM_REGIONS = 36
-        HIDDEN_DIM = 2048
+        CA_HIDDEN_DIM = 512
         OUTPUT_HIDDEN_DIM = 1024
 
         # wx and wy are the weights in the attention operator
-        self.wx = nn.Parameter(torch.empty(NUM_REGIONS, HIDDEN_DIM, HIDDEN_DIM), requires_grad=True)
-        self.wy = nn.Parameter(torch.empty(NUM_REGIONS, HIDDEN_DIM, HIDDEN_DIM), requires_grad=True)
+        self.wx = nn.Parameter(torch.empty(NUM_REGIONS, CA_HIDDEN_DIM, CA_HIDDEN_DIM), requires_grad=True)
+        self.wy = nn.Parameter(torch.empty(NUM_REGIONS, CA_HIDDEN_DIM, CA_HIDDEN_DIM), requires_grad=True)
 
-        self.wx_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, HIDDEN_DIM), requires_grad=True)
-        self.wy_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, HIDDEN_DIM), requires_grad=True)
+        self.wx_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, CA_HIDDEN_DIM), requires_grad=True)
+        self.wy_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, CA_HIDDEN_DIM), requires_grad=True)
 
         # w is the weight for the final linear transformation
         # (note that output_hidden_dim is 1024, since this is what binary classifiers and language model expect)
-        self.w = nn.Parameter(torch.empty(NUM_REGIONS, HIDDEN_DIM * 2, OUTPUT_HIDDEN_DIM), requires_grad=True)
+        self.w = nn.Parameter(torch.empty(NUM_REGIONS, CA_HIDDEN_DIM * 2, OUTPUT_HIDDEN_DIM), requires_grad=True)
         self.w_bias = nn.Parameter(torch.empty(NUM_REGIONS, 1, OUTPUT_HIDDEN_DIM), requires_grad=True)
 
         self.reset_parameters(self.wx, self.wx_bias)

@@ -98,7 +98,7 @@ def update_normality_pool(model, normality_pool_dl):
 
         current_normality_pool = torch.stack(region_normality_features, dim=0)  # of shape [36, NORMALITY_POOL_SIZE, 2048]
 
-        model.contrastive_attention.aggregate_attention.update_normality_pool(current_normality_pool)
+        model.contrastive_attention.update_normality_pool(current_normality_pool)
 
 
 def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer, log_file):
@@ -194,7 +194,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             try:
                 output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
             except RuntimeError as e:  # out of memory error
-                log.info(f"Error: {e}")  # TODO: delete
+                log.info(f"Error: {e}")
                 if "out of memory" in str(e):
                     oom = True
 
@@ -268,22 +268,17 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             run_params["steps_taken"] += 1
             run_params["overall_steps_taken"] += 1
 
-            is_epoch_end = True if (num_batch + 1) == len(train_dl) else False
-
             # evaluate every k steps and at the end of each epoch
-            # also update the normality pool
-            if run_params["steps_taken"] >= EVALUATE_EVERY_K_STEPS or is_epoch_end:
+            # also update normality pool
+            if run_params["steps_taken"] >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
+
+                log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path, log)
+                log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 log.info("Updating normality pool...")
                 update_normality_pool(model, normality_pool_dl)
                 log.info("Updating normality pool finished!")
-
-                log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
-
-                # evaluate the model and write the scores (among other things) to tensorboard
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, is_epoch_end, generated_sentences_folder_path, log)
-
-                log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
