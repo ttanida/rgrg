@@ -31,6 +31,7 @@ from src.full_model.run_configurations import (
     PERCENTAGE_OF_TRAIN_SET_TO_USE,
     PERCENTAGE_OF_VAL_SET_TO_USE,
     BATCH_SIZE,
+    EFFECTIVE_BATCH_SIZE,
     NUM_WORKERS,
     EPOCHS,
     LR,
@@ -158,6 +159,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
     run_params["overall_steps_taken"] = 0  # for logging to tensorboard
     run_params["log_file"] = log_file  # for logging error messages (e.g. OOM)
 
+    # for gradient accumulation
+    ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
+
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
@@ -263,8 +267,10 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 total_loss += language_model_loss
 
             total_loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+
+            if (num_batch + 1) % ACCUMULATION_STEPS == 0:
+                optimizer.step()
+                optimizer.zero_grad()
 
             list_of_losses = [
                 total_loss,
@@ -299,6 +305,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 for loss_type in train_losses_dict:
                     train_losses_dict[loss_type] = 0.0
                 run_params["steps_taken"] = 0
+                optimizer.zero_grad()
 
                 # set the model back to training
                 model.train()
@@ -528,6 +535,7 @@ def create_run_folder():
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
         "BATCH_SIZE": BATCH_SIZE,
+        "EFFECTIVE_BATCH_SIZE": EFFECTIVE_BATCH_SIZE,
         "NUM_WORKERS": NUM_WORKERS,
         "EPOCHS": EPOCHS,
         "LR": LR,
