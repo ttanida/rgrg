@@ -59,8 +59,20 @@ torch.cuda.manual_seed_all(seed_val)
 
 
 def update_normality_pool(model, normality_pool_dl):
+    """
+    Creates a normality pool tensor of shape [36 x NORMALITY_POOL_SIZE x 2048].
+
+    This normality pool will be saved and used in the constrastive attention module to extract abnormal image features from input images
+    during training, evaluation and inference.
+
+    To create the normality pool, batches of a normality pool dataloader are iterated, until the normality pool is filled with exactly NORMALITY_POOL_SIZE number of
+    normal region features for all 36 regions.
+
+    The data of the normality_pool_dl is the same as the train_dl, however shuffling is off, as to ensure reproducibility.
+    """
     with torch.no_grad():
-        region_normality_features = [torch.zeros(size=(0, 2048), device=device) for _ in range(36)]
+        # list of 36 tensors, each of which will have the shape [NORMALITY_POOL_SIZE x 2048] in the end (i.e. normality pool for each region)
+        region_normality_pools = [torch.zeros(size=(0, 2048), device=device) for _ in range(36)]
 
         for batch in normality_pool_dl:
             images = batch["images"]
@@ -69,36 +81,39 @@ def update_normality_pool(model, normality_pool_dl):
 
             images = images.to(device, non_blocking=True)
             image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
-            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)  # of shape [batch_size, 36]
+            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)  # of shape [batch_size x 36]
 
-            # top_region_features of shape [batch_size, 36, 2048]
-            # class_detected of shape [batch_size, 36]
+            # top_region_features of shape [batch_size x 36 x 2048]
+            # class_detected of shape [batch_size x 36]
             _, top_region_features, class_detected = model.object_detector(images, image_targets)
 
-            top_region_features = top_region_features.transpose(0, 1)  # of shape [36, batch_size, 2048]
-            normal_and_detected = torch.logical_and(~region_is_abnormal, class_detected).transpose(0, 1)  # of shape [36, batch_size]
+            top_region_features = top_region_features.transpose(0, 1)  # of shape [36 x batch_size x 2048]
+            normal_and_detected = torch.logical_and(~region_is_abnormal, class_detected).transpose(0, 1)  # of shape [36 x batch_size]
 
-            region_normality_features_full = True
+            all_region_normality_pools_are_full = True
 
+            # region_features of shape [batch_size x 2048]
+            # normal_detected of shape [batch_size]
             for region_num, (region_features, normal_detected) in enumerate(zip(top_region_features, normal_and_detected)):
-                current_stacked_region_features = region_normality_features[region_num]
+                region_norm_pool = region_normality_pools[region_num]
 
-                if current_stacked_region_features.size(0) < NORMALITY_POOL_SIZE:
-                    region_normality_features_full = False
+                if region_norm_pool.size(0) < NORMALITY_POOL_SIZE:
+                    all_region_normality_pools_are_full = False
                     normal_detected_region_features = region_features[normal_detected]
 
-                    if normal_detected_region_features.nelement() != 0:
-                        current_stacked_region_features = torch.cat([current_stacked_region_features, normal_detected_region_features], dim=0)
-                        region_normality_features[region_num] = current_stacked_region_features
+                    # only concat new region_features (to a region's normality pool) that are normal and were detected by the object_detector
+                    region_norm_pool = torch.cat([region_norm_pool, normal_detected_region_features], dim=0)
+                    region_normality_pools[region_num] = region_norm_pool
 
-            if region_normality_features_full:
+            if all_region_normality_pools_are_full:
                 break
 
-        region_normality_features = [region_tensor[:NORMALITY_POOL_SIZE] for region_tensor in region_normality_features]
+        # trim each region_norm_pool to have size NORMALITY_POOL_SIZE
+        region_normality_pools = [region_norm_pool[:NORMALITY_POOL_SIZE] for region_norm_pool in region_normality_pools]
 
-        current_normality_pool = torch.stack(region_normality_features, dim=0)  # of shape [36, NORMALITY_POOL_SIZE, 2048]
+        normality_pool = torch.stack(region_normality_pools, dim=0)  # of shape [36 x NORMALITY_POOL_SIZE x 2048]
 
-        model.contrastive_attention.update_normality_pool(current_normality_pool)
+        model.contrastive_attention.update_normality_pool(normality_pool)
 
 
 def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer, log_file):
@@ -560,6 +575,7 @@ def main():
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
+    # model.load_state_dict(torch.load("path_to_pretrained_full_model"))
     model.to(device, non_blocking=True)
     model.train()
 
