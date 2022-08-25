@@ -35,7 +35,7 @@ from src.full_model.run_configurations import (
     NUM_WORKERS,
     EPOCHS,
     LR,
-    EVALUATE_EVERY_K_STEPS,
+    EVALUATE_EVERY_K_BATCHES,
     PATIENCE_LR_SCHEDULER,
     THRESHOLD_LR_SCHEDULER,
     NUM_BEAMS,
@@ -289,13 +289,16 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             run_params["steps_taken"] += 1
             run_params["overall_steps_taken"] += 1
 
-            # evaluate every k steps and at the end of each epoch
+            # evaluate every k batches and at the end of each epoch
             # also update normality pool
-            if run_params["steps_taken"] >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
+            if run_params["steps_taken"] >= EVALUATE_EVERY_K_BATCHES or (num_batch + 1) == len(train_dl):
 
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
                 evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path)
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
+
+                # set the model back to training
+                model.train()
 
                 log.info("Updating normality pool...")
                 update_normality_pool(model, normality_pool_dl)
@@ -306,9 +309,6 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                     train_losses_dict[loss_type] = 0.0
                 run_params["steps_taken"] = 0
                 optimizer.zero_grad()
-
-                # set the model back to training
-                model.train()
 
     log.info("Finished training!")
     log.info(f"Lowest overall val loss: {run_params['lowest_val_loss']:.3f} at epoch {run_params['best_epoch']}")
@@ -539,7 +539,7 @@ def create_run_folder():
         "NUM_WORKERS": NUM_WORKERS,
         "EPOCHS": EPOCHS,
         "LR": LR,
-        "EVALUATE_EVERY_K_STEPS": EVALUATE_EVERY_K_STEPS,
+        "EVALUATE_EVERY_K_BATCHES": EVALUATE_EVERY_K_BATCHES,
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
         "THRESHOLD_LR_SCHEDULER": THRESHOLD_LR_SCHEDULER,
         "NUM_BEAMS": NUM_BEAMS,
