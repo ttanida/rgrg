@@ -45,15 +45,6 @@ def compute_final_language_model_scores(language_model_scores):
                 bleu_score_type = int(metric[-1])
                 result = score.compute(max_order=bleu_score_type)
                 temp[f"{metric}"] = result["bleu"]
-            else:  # bert_score
-                result = score.compute(lang="en", device=device)
-                avg_precision = np.array(result["precision"]).mean()
-                avg_recall = np.array(result["recall"]).mean()
-                avg_f1 = np.array(result["f1"]).mean()
-
-                temp["bertscore_precision"] = avg_precision
-                temp["bertscore_recall"] = avg_recall
-                temp["bertscore_f1"] = avg_f1
 
         language_model_scores[subset] = temp
 
@@ -400,12 +391,9 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     log_file = run_params["log_file"]
 
     # compute scores for all, normal and abnormal reference sentences
-    subsets = ["all", "normal", "abnormal"]
     language_model_scores = {}
-
-    for subset in subsets:
+    for subset in ["all", "normal", "abnormal"]:
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
-        language_model_scores[subset]["bert_score"] = evaluate.load("bertscore")
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],
@@ -482,8 +470,8 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
             if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
                 gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(generated_sentences_for_selected_regions)
-                gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"].extend(gen_sents_for_abnormal_selected_regions)
                 gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences_for_selected_regions)
+                gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"].extend(gen_sents_for_abnormal_selected_regions)
                 gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"].extend(ref_sents_for_abnormal_selected_regions)
 
             if num_batch < num_batches_to_process_for_image_plotting:

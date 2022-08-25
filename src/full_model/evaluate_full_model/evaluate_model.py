@@ -275,18 +275,11 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
       FN: (normal/abnormal) region has sentence (gt), but is not selected by classifier to get sentence (pred)
     """
     region_selection_scores = {}
-    region_selection_scores["all"] = {
-        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
-        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
-    }
-    region_selection_scores["normal"] = {
-        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
-        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
-    }
-    region_selection_scores["abnormal"] = {
-        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
-        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
-    }
+    for subset in ["all", "normal", "abnormal"]:
+        region_selection_scores[subset] = {
+            "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
+            "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
+        }
 
     """
     For the binary classifier for region normal/abnormal detection, we want to compute the precision and recall for:
