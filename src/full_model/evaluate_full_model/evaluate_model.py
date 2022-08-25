@@ -216,7 +216,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
 
 
-def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
+def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
@@ -453,7 +453,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch):
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path, log):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path):
     model.eval()
 
     epoch = run_params["epoch"]
@@ -470,7 +470,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
-    ) = get_val_losses_and_other_metrics(model, val_dl, log, log_file, epoch)
+    ) = get_val_losses_and_other_metrics(model, val_dl, log_file, epoch)
 
     if PRETRAIN_WITHOUT_LM_MODEL:
         language_model_scores = None

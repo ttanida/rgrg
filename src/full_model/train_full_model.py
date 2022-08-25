@@ -288,7 +288,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
 
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path, log)
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path)
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 log.info("Updating normality pool...")
