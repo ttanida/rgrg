@@ -43,9 +43,9 @@ RUN_COMMENT = """Backbone changed to ResNet-50 pre-trained on ImageNet. Train on
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 EFFECTIVE_BATCH_SIZE = 64
-NUM_WORKERS = 12
+NUM_WORKERS = 8
 EPOCHS = 20
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
@@ -396,7 +396,8 @@ def train_model(
                 for class_, avg_iou_class in zip(anatomical_regions, avg_iou_per_class):
                     writer.add_scalar(f"iou_{class_}", avg_iou_class, overall_steps_taken)
 
-                writer.add_scalar("lr", lr_scheduler.get_last_lr(), overall_steps_taken)
+                current_lr = float(optimizer.param_groups[0]["lr"])
+                writer.add_scalar("lr", current_lr, overall_steps_taken)
 
                 log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
 
@@ -610,6 +611,8 @@ def create_run_folder():
 
 
 def main():
+    torch.cuda.empty_cache()
+
     weights_folder_path, tensorboard_folder_path, config_file_path = create_run_folder()
 
     datasets_as_dfs = get_datasets_as_dfs(config_file_path)
