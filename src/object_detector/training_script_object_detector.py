@@ -15,7 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch
 from torch import Tensor
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -39,17 +39,19 @@ torch.cuda.manual_seed_all(seed_val)
 # define configurations for training run
 RUN = 6
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Backbone changed to ResNet-50 with input image resolution 512. Train on full dataset. Convert from ReduceLROnPlateau to StepLR"""
+RUN_COMMENT = """Backbone changed to ResNet-50 pre-trained on ImageNet. Train on full dataset."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
-BATCH_SIZE = 16
+BATCH_SIZE = 32
+EFFECTIVE_BATCH_SIZE = 64
 NUM_WORKERS = 12
 EPOCHS = 20
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE = 80  # number of evaluations to wait before early stopping
-PATIENCE_LR_SCHEDULER = 40  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+PATIENCE_LR_SCHEDULER = 7  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
+THRESHOLD_LR_SCHEDULER = 1e-3
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
@@ -341,6 +343,9 @@ def train_model(
 
     overall_steps_taken = 0  # for logging to tensorboard
 
+    # for gradient accumulation
+    ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
+
     for epoch in range(epochs):
         log.info(f"\nTraining epoch {epoch}!\n")
 
@@ -361,8 +366,10 @@ def train_model(
             loss = sum(loss for loss in loss_dict.values())
 
             loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+
+            if (num_batch + 1) % ACCUMULATION_STEPS == 0:
+                optimizer.step()
+                optimizer.zero_grad()
 
             train_loss += loss.item() * batch_size
             steps_taken += 1
@@ -584,12 +591,14 @@ def create_run_folder():
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
         "BATCH_SIZE": BATCH_SIZE,
+        "EFFECTIVE_BATCH_SIZE": EFFECTIVE_BATCH_SIZE,
         "NUM_WORKERS": NUM_WORKERS,
         "EPOCHS": EPOCHS,
         "LR": LR,
         "EVALUATE_EVERY_K_STEPS": EVALUATE_EVERY_K_STEPS,
         "PATIENCE": PATIENCE,
-        "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER
+        "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
+        "THRESHOLD_LR_SCHEDULER": THRESHOLD_LR_SCHEDULER
     }
 
     with open(config_file_path, "w") as f:
@@ -618,7 +627,7 @@ def main():
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
-    lr_scheduler = StepLR(opt, step_size=6000, gamma=0.1)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     log.info("\nStarting training!\n")

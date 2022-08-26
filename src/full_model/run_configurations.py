@@ -1,7 +1,7 @@
 # define configurations for training run
-RUN = 5
+RUN = 6
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """(Pre-)train full model minus language model. Reimplemented (dynamic) contrastive attention. First time using gradient accumulation."""
+RUN_COMMENT = """(Pre-)train full model minus language model. Change backbone to ResNet-50 pretrained on ImageNet. Use dynamic contrastive attention and gradient accumulation."""
 PRETRAIN_WITHOUT_LM_MODEL = True
 IMAGE_INPUT_SIZE = 512
 NORMALITY_POOL_SIZE = 500
