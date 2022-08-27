@@ -26,7 +26,7 @@ class ReportGenerationModel(nn.Module):
         self.pretrain_without_lm_model = pretrain_without_lm_model
 
         self.object_detector = ObjectDetector(return_feature_vectors=True)
-        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_5/weights/val_loss_16.333_epoch_3.pth"
+        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_6/weights/val_loss_13.724_epoch_4.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
         self.contrastive_attention = ContrastiveAttention()
