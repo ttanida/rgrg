@@ -228,7 +228,6 @@ class LanguageModel(nn.Module):
 
         # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
         self.feature_space_transformation_nn = nn.Sequential(
-            # nn.Linear(in_features=2048, out_features=1024),
             nn.Linear(in_features=1024, out_features=1024),
             nn.ReLU(),
             nn.Linear(in_features=1024, out_features=1024)

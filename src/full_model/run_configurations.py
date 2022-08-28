@@ -1,7 +1,7 @@
 # define configurations for training run
-RUN = 7
+RUN = 8
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """(Pre-)train full model minus language model. Change backbone to ResNet-50 pretrained on ImageNet. Use dynamic contrastive attention and gradient accumulation. Add weights of 3 to both classifier losses."""
+RUN_COMMENT = """(Pre-)train full model minus language model. Train with image features coming from box_head instead of box_roi_pool. Train without CA. Backbone is ResNet-50 pretrained on ImageNet. Use gradient accumulation. Add weights of 4 to both classifier losses."""
 PRETRAIN_WITHOUT_LM_MODEL = True
 IMAGE_INPUT_SIZE = 512
 NORMALITY_POOL_SIZE = 500
@@ -12,7 +12,7 @@ BATCH_SIZE = 16
 EFFECTIVE_BATCH_SIZE = 64  # batch size after gradient accumulation
 NUM_WORKERS = 8
 EPOCHS = 20
-LR = 1e-3
+LR = 5e-4
 EVALUATE_EVERY_K_BATCHES = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 THRESHOLD_LR_SCHEDULER = 1e-3  # threshold for measuring the new optimum, to only focus on significant changes
