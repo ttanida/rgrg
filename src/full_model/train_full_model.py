@@ -165,9 +165,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    # log.info("Initializing normality pool...")
-    # update_normality_pool(model, normality_pool_dl)
-    # log.info("Initializing normality pool finished!")
+    log.info("Initializing normality pool...")
+    update_normality_pool(model, normality_pool_dl)
+    log.info("Initializing normality pool finished!")
 
     for epoch in range(epochs):
         run_params["epoch"] = epoch
@@ -299,9 +299,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 # set the model back to training
                 model.train()
 
-                # log.info("Updating normality pool...")
-                # update_normality_pool(model, normality_pool_dl)
-                # log.info("Updating normality pool finished!")
+                log.info("Updating normality pool...")
+                update_normality_pool(model, normality_pool_dl)
+                log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:

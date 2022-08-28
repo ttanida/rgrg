@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
 from src.binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
-# from src.contrastive_attention.contrastive_attention import ContrastiveAttention
+from src.contrastive_attention.contrastive_attention import ContrastiveAttention
 from src.object_detector.object_detector import ObjectDetector
 from src.language_model.language_model import LanguageModel
 
@@ -29,7 +29,7 @@ class ReportGenerationModel(nn.Module):
         path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_6/weights/val_loss_13.724_epoch_4.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
-        # self.contrastive_attention = ContrastiveAttention()
+        self.contrastive_attention = ContrastiveAttention()
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
@@ -67,7 +67,7 @@ class ReportGenerationModel(nn.Module):
 
             # top_region_features is of shape [batch_size x 36 x 1024] after applying contrastive attention
             # the features now have contrastive information encoded in them
-            # top_region_features = self.contrastive_attention(top_region_features)
+            top_region_features = self.contrastive_attention(top_region_features)
 
             # during training, only get the two losses for the two binary classifiers
 
@@ -104,7 +104,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            # top_region_features = self.contrastive_attention(top_region_features)
+            top_region_features = self.contrastive_attention(top_region_features)
 
             # during evaluation, for the binary classifier for region selection, get the loss, the regions that were selected by the classifier
             # (and that were also detected) and the corresponding region features (selected_region_features)
@@ -257,7 +257,7 @@ class ReportGenerationModel(nn.Module):
         del images
 
         # top_region_features is of shape [batch_size x 36 x 1024] after applying contrastive_attention
-        # top_region_features = self.contrastive_attention(top_region_features)
+        top_region_features = self.contrastive_attention(top_region_features)
 
         # selected_region_features is of shape [num_regions_selected_in_batch x 1024]
         # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
