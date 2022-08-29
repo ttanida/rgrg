@@ -30,6 +30,7 @@ from src.full_model.run_configurations import (
     NUM_BEAMS,
     MAX_NUM_TOKENS_GENERATE,
     NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
+    NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
     NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION,
     NUM_IMAGES_TO_PLOT,
 )
@@ -390,16 +391,25 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     overall_steps_taken = run_params["overall_steps_taken"]
     log_file = run_params["log_file"]
 
-    # compute scores for all, normal and abnormal reference sentences
     language_model_scores = {}
-    for subset in ["all", "normal", "abnormal"]:
+    # compute bleu scores for all, normal and abnormal reference sentences as well as full reports
+    for subset in ["all", "normal", "abnormal", "report"]:
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+
+    # compute meteor and rouge-L scores for complete reports
+    language_model_scores["report"]["meteor"] = evaluate.load("meteor")
+    language_model_scores["report"]["rouge"] = evaluate.load("rouge")
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],
         "reference_sentences": [],
         "generated_abnormal_sentences": [],
         "reference_abnormal_sentences": [],
+    }
+
+    gen_and_ref_reports_to_save_to_file = {
+        "generated_reports": [],
+        "reference_reports": [],
     }
 
     # since generating sentences takes some time, we only generate NUM_SENTENCES_TO_GENERATE sentences
@@ -473,6 +483,15 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(reference_sentences_for_selected_regions)
                 gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"].extend(gen_sents_for_abnormal_selected_regions)
                 gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"].extend(ref_sents_for_abnormal_selected_regions)
+
+            if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
+                reference_reports = []
+                for ref_sents_single_image in reference_sentences:
+                    ref_report_single_image = []
+                    for sent in ref_sents_single_image:
+                        if sent:
+                            # remove duplicates
+                            ref_report_single_image += sent
 
             if num_batch < num_batches_to_process_for_image_plotting:
                 plot_detections_and_sentences_to_tensorboard(

@@ -41,6 +41,7 @@ from src.full_model.run_configurations import (
     NUM_BEAMS,
     MAX_NUM_TOKENS_GENERATE,
     NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
+    NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
     NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION,
     NUM_IMAGES_TO_PLOT,
 )
@@ -238,10 +239,10 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
                 # sum up the rest of the losses
-                total_loss = obj_detector_losses + 4 * classifier_loss_region_selection + 4 * classifier_loss_region_abnormal
+                total_loss = obj_detector_losses + 3 * classifier_loss_region_selection + 3 * classifier_loss_region_abnormal
 
                 if not PRETRAIN_WITHOUT_LM_MODEL:
-                    total_loss += language_model_loss
+                    total_loss += 2 * language_model_loss
 
                 total_loss.backward()
 
@@ -544,6 +545,7 @@ def create_run_folder():
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
         "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
+        "NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
         "NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION": NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION,
         "NUM_IMAGES_TO_PLOT": NUM_IMAGES_TO_PLOT
     }
@@ -582,7 +584,7 @@ def main():
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    # model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_6/weights/val_loss_33.717_epoch_1.pth"))
+    model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_7/weights/val_loss_31.493_epoch_2.pth"))
     model.to(device, non_blocking=True)
     model.train()
 
