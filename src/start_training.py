@@ -22,7 +22,7 @@ while free_memory < 35000:
     free_memory = gpus[0].memoryFree
 
 # x = torch.rand(1024, 1024, 1024 * 11, device=device)  # ^= 45.9 GB
-x = torch.rand(1024, 1024, 1024 * 8, device=device)  # ^= 33.6 GB
+x = torch.rand(1024, 1024, 1024 * 9, device=device)  # ^= 37.7 GB
 del x
 
 main()

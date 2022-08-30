@@ -583,8 +583,8 @@ def get_generated_and_reference_reports(
         return generated_reports, removed_similar_generated_sentences
 
     def get_ref_report_single_image(ref_sents_single_image):
-        # concatenate all non-empty ref sentences
-        ref_report_single_image = " ".join(sent for sent in ref_sents_single_image if sent != "")
+        # concatenate all non-empty ref sentences (empty ref sentences are symbolized by #)
+        ref_report_single_image = " ".join(sent for sent in ref_sents_single_image if sent != "#")
 
         # different regions can have the same or partially the same ref sentences
         # e.g. region 1 can have ref_sentence "The lung volume is low." and regions 2 the ref_sentence "The lung volume is low. There is pneumothorax."
