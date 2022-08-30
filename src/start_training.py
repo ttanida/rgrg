@@ -14,14 +14,15 @@ log = logging.getLogger(__name__)
 gpus = GPUtil.getGPUs()
 free_memory = gpus[0].memoryFree
 
-while free_memory < 36500:
+while free_memory < 35000:
     time.sleep(5)
     log.info("Sleeping 5 seconds")
 
     gpus = GPUtil.getGPUs()
     free_memory = gpus[0].memoryFree
 
-# x = torch.rand(1024, 1024, 1024 * 11, device=device)
-# del x
+# x = torch.rand(1024, 1024, 1024 * 11, device=device)  # ^= 45.9 GB
+x = torch.rand(1024, 1024, 1024 * 8, device=device)  # ^= 33.6 GB
+del x
 
 main()
