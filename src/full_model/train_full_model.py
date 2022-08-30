@@ -591,6 +591,7 @@ def main():
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_7/weights/val_loss_31.493_epoch_2.pth"))
+    model.language_model.load_state_dict(torch.load("/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"))
     model.to(device, non_blocking=True)
     model.train()
 

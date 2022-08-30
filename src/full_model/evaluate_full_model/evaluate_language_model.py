@@ -190,7 +190,7 @@ def get_generated_sentence_for_region(
         generated_sentences_for_selected_regions[index] = "Heart is ok."
     """
     selected_regions_flat = selected_regions.reshape(-1)
-    cum_sum_true_values = torch.cumsum(selected_regions_flat, dim=0)
+    cum_sum_true_values = np.cumsum(selected_regions_flat)
 
     cum_sum_true_values = cum_sum_true_values.reshape(selected_regions.shape)
     cum_sum_true_values -= 1
@@ -516,6 +516,9 @@ def get_generated_and_reference_reports(
         # since different (closely related) regions can have the same generated sentence, we first remove exact duplicates
         gen_sents_single_image = sentence_tokenizer(gen_report_single_image).sents
 
+        # convert spacy.tokens.span.Span object into str by using .text attribute
+        gen_sents_single_image = [sent.text for sent in gen_sents_single_image]
+
         gen_sents_single_image = list(dict.fromkeys(gen_sents_single_image))
 
         # use bertscore to remove generated sentences that are not exact duplicates, but very similar nonetheless
@@ -539,7 +542,7 @@ def get_generated_and_reference_reports(
                 bert_score_result = bert_score.compute(
                     lang="en", predictions=[gen_sent_1], references=[gen_sent_2], model_type="distilbert-base-uncased"
                 )
-                if bert_score_result["f1"] > BERTSCORE_SIMILARITY_THRESHOLD:
+                if bert_score_result["f1"][0] > BERTSCORE_SIMILARITY_THRESHOLD:
                     similar_generated_sents_to_be_removed[gen_sent_1] = gen_sent_2
 
         gen_report_single_image = " ".join(
@@ -589,8 +592,11 @@ def get_generated_and_reference_reports(
         # with a sentence tokenizer
         ref_sents_single_image = sentence_tokenizer(ref_report_single_image).sents
 
+        # convert spacy.tokens.span.Span object into str by using .text attribute
+        ref_sents_single_image = [sent.text for sent in ref_sents_single_image]
+
         # we use a dict to remove duplicate sentences and put the unique sentences back together to a single str ref_report_single_image
-        ref_report_single_image = " ".join(sent for sent in dict.fromkeys(ref_sents_single_image))
+        ref_report_single_image = " ".join(dict.fromkeys(ref_sents_single_image))
 
         return ref_report_single_image
 
