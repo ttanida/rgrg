@@ -21,3 +21,4 @@ NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 10  # save num_batches_of_.
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated reports with their gt reference reports to a txt file
 NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION = 300  # for evaluation of BLEU/BERTScore
 NUM_IMAGES_TO_PLOT = 8
+BERTSCORE_SIMILARITY_THRESHOLD = 0.955  # threshold for discarding generated sentences that are too similar

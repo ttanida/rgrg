@@ -44,6 +44,7 @@ from src.full_model.run_configurations import (
     NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
     NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION,
     NUM_IMAGES_TO_PLOT,
+    BERTSCORE_SIMILARITY_THRESHOLD
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -118,7 +119,7 @@ def update_normality_pool(model, normality_pool_dl):
         model.contrastive_attention.update_normality_pool(normality_pool)
 
 
-def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_folder_path, writer, log_file):
+def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_and_reports_folder_path, writer, log_file):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -294,7 +295,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_BATCHES or (num_batch + 1) == len(train_dl):
 
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path)
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path)
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 # set the model back to training
@@ -510,7 +511,9 @@ def create_run_folder():
     run_folder_path = os.path.join(run_folder_path_parent_dir, f"run_{RUN}")
     weights_folder_path = os.path.join(run_folder_path, "weights")
     tensorboard_folder_path = os.path.join(run_folder_path, "tensorboard")
-    generated_sentences_folder_path = os.path.join(run_folder_path, "generated_sentences")
+    generated_sentences_and_reports_folder_path = os.path.join(run_folder_path, "generated_sentences_and_reports")
+    generated_sentences_folder_path = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences")
+    generated_reports_folder_path = os.path.join(generated_sentences_and_reports_folder_path, "generated_reports")
     log_file = os.path.join(run_folder_path, "log_file")
 
     if os.path.exists(run_folder_path):
@@ -521,7 +524,9 @@ def create_run_folder():
     os.mkdir(run_folder_path)
     os.mkdir(weights_folder_path)
     os.mkdir(tensorboard_folder_path)
+    os.mkdir(generated_sentences_and_reports_folder_path)
     os.mkdir(generated_sentences_folder_path)
+    os.mkdir(generated_reports_folder_path)
 
     log.info(f"Run {RUN} folder created at {run_folder_path}.")
 
@@ -547,7 +552,8 @@ def create_run_folder():
         "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
         "NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
         "NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION": NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION,
-        "NUM_IMAGES_TO_PLOT": NUM_IMAGES_TO_PLOT
+        "NUM_IMAGES_TO_PLOT": NUM_IMAGES_TO_PLOT,
+        "BERTSCORE_SIMILARITY_THRESHOLD": BERTSCORE_SIMILARITY_THRESHOLD
     }
 
     with open(config_file_path, "w") as f:
@@ -555,7 +561,7 @@ def create_run_folder():
         for param_name, param_value in config_parameters.items():
             f.write(f"\t{param_name}: {param_value}\n")
 
-    return weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_folder_path, log_file
+    return weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_and_reports_folder_path, log_file
 
 
 def main():
@@ -563,7 +569,7 @@ def main():
         weights_folder_path,
         tensorboard_folder_path,
         config_file_path,
-        generated_sentences_folder_path,
+        generated_sentences_and_reports_folder_path,
         log_file
     ) = create_run_folder()
 
@@ -604,7 +610,7 @@ def main():
         epochs=EPOCHS,
         weights_folder_path=weights_folder_path,
         tokenizer=tokenizer,
-        generated_sentences_folder_path=generated_sentences_folder_path,
+        generated_sentences_and_reports_folder_path=generated_sentences_and_reports_folder_path,
         writer=writer,
         log_file=log_file
     )

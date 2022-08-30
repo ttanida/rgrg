@@ -446,7 +446,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_folder_path):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path):
     model.eval()
 
     epoch = run_params["epoch"]
@@ -468,7 +468,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
     if PRETRAIN_WITHOUT_LM_MODEL:
         language_model_scores = None
     else:
-        language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_folder_path)
+        language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
 
     current_lr = float(optimizer.param_groups[0]["lr"])
 
