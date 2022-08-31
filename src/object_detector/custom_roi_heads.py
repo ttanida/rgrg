@@ -247,13 +247,7 @@ class CustomRoIHeads(RoIHeads):
         # if we evaluate the object detector (in isolation or as part of the full model), we need the "detections"
         # if we do either of them, we always need "class_detected" (see doc_string of method for details)
         if self.return_feature_vectors or not self.training:
-            # take the box features after the roi pool and transform from [num_proposals, 2048, 8, 8] to [num_proposals, 2048, 1, 1]
-            box_features_after_roi_pool = self.avg_pool(box_features_after_roi_pool)
-
-            # remove all dims of size 1
-            box_features_after_roi_pool = torch.squeeze(box_features_after_roi_pool)
-
-            output = self.get_top_region_features_detections_class_detected(box_features_after_roi_pool, box_regression, class_logits, proposals, image_shapes)
+            output = self.get_top_region_features_detections_class_detected(box_features, box_regression, class_logits, proposals, image_shapes)
 
             roi_heads_output["class_detected"] = output["class_detected"]
 

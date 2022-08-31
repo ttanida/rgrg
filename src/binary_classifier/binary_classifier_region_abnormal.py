@@ -15,15 +15,7 @@ class BinaryClassifierRegionAbnormal(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.classifier = nn.Sequential(
-            # nn.Linear(in_features=2048, out_features=1024),
-            # nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=512),
-            nn.ReLU(),
-            nn.Linear(in_features=512, out_features=128),
-            nn.ReLU(),
-            nn.Linear(in_features=128, out_features=1)
-        )
+        self.classifier = nn.Linear(in_features=1024, out_features=1)
 
         # since we have around 7.6x more normal regions than abnormal regions (see compute_stats_dataset.py),
         # we set pos_weight=7.6 to put 7.6 more weight on the loss of abnormal regions

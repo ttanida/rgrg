@@ -10,7 +10,7 @@ class ContrastiveAttention(nn.Module):
     def __init__(self):
         super().__init__()
         NUM_REGIONS = 36
-        INPUT_HIDDEN_DIM = 2048
+        INPUT_HIDDEN_DIM = 1024
         CA_HIDDEN_DIM = 512
 
         self.aggregate_attention = AggregateAttention()

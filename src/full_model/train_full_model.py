@@ -75,7 +75,7 @@ def update_normality_pool(model, normality_pool_dl):
     """
     with torch.no_grad():
         # list of 36 tensors, each of which will have the shape [NORMALITY_POOL_SIZE x 2048] in the end (i.e. normality pool for each region)
-        region_normality_pools = [torch.zeros(size=(0, 2048), device=device) for _ in range(36)]
+        region_normality_pools = [torch.zeros(size=(0, 1024), device=device) for _ in range(36)]
 
         for batch in normality_pool_dl:
             images = batch["images"]
@@ -590,7 +590,7 @@ def main():
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_7/weights/val_loss_31.493_epoch_2.pth"))
+    model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_9/weights/val_loss_33.325_epoch_3.pth"))
     model.language_model.load_state_dict(torch.load("/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"))
     model.to(device, non_blocking=True)
     model.train()
