@@ -14,6 +14,7 @@ It also calls subfunctions which:
     - save NUM_IMAGES_TO_PLOT (see run_configurations.py) images to tensorboard where gt and predicted bboxes for every region are depicted,
     as well as the generated sentences (if they exist) and reference sentences for every region
 """
+from collections import defaultdict
 import io
 import os
 
@@ -87,12 +88,14 @@ def write_sentences_and_reports_to_file(
             for gen_report, ref_report, removed_similar_gen_sents in zip(
                 generated_reports, reference_reports, removed_similar_generated_sentences
             ):
-                f.write(f"Generated report: {gen_report}\n")
-                f.write(f"Reference report: {ref_report}\n")
+                f.write(f"Generated report: {gen_report}\n\n")
+                f.write(f"Reference report: {ref_report}\n\n")
                 f.write("Generated sentences that were removed:\n")
-                for gen_sent_1, gen_sent_2 in removed_similar_gen_sents.items():
-                    f.write(f"\t{gen_sent_1} == {gen_sent_2}\n")
+                for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
+                    f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
                 f.write("\n")
+                f.write("=" * 30)
+                f.write("\n\n")
 
     # generated_sentences is a list of str
     generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
@@ -508,45 +511,61 @@ def get_generated_and_reference_reports(
     Return:
         generated_reports (List[str]): list of length batch_size containing generated reports for every image in batch
         reference_reports (List[str]): list of length batch_size containing reference reports for every image in batch
-        removed_similar_generated_sentences (List[Dict[str, str]): list of length batch_size containing dicts that map from one generated sentence to another
-        generated sentence that was removed because it was too similar. Useful for manually verifying if removing similar generated sentences is successful
+        removed_similar_generated_sentences (List[Dict[str, List]): list of length batch_size containing dicts that map from one generated sentence to a list
+        of other generated sentences that were removed because they were too similar. Useful for manually verifying if removing similar generated sentences was successful
     """
 
     def remove_duplicate_generated_sentences(gen_report_single_image, bert_score):
+        def check_gen_sent_in_sents_to_be_removed(gen_sent, similar_generated_sents_to_be_removed):
+            for lists_of_gen_sents_to_be_removed in similar_generated_sents_to_be_removed.values():
+                if gen_sent in lists_of_gen_sents_to_be_removed:
+                    return True
+
+            return False
+
         # since different (closely related) regions can have the same generated sentence, we first remove exact duplicates
+
+        # use sentence tokenizer to separate the generated sentences
         gen_sents_single_image = sentence_tokenizer(gen_report_single_image).sents
 
         # convert spacy.tokens.span.Span object into str by using .text attribute
         gen_sents_single_image = [sent.text for sent in gen_sents_single_image]
 
+        # remove exact duplicates using a dict as an ordered set
+        # note that dicts are insertion ordered as of Python 3.7
         gen_sents_single_image = list(dict.fromkeys(gen_sents_single_image))
-
-        # use bertscore to remove generated sentences that are not exact duplicates, but very similar nonetheless
 
         # there can still be generated sentences that are not exact duplicates, but nonetheless very similar
         # e.g. "The cardiomediastinal silhouette is normal." and "The cardiomediastinal silhouette is unremarkable."
         # to remove these "soft" duplicates, we use bertscore
 
-        # similar_generated_sents_to_be_removed maps from one sentence to another similar sentence that is to be removed
-        similar_generated_sents_to_be_removed = {}
+        # similar_generated_sents_to_be_removed maps from one sentence to a list of similar sentences that are to be removed
+        similar_generated_sents_to_be_removed = defaultdict(list)
+
         for i in range(len(gen_sents_single_image)):
             gen_sent_1 = gen_sents_single_image[i]
-            if gen_sent_1 in similar_generated_sents_to_be_removed.values():
-                continue
 
             for j in range(i + 1, len(gen_sents_single_image)):
+                if check_gen_sent_in_sents_to_be_removed(gen_sent_1, similar_generated_sents_to_be_removed):
+                    break
+
                 gen_sent_2 = gen_sents_single_image[j]
-                if gen_sent_2 in similar_generated_sents_to_be_removed.values():
+                if check_gen_sent_in_sents_to_be_removed(gen_sent_2, similar_generated_sents_to_be_removed):
                     continue
 
                 bert_score_result = bert_score.compute(
                     lang="en", predictions=[gen_sent_1], references=[gen_sent_2], model_type="distilbert-base-uncased"
                 )
+
                 if bert_score_result["f1"][0] > BERTSCORE_SIMILARITY_THRESHOLD:
-                    similar_generated_sents_to_be_removed[gen_sent_1] = gen_sent_2
+                    # remove the generated similar sentence that is shorter
+                    if len(gen_sent_1) > len(gen_sent_2):
+                        similar_generated_sents_to_be_removed[gen_sent_1].append(gen_sent_2)
+                    else:
+                        similar_generated_sents_to_be_removed[gen_sent_2].append(gen_sent_1)
 
         gen_report_single_image = " ".join(
-            sent for sent in gen_sents_single_image if sent not in similar_generated_sents_to_be_removed.values()
+            sent for sent in gen_sents_single_image if not check_gen_sent_in_sents_to_be_removed(sent, similar_generated_sents_to_be_removed)
         )
 
         return gen_report_single_image, similar_generated_sents_to_be_removed
@@ -562,7 +581,7 @@ def get_generated_and_reference_reports(
             # sum up all True values for a single row in the array (corresponing to a single image)
             num_selected_regions_single_image = np.sum(selected_regions_single_image)
 
-            # use curr_index and the previous computed number to index all generated sentences corresponding to a single image
+            # use curr_index and num_selected_regions_single_image to index all generated sentences corresponding to a single image
             gen_sents_single_image = generated_sentences_for_selected_regions[
                 curr_index: curr_index + num_selected_regions_single_image
             ]
@@ -589,13 +608,14 @@ def get_generated_and_reference_reports(
         # different regions can have the same or partially the same ref sentences
         # e.g. region 1 can have ref_sentence "The lung volume is low." and regions 2 the ref_sentence "The lung volume is low. There is pneumothorax."
         # to deal with those, we first split the single str ref_report_single_image back into a list of str (where each str is a single sentence)
-        # with a sentence tokenizer
+        # using a sentence tokenizer
         ref_sents_single_image = sentence_tokenizer(ref_report_single_image).sents
 
         # convert spacy.tokens.span.Span object into str by using .text attribute
         ref_sents_single_image = [sent.text for sent in ref_sents_single_image]
 
         # we use a dict to remove duplicate sentences and put the unique sentences back together to a single str ref_report_single_image
+        # note that dicts are insertion ordered as of Python 3.7
         ref_report_single_image = " ".join(dict.fromkeys(ref_sents_single_image))
 
         return ref_report_single_image

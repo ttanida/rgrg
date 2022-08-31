@@ -1,17 +1,17 @@
 import evaluate
-import time
+import torch
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # bleu_1 = evaluate.load("bleu")
 # bleu_2 = evaluate.load("bleu")
 # bleu_3 = evaluate.load("bleu")
 # bleu_4 = evaluate.load("bleu")
 bert_score = evaluate.load("bertscore")
-print("Sleeping 5")
-time.sleep(5)
-print("Sleeping finished")
-bert_score = evaluate.load("bertscore")
+# print("Sleeping 5")
+# time.sleep(5)
+# print("Sleeping finished")
+# bert_score = evaluate.load("bertscore")
 
 # rouge = evaluate.load("rouge")
 # meteor = evaluate.load("meteor")
@@ -37,12 +37,12 @@ bert_score = evaluate.load("bertscore")
 # "The lungs are clear without consolidation, effusion, or edema."
 # "The cardiomediastinal and hilar silhouettes are normal."
 
-# gen_sent = " pulmonary pulmonary acute acute pulmonary acute pulmonary acute acute acute acute acute pulmonary acute acute acute acute acute acute acuteThe card acute acute acute acute acute acute acute acute acute acute pulmonary pulmonary acute pulmonary acute acute acute acute pulmonary pulmonary acute pulmonary acute pulmonary acute acute the pulmonary acute pulmonary acute pulmonary pulmonary pulmonary acute pulmonary acute acute acute acute acute acute acute pulmonary acute pulmonary acute acute pulmonary acute pulmonary pulmonary acute acute pulmonary acute acute pulmonary acute acute pulmonary acute acute pulmonary acute acute pulmonary acute acute acute pulmonary acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute pulmonary acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute pulmonary pulmonary pulmonary acute acute acute acute acute acute acute acute acute acute acute acute pulmonary pulmonaryThe acute acute acute acute acute pulmonary acute pulmonaryTheThe pulmonaryTheThe pulmonary acute acute acute acute acute acute acute acute acute acute pulmonaryTheTheTheThe pulmonary acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute pulmonaryTheTheTheTheThe the ."
-# ref_sent = " the pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary acute pulmonary pulmonary acute pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary pulmonary acute acute pulmonary pulmonary acute pulmonary pulmonary pulmonary pulmonary pulmonary acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute acute the card the card the cardiac the the the the the the acute the acute acute acute the acute the pulmonary the acute the acute pulmonary the card the the cardiac the the acute the the acute the the the pulmonary the pulmonary the the pulmonary the pulmonary the pulmonary the acute the the acute the pulmonary the the acute the acute the the pulmonary the the the the pulmonary the pulmonary the the the acute the acute the pulmonary the pulmonary pulmonary pulmonary the the the the pulmonary the the the the the pulmonary the the the the the the the the acute pulmonary the the pulmonary the the the the the the the the acute the pulmonary the the pulmonary pulmonary the the the the the the the the the the the the the the the the the the the the the acute the card the the the the the the the the the the acute the the the the the acute the the the the acute the The."
-# bert_score_result_distil = bert_score.compute(lang="en", predictions=[gen_sent], references=[ref_sent], model_type="distilbert-base-uncased")
+gen_sent = 'There is no focal consolidation, effusion, or pneumothorax.'
+ref_sent = 'No large effusion or pneumothorax.'
+bert_score_result_distil = bert_score.compute(lang="en", predictions=[gen_sent], references=[ref_sent], model_type="distilbert-base-uncased", device=device)
 # bert_score_result_roberta = bert_score.compute(lang="en", predictions=[gen_sent], references=[ref_sent])
 
-# print(f"bert_score_distil: {bert_score_result_distil['f1'][0]}")
+print(f"bert_score: {bert_score_result_distil['f1'][0]}")
 # print(f"bert_score_roberta: {bert_score_result_roberta['f1']}")
 
 

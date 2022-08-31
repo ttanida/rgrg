@@ -1,9 +1,9 @@
 # define configurations for training run
-RUN = 10
-RUN_COMMENT = """Train full model (using pre-trained weights). Train with image features coming from box_roi_pool. Train with CA. Backbone is ResNet-50 pretrained on ImageNet. Use gradient accumulation. Add weights of 4 to classifiers and 2 to language model."""
+RUN = 11
+RUN_COMMENT = """Train full model (using pre-trained weights). Train with image features coming from box_head. Train with CA. Backbone is ResNet-50 pretrained on ImageNet. Use gradient accumulation. Add weights of 4 to classifiers and 2 to language model."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
-NORMALITY_POOL_SIZE = 500
+NORMALITY_POOL_SIZE = 1000
 AGGREGATE_ATTENTION_NUM = 6
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
@@ -21,4 +21,4 @@ NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 10  # save num_batches_of_.
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated reports with their gt reference reports to a txt file
 NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION = 300  # for evaluation of bleu (+ rouge-L and meteor for full reports)
 NUM_IMAGES_TO_PLOT = 8
-BERTSCORE_SIMILARITY_THRESHOLD = 0.955  # threshold for discarding generated sentences that are too similar
+BERTSCORE_SIMILARITY_THRESHOLD = 0.8  # threshold for discarding generated sentences that are too similar
