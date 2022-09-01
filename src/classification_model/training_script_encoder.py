@@ -16,9 +16,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.encoder.classification_model import ClassificationModel
+from src.classification_model.classification_model import ClassificationModel
+from src.classification_model.custom_image_dataset import CustomImageDataset
 from src.dataset.constants import ANATOMICAL_REGIONS
-from src.encoder.custom_image_dataset import CustomImageDataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

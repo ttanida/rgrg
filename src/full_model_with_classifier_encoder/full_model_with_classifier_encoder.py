@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 
-from src.encoder.classification_model import ClassificationModel
+from src.classification_model.classification_model import ClassificationModel
 from src.language_model.language_model import LanguageModel
 
 

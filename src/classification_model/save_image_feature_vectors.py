@@ -8,8 +8,8 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from classification_model import ClassificationModel
-from custom_image_dataset import CustomImageDataset
+from src.classification_model.classification_model import ClassificationModel
+from src.classification_model.custom_image_dataset import CustomImageDataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 path_to_best_weights = "/u/home/tanida/weights/classification_model/weight_runs_2/val_loss_53.536_epoch_11.pth"
