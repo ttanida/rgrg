@@ -590,8 +590,8 @@ def main():
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_9/weights/val_loss_33.325_epoch_3.pth"))
-    model.language_model.load_state_dict(torch.load("/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"))
+    # model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_9/weights/val_loss_33.325_epoch_3.pth"))
+    # model.language_model.load_state_dict(torch.load("/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"))
     model.to(device, non_blocking=True)
     model.train()
 
