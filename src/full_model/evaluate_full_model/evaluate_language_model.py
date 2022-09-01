@@ -428,6 +428,8 @@ def plot_detections_and_sentences_to_tensorboard(
                 dataformats="HWC",
             )
 
+            plt.close(fig)
+
 
 def update_language_model_scores(
     language_model_scores,
