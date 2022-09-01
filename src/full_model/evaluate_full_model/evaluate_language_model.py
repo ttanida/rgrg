@@ -33,7 +33,7 @@ from src.full_model.run_configurations import (
     MAX_NUM_TOKENS_GENERATE,
     NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
     NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
-    NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION,
+    NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION,
     NUM_IMAGES_TO_PLOT,
     BERTSCORE_SIMILARITY_THRESHOLD,
 )
@@ -680,9 +680,6 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
         "reference_reports": [],
     }
 
-    # since generating sentences takes some time, we only generate NUM_SENTENCES_TO_GENERATE sentences
-    num_batches_to_process_for_sentence_generation = NUM_SENTENCES_TO_GENERATE_FOR_EVALUATION // BATCH_SIZE
-
     # we also want to plot a couple of images
     num_batches_to_process_for_image_plotting = NUM_IMAGES_TO_PLOT // BATCH_SIZE
 
@@ -693,8 +690,9 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     sentence_tokenizer = spacy.load("en_core_web_trf")
 
     with torch.no_grad():
-        for num_batch, batch in tqdm(enumerate(val_dl), total=num_batches_to_process_for_sentence_generation):
-            if num_batch >= num_batches_to_process_for_sentence_generation:
+        for num_batch, batch in tqdm(enumerate(val_dl), total=NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION):
+            # since generating sentences takes some time, we limit the number of batches used to compute bleu/rouge-l/meteor
+            if num_batch >= NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION:
                 break
 
             images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
