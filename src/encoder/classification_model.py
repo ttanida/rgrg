@@ -19,12 +19,12 @@ class ClassificationModel(nn.Module):
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
 
         # linear layers for classification
-        # 36 classes for 36 anatomical regions
+        # 37 classes = 36 classes for 36 anatomical regions + 1 class for binary normal/abnormal classification of image region
         self.classifier = nn.Sequential(
             nn.Linear(in_features=2048, out_features=512),
-            # nn.BatchNorm1d(num_features=512),
+            nn.BatchNorm1d(num_features=512),
             nn.ReLU(),
-            nn.Linear(in_features=512, out_features=36)
+            nn.Linear(in_features=512, out_features=37)
         )
 
         # boolean to specify if feature vectors should be returned after avg_pool

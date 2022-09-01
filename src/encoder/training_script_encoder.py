@@ -10,7 +10,7 @@ import pandas as pd
 from sklearn.metrics import f1_score, precision_score, recall_score
 from torch.utils.tensorboard import SummaryWriter
 import torch
-from torch.nn.functional import cross_entropy
+from torch.nn.functional import binary_cross_entropy_with_logits, cross_entropy
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -36,7 +36,7 @@ torch.cuda.manual_seed_all(seed_val)
 # define configurations for training run
 RUN = 3
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train ResNet-50 classification model only on classifying regions (i.e. not on classifying normal/abnormal). As dataset use chest-imagenome-dataset-customized-10%-of-full-dataset"""
+RUN_COMMENT = """..."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
@@ -49,34 +49,17 @@ PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduc
 THRESHOLD_LR_SCHEDULER = 1e-3  # threshold for measuring the new optimum, to only focus on significant changes
 
 
-def write_scores_to_tensorboard(writer, train_loss, val_stats, overall_steps_taken):
-    val_loss, precision_score_bboxes, recall_score_bboxes, f1_score_bboxes, f1_scores_per_bbox_class = val_stats
-
-    writer.add_scalars("_loss", {"train_loss": train_loss, "val_loss": val_loss}, overall_steps_taken)
-
-    writer.add_scalar("precision", precision_score_bboxes, overall_steps_taken)
-    writer.add_scalar("recall", recall_score_bboxes, overall_steps_taken)
-    writer.add_scalar("f1_score", f1_score_bboxes, overall_steps_taken)
-
-    for i, bbox_name in enumerate(ANATOMICAL_REGIONS):
-        writer.add_scalar(f"f1_score region: {bbox_name}", f1_scores_per_bbox_class[i], overall_steps_taken)
-
-
-def evaluate_model(model, val_dl):
+def evaluate_model(model, val_dl, overall_steps_taken, writer):
     """
     Evaluate model on val set.
 
-    Args:
-        model (nn.Module): The input model to be evaluated.
-        val_dl (torch.utils.data.Dataloder): The val dataloader to evaluate on.
-
-    Returns:
-        val_loss (float): Val loss for 1 epoch.
-        f1_scores_is_abnormal (float): Average f1 score for is_abnormal variable for 1 epoch.
-        f1_scores_bboxes (float): Average global f1 score for bboxes for 1 epoch.
-        f1_scores_bboxes_class (list[float]): Average f1 score for each bbox class for 1 epoch.
-        precision_is_abnormal (float): Average precision for is_abnormal variable for 1 epoch.
-        recall_is_abnormal (float): Average recall for is_abnormal variable for 1 epoch.
+    Write to tensorboard:
+        - val loss
+        - val f1_score is_abnormal
+        - val precision is_abnormal
+        - val recall is_abnormal
+        - val f1_score bboxes
+        - val f1_score bbox for 36 bbox regions
     """
     # evaluating the model on the val set
     model.eval()
@@ -84,64 +67,96 @@ def evaluate_model(model, val_dl):
 
     num_classes = len(ANATOMICAL_REGIONS)
 
-    # lists collect the global precision/recall/f1-scores of bboxes calculated for each batch
-    precision_scores_bboxes = []
-    recall_scores_bboxes = []
+    # list collects the f1-scores of is_abnormal variables calculated for each batch
+    f1_scores_is_abnormal = []
+
+    # list collects the global f1-scores of bboxes calculated for each batch
     f1_scores_bboxes = []
 
     # list of list where inner list collects the f1-scores calculated for each bbox class for each batch
     f1_scores_bboxes_class = [[] for _ in range(num_classes)]
 
+    # list collects the precision of is_abnormal variables calculated for each batch
+    precision_is_abnormal = []
+
+    # list collects the recall of is_abnormal variables calculated for each batch
+    recall_is_abnormal = []
+
     with torch.no_grad():
         for batch in tqdm(val_dl):
-            batch_images, bbox_targets = batch.values()
+            batch_images, bbox_targets, is_abnormal_targets = batch.values()
 
             batch_size = batch_images.size(0)
 
-            batch_images = batch_images.to(device, non_blocking=True)  # shape: (BATCH_SIZE, 1, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE), with IMAGE_INPUT_SIZE usually 512
+            batch_images = batch_images.to(device, non_blocking=True)  # shape: (BATCH_SIZE, 1, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE), with IMAGE_INPUT_SIZE usually 224
             bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 35 specifying the class for each bbox image
+            is_abnormal_targets = is_abnormal_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), floats that are either 0. (normal) or 1. (abnormal) specifying if bbox image is normal/abnormal
 
-            # logits has output shape: (BATCH_SIZE, 36)
+            # logits has output shape: (BATCH_SIZE, 37)
             logits = model(batch_images)
 
-            total_loss = cross_entropy(logits, bbox_targets)
+            # use the first 36 columns as logits for bbox classes, shape: (BATCH_SIZE, 36)
+            bbox_class_logits = logits[:, :36]
+
+            # use the last column (i.e. 37th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
+            abnormal_logits = logits[:, -1]
+
+            cross_entropy_loss = cross_entropy(bbox_class_logits, bbox_targets)
+            pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)  # we have 7.6x more normal bbox images than abnormal ones
+            binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
+
+            total_loss = cross_entropy_loss + binary_cross_entropy_loss
 
             val_loss += total_loss.item() * batch_size
 
-            bbox_targets = bbox_targets.cpu()
-            preds_bbox = torch.argmax(logits, dim=1).cpu()
+            preds_bbox = torch.argmax(bbox_class_logits, dim=1)
+            preds_is_abnormal = abnormal_logits > 0
+
+            # f1-score uses average='binary' by default
+            is_abnormal_targets = is_abnormal_targets.cpu()
+            preds_is_abnormal = preds_is_abnormal.cpu()
+            f1_score_is_abnormal_current_batch = f1_score(is_abnormal_targets, preds_is_abnormal)  # single float value
+            f1_scores_is_abnormal.append(f1_score_is_abnormal_current_batch)
 
             # average='micro': calculate metrics globally by counting the total true positives, false negatives and false positives
-            precision_score_bbox_globally_current_batch = precision_score(bbox_targets, preds_bbox, average="micro")  # single float value
-            recall_score_bbox_globally_current_batch = recall_score(bbox_targets, preds_bbox, average="micro")  # single float value
-            f1_score_bbox_globally_current_batch = f1_score(bbox_targets, preds_bbox, average="micro")  # single float value
-
-            precision_scores_bboxes.append(precision_score_bbox_globally_current_batch)
-            recall_scores_bboxes.append(recall_score_bbox_globally_current_batch)
+            f1_score_bbox_globally_current_batch = f1_score(bbox_targets.cpu(), preds_bbox.cpu(), average="micro")  # single float value
             f1_scores_bboxes.append(f1_score_bbox_globally_current_batch)
 
             # average=None: f1-score for each class are returned
             f1_scores_per_bbox_class_current_batch = f1_score(
-                bbox_targets, preds_bbox, average=None, labels=[i for i in range(num_classes)]
+                bbox_targets.cpu(), preds_bbox.cpu(), average=None, labels=[i for i in range(num_classes)]
             )  # list of 36 f1-scores (float values) for 36 regions
 
             for i in range(num_classes):
                 f1_scores_bboxes_class[i].append(f1_scores_per_bbox_class_current_batch[i])
 
+            # precision_score uses average='binary' by default
+            precision_is_abnormal_current_batch = precision_score(is_abnormal_targets, preds_is_abnormal)
+            precision_is_abnormal.append(precision_is_abnormal_current_batch)
+
+            # recall_score uses average='binary' by default
+            recall_is_abnormal_current_batch = recall_score(is_abnormal_targets, preds_is_abnormal)
+            recall_is_abnormal.append(recall_is_abnormal_current_batch)
+
     val_loss /= len(val_dl)
 
-    precision_score_bboxes = np.array(precision_scores_bboxes).mean()
-    recall_score_bboxes = np.array(recall_scores_bboxes).mean()
+    f1_score_is_abnormal = np.array(f1_scores_is_abnormal).mean()
     f1_score_bboxes = np.array(f1_scores_bboxes).mean()
     f1_scores_per_bbox_class = [np.array(list_).mean() for list_ in f1_scores_bboxes_class]
 
-    return (
-        val_loss,
-        precision_score_bboxes,
-        recall_score_bboxes,
-        f1_score_bboxes,
-        f1_scores_per_bbox_class,
-    )
+    precision_is_abnormal = np.array(precision_is_abnormal).mean()
+    recall_is_abnormal = np.array(recall_is_abnormal).mean()
+
+    writer.add_scalar("val loss", val_loss, overall_steps_taken)
+    writer.add_scalar("val f1_score is_abnormal", f1_score_is_abnormal, overall_steps_taken)
+    writer.add_scalar("val f1_score bboxes", f1_score_bboxes, overall_steps_taken)
+    writer.add_scalar("val precision is_abnormal", precision_is_abnormal, overall_steps_taken)
+    writer.add_scalar("val recall is_abnormal", recall_is_abnormal, overall_steps_taken)
+
+    for i, bbox_name in enumerate(ANATOMICAL_REGIONS):
+        writer.add_scalar(f"valid f1_score bbox: {bbox_name}", f1_scores_per_bbox_class[i], overall_steps_taken)
+
+    return val_loss
 
 
 def train_model(
@@ -186,24 +201,40 @@ def train_model(
     overall_steps_taken = 0  # for logging to tensorboard
 
     for epoch in range(epochs):
-        log.info(f"\nTraining epoch {epoch}!\n")
+        log.info(f"Training epoch {epoch}!")
 
         train_loss = 0.0
         steps_taken = 0
         for num_batch, batch in tqdm(enumerate(train_dl)):
-            # batch is a dict with keys for 'image', 'bbox_target' (see custom_image_dataset)
-            batch_images, bbox_targets = batch.values()
+            # batch is a dict with keys for 'image', 'bbox_target', 'is_abnormal_target' (see custom_image_dataset)
+            batch_images, bbox_targets, is_abnormal_targets = batch.values()
 
             batch_size = batch_images.size(0)
 
             batch_images = batch_images.to(device, non_blocking=True)  # shape: (BATCH_SIZE, 1, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE), with IMAGE_INPUT_SIZE usually 512
             bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 35 specifying the class for each bbox image
+            is_abnormal_targets = is_abnormal_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), floats that are either 0. (normal) or 1. (abnormal) specifying if bbox image is normal/abnormal
 
-            # logits has output shape: (BATCH_SIZE, 36)
+            # logits has output shape: (BATCH_SIZE, 37)
             logits = model(batch_images)
 
+            # use the first 36 columns as logits for bbox classes, shape: (BATCH_SIZE, 36)
+            bbox_class_logits = logits[:, :36]
+
+            # use the last column (i.e. 37th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
+            abnormal_logits = logits[:, -1]
+
             # compute the (multi-class) cross entropy loss
-            total_loss = cross_entropy(logits, bbox_targets)
+            cross_entropy_loss = cross_entropy(bbox_class_logits, bbox_targets)
+
+            # compute the binary cross entropy loss, use pos_weight to adding weights to positive samples (i.e. abnormal samples)
+            # since we have around 7.6x more normal bbox images than abnormal bbox images (see compute_stats_dataset.py),
+            # we set pos_weight=7.6 to put 7.6 more weight on the loss of abnormal images
+            pos_weight = torch.tensor([7.6]).to(device, non_blocking=True)
+            binary_cross_entropy_loss = binary_cross_entropy_with_logits(abnormal_logits, is_abnormal_targets, pos_weight=pos_weight)
+
+            # total loss is weighted 1:1 between cross_entropy_loss and binary_cross_entropy_loss
+            total_loss = cross_entropy_loss + binary_cross_entropy_loss
 
             total_loss.backward()
             optimizer.step()
@@ -215,19 +246,15 @@ def train_model(
 
             # evaluate every k steps and also at the end of an epoch
             if steps_taken >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
-                log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
+                log.info(f"Evaluating at step {overall_steps_taken}!")
 
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
+                writer.add_scalar("train loss", train_loss, overall_steps_taken)
 
-                val_stats = evaluate_model(model, val_dl)
-
-                write_scores_to_tensorboard(writer, train_loss, val_stats, overall_steps_taken)
-
-                log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
+                val_loss = evaluate_model(model, val_dl, overall_steps_taken, writer)
 
                 # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
-                val_loss = val_stats[0]
                 lr_scheduler.step(val_loss)
 
                 if val_loss < lowest_val_loss:
@@ -237,6 +264,8 @@ def train_model(
 
                     torch.save(model.state_dict(), best_model_save_path)
 
+                log.info(f"Metrics evaluated at step {overall_steps_taken}!")
+
                 # set the model back to training
                 model.train()
 
@@ -244,7 +273,7 @@ def train_model(
                 train_loss = 0.0
                 steps_taken = 0
 
-    log.info("\nFinished training!")
+    log.info("Finished training!")
     log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
     return None
 
@@ -324,7 +353,7 @@ def get_datasets_as_dfs(config_file_path):
     path_dataset_classification_model = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-10%-of-full-dataset"
 
     # reduce memory usage by only using necessary columns and selecting appropriate datatypes
-    usecols = ["mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2"]
+    usecols = ["mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "is_abnormal"]
     dtype = {"x1": "int16", "x2": "int16", "y1": "int16", "y2": "int16", "bbox_name": "category"}
 
     datasets_as_dfs = {}
