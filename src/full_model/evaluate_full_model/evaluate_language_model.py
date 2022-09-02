@@ -703,12 +703,13 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             reference_sentences = batch["reference_sentences"]
 
             try:
-                output = model.generate(
-                    images.to(device, non_blocking=True),
-                    max_length=MAX_NUM_TOKENS_GENERATE,
-                    num_beams=NUM_BEAMS,
-                    early_stopping=True,
-                )
+                with torch.autocast(device_type='cuda', dtype=torch.float16):
+                    output = model.generate(
+                        images.to(device, non_blocking=True),
+                        max_length=MAX_NUM_TOKENS_GENERATE,
+                        num_beams=NUM_BEAMS,
+                        early_stopping=True,
+                    )
             except RuntimeError as e:  # out of memory error
                 if "out of memory" in str(e):
                     oom = True
