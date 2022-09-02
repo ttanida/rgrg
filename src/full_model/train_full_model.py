@@ -445,7 +445,7 @@ def get_tokenizer():
 
 
 def get_datasets(config_file_path):
-    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
+    path_dataset_full_model = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
 
     usecols = [
         "mimic_image_file_path",
@@ -466,7 +466,7 @@ def get_datasets(config_file_path):
         "bbox_is_abnormal": literal_eval,
     }
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid"]}
+    datasets_as_dfs = {dataset: os.path.join(path_dataset_full_model, dataset) + ".csv" for dataset in ["train", "valid"]}
 
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
