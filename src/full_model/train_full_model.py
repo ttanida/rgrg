@@ -119,7 +119,7 @@ def update_normality_pool(model, normality_pool_dl):
         model.contrastive_attention.update_normality_pool(normality_pool)
 
 
-def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_scheduler, epochs, weights_folder_path, tokenizer, generated_sentences_and_reports_folder_path, writer, log_file):
+def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, lr_scheduler, current_epoch, epochs, overall_steps_taken, lowest_val_loss, weights_folder_path, tokenizer, generated_sentences_and_reports_folder_path, writer, log_file):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -156,9 +156,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
     run_params = {}
     run_params["epochs"] = epochs
     run_params["weights_folder_path"] = weights_folder_path
-    run_params["lowest_val_loss"] = np.inf
+    run_params["lowest_val_loss"] = lowest_val_loss
     run_params["best_epoch"] = None  # the epoch with the lowest val loss overall
-    run_params["overall_steps_taken"] = 0  # for logging to tensorboard
+    run_params["overall_steps_taken"] = overall_steps_taken  # for logging to tensorboard
     run_params["log_file"] = log_file  # for logging error messages (e.g. OOM)
 
     # for gradient accumulation
@@ -167,13 +167,11 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    scaler = torch.cuda.amp.GradScaler()
-
     log.info("Initializing normality pool...")
     update_normality_pool(model, normality_pool_dl)
     log.info("Initializing normality pool finished!")
 
-    for epoch in range(epochs):
+    for epoch in range(current_epoch, epochs):
         run_params["epoch"] = epoch
         log.info(f"Training epoch {epoch}!\n")
 
@@ -299,7 +297,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_BATCHES or (num_batch + 1) == len(train_dl):
 
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path)
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path)
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 # set the model back to training
@@ -593,13 +591,28 @@ def main():
 
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
+    checkpoint = None
+    # checkpoint = torch.load(check_point_path)
+
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     # model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_9/weights/val_loss_33.325_epoch_3.pth"))
-    # model.language_model.load_state_dict(torch.load("/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"))
+    opt = AdamW(model.parameters(), lr=LR)
+    scaler = torch.cuda.amp.GradScaler()
+
+    current_epoch = 0
+    overall_steps_taken = 0
+    lowest_val_loss = np.inf
+
+    if checkpoint:
+        model.load_state_dict(checkpoint["model"])
+        opt.load_state_dict(checkpoint["optimizer"])
+        scaler.load_state_dict(checkpoint["scaler"])
+        current_epoch = checkpoint["current_epoch"]
+        overall_steps_taken = checkpoint["overall_steps_taken"]
+        lowest_val_loss = checkpoint["lowest_val_loss"]
+
     model.to(device, non_blocking=True)
     model.train()
-
-    opt = AdamW(model.parameters(), lr=LR)
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
@@ -611,8 +624,12 @@ def main():
         val_dl=val_loader,
         normality_pool_dl=normality_pool_loader,
         optimizer=opt,
+        scaler=scaler,
         lr_scheduler=lr_scheduler,
+        epoch=current_epoch,
         epochs=EPOCHS,
+        overall_steps_taken=overall_steps_taken,
+        lowest_val_loss=lowest_val_loss,
         weights_folder_path=weights_folder_path,
         tokenizer=tokenizer,
         generated_sentences_and_reports_folder_path=generated_sentences_and_reports_folder_path,

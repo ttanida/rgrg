@@ -455,7 +455,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path):
     model.eval()
 
     epoch = run_params["epoch"]
@@ -503,6 +503,15 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, wr
         run_params["lowest_val_loss"] = total_val_loss
         run_params["best_epoch"] = epoch
 
-        save_path = os.path.join(run_params["weights_folder_path"], f"val_loss_{total_val_loss:.3f}_epoch_{epoch}.pth")
+        save_path = os.path.join(run_params["weights_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_epoch_{epoch}.pt")
 
-        torch.save(model.state_dict(), save_path)
+        checkpoint = {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "scaler": scaler.state_dict(),
+            "current_epoch": epoch,
+            "overall_steps_taken": overall_steps_taken,
+            "lowest_val_loss": total_val_loss,
+        }
+
+        torch.save(checkpoint, save_path)
