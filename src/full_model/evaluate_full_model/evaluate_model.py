@@ -330,7 +330,8 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
                 attention_mask = None
 
             try:
-                output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+                with torch.autocast(device_type='cuda', dtype=torch.float16):
+                    output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
             except RuntimeError as e:  # out of memory error
                 if "out of memory" in str(e):
                     oom = True

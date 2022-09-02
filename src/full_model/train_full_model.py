@@ -167,6 +167,8 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
+    scaler = torch.cuda.amp.GradScaler()
+
     log.info("Initializing normality pool...")
     update_normality_pool(model, normality_pool_dl)
     log.info("Initializing normality pool finished!")
@@ -211,41 +213,42 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 attention_mask = None
 
             try:
-                output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
+                with torch.autocast(device_type='cuda', dtype=torch.float16):
+                    output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
-                # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
-                if output == -1:
-                    with open(run_params["log_file"], "a") as f:
-                        f.write("Training:\n")
-                        f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
+                    # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
+                    if output == -1:
+                        with open(run_params["log_file"], "a") as f:
+                            f.write("Training:\n")
+                            f.write(f"Empty region features before language model at epoch {epoch}, batch number {num_batch}.\n\n")
 
-                    optimizer.zero_grad()
-                    continue
+                        optimizer.zero_grad()
+                        continue
 
-                if PRETRAIN_WITHOUT_LM_MODEL:
-                    (
-                        obj_detector_loss_dict,
-                        classifier_loss_region_selection,
-                        classifier_loss_region_abnormal,
-                    ) = output
-                else:
-                    (
-                        obj_detector_loss_dict,
-                        classifier_loss_region_selection,
-                        classifier_loss_region_abnormal,
-                        language_model_loss,
-                    ) = output
+                    if PRETRAIN_WITHOUT_LM_MODEL:
+                        (
+                            obj_detector_loss_dict,
+                            classifier_loss_region_selection,
+                            classifier_loss_region_abnormal,
+                        ) = output
+                    else:
+                        (
+                            obj_detector_loss_dict,
+                            classifier_loss_region_selection,
+                            classifier_loss_region_abnormal,
+                            language_model_loss,
+                        ) = output
 
-                # sum up all 4 losses from the object detector
-                obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
+                    # sum up all 4 losses from the object detector
+                    obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
-                # sum up the rest of the losses
-                total_loss = obj_detector_losses + 10 * classifier_loss_region_selection + 10 * classifier_loss_region_abnormal
+                    # sum up the rest of the losses
+                    total_loss = obj_detector_losses + 10 * classifier_loss_region_selection + 10 * classifier_loss_region_abnormal
 
-                if not PRETRAIN_WITHOUT_LM_MODEL:
-                    total_loss += 2 * language_model_loss
+                    if not PRETRAIN_WITHOUT_LM_MODEL:
+                        total_loss += 2 * language_model_loss
 
-                total_loss.backward()
+                scaler.scale(total_loss).backward()
 
             except RuntimeError as e:  # out of memory error
                 log.info(f"Error: {e}")
@@ -270,7 +273,8 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 continue
 
             if (num_batch + 1) % ACCUMULATION_STEPS == 0:
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
 
             list_of_losses = [
