@@ -119,7 +119,7 @@ def update_normality_pool(model, normality_pool_dl):
         model.contrastive_attention.update_normality_pool(normality_pool)
 
 
-def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, lr_scheduler, current_epoch, epochs, overall_steps_taken, lowest_val_loss, weights_folder_path, tokenizer, generated_sentences_and_reports_folder_path, writer, log_file):
+def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, lr_scheduler, current_epoch, epochs, overall_steps_taken, lowest_val_loss, checkpoints_folder_path, tokenizer, generated_sentences_and_reports_folder_path, writer, log_file):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -138,8 +138,8 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
         The learning rate scheduler to use.
     epochs: int
         Number of epochs to train for.
-    weights_folder_path: str
-        Path to folder where best weights will be saved.
+    checkpoints_folder_path: str
+        Path to folder where checkpoints with best weights will be saved.
     tokenizer: transformers.GPT2Tokenizer
         Used for decoding the generated ids into tokens in evaluate_model (more specifically evaluate_language_model)
     generated_sentences_folder_path:
@@ -155,7 +155,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
     """
     run_params = {}
     run_params["epochs"] = epochs
-    run_params["weights_folder_path"] = weights_folder_path
+    run_params["checkpoints_folder_path"] = checkpoints_folder_path
     run_params["lowest_val_loss"] = lowest_val_loss
     run_params["best_epoch"] = None  # the epoch with the lowest val loss overall
     run_params["overall_steps_taken"] = overall_steps_taken  # for logging to tensorboard
@@ -511,7 +511,7 @@ def create_run_folder():
     run_folder_path_parent_dir = "/u/home/tanida/runs/full_model"
 
     run_folder_path = os.path.join(run_folder_path_parent_dir, f"run_{RUN}")
-    weights_folder_path = os.path.join(run_folder_path, "weights")
+    checkpoints_folder_path = os.path.join(run_folder_path, "checkpoints")
     tensorboard_folder_path = os.path.join(run_folder_path, "tensorboard")
     generated_sentences_and_reports_folder_path = os.path.join(run_folder_path, "generated_sentences_and_reports")
     generated_sentences_folder_path = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences")
@@ -524,7 +524,7 @@ def create_run_folder():
         return None
 
     os.mkdir(run_folder_path)
-    os.mkdir(weights_folder_path)
+    os.mkdir(checkpoints_folder_path)
     os.mkdir(tensorboard_folder_path)
     os.mkdir(generated_sentences_and_reports_folder_path)
     os.mkdir(generated_sentences_folder_path)
@@ -563,12 +563,12 @@ def create_run_folder():
         for param_name, param_value in config_parameters.items():
             f.write(f"\t{param_name}: {param_value}\n")
 
-    return weights_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_and_reports_folder_path, log_file
+    return checkpoints_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_and_reports_folder_path, log_file
 
 
 def main():
     (
-        weights_folder_path,
+        checkpoints_folder_path,
         tensorboard_folder_path,
         config_file_path,
         generated_sentences_and_reports_folder_path,
@@ -630,7 +630,7 @@ def main():
         epochs=EPOCHS,
         overall_steps_taken=overall_steps_taken,
         lowest_val_loss=lowest_val_loss,
-        weights_folder_path=weights_folder_path,
+        checkpoints_folder_path=checkpoints_folder_path,
         tokenizer=tokenizer,
         generated_sentences_and_reports_folder_path=generated_sentences_and_reports_folder_path,
         writer=writer,
