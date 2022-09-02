@@ -4,12 +4,15 @@ This module contains all functions used to evaluate the language model.
 The (main) function evaluate_language_model of this module is called by the function evaluate_model in evaluate_model.py.
 
 evaluate_language_model returns language_model_scores which include:
-    - the BLEU 1-4 and BertScore for all generated sentences
-    - the BLEU 1-4 and BertScore for all generated sentences with gt = normal (i.e. the region was considered normal by the radiologist)
-    - the BLEU 1-4 and BertScore for all generated sentences with gt = abnormal (i.e. the region was considered abnormal by the radiologist).
+    - BLEU 1-4 for all generated sentences
+    - BLEU 1-4 for all generated sentences with gt = normal (i.e. the region was considered normal by the radiologist)
+    - BLEU 1-4 for all generated sentences with gt = abnormal (i.e. the region was considered abnormal by the radiologist).
+    - BLEU 1-4, meteor, rouge-L for all generated reports
 
 It also calls subfunctions which:
     - save NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated sentences as a txt file
+    (for manual verification what the model generates)
+    - save NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated reports as a txt file
     (for manual verification what the model generates)
     - save NUM_IMAGES_TO_PLOT (see run_configurations.py) images to tensorboard where gt and predicted bboxes for every region are depicted,
     as well as the generated sentences (if they exist) and reference sentences for every region

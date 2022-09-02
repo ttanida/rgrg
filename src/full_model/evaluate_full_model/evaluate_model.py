@@ -14,14 +14,16 @@ evaluate_model and its sub-functions evaluate among other things:
         - average num detected regions per image (ideally 36.0)
         - average num each region is detected in an image (ideally 1.0 for every region)
     - binary classifier region selection:
-        - precision and recall for all regions, regions that have gt = normal (i.e. the region was considered normal by the radiologist),
+        - precision, recall, f1 for all regions, regions that have gt = normal (i.e. the region was considered normal by the radiologist),
         regions that have gt = abnormal (i.e. the region was considered abnormal by the radiologist)
     - binary classifier region abnormal detection:
-        - precision and recall for all regions
+        - precision, recall, f1 for all regions
     - language model (is evaluated in separate evaluate_language_model.py module):
-        - BLEU 1-4 and BertScore for all generated sentences, generated sentences with gt = normal,
-        generated sentences with gt = abnormal
+        - BLEU 1-4 for all generated sentences, generated sentences with gt = normal, generated sentences with gt = abnormal
+        - BLEU 1-4, meteor, rouge-L for all generated reports
         - NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated sentences
+        are saved as a txt file (for manual verification what the model generates)
+        - NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated reports
         are saved as a txt file (for manual verification what the model generates)
         - NUM_IMAGES_TO_PLOT images are saved to tensorboard where gt and predicted bboxes for every region
         are depicted, as well as the generated sentences (if they exist) and reference sentences for every region
@@ -117,6 +119,7 @@ def update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_re
 
     region_abnormal_scores["precision"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
     region_abnormal_scores["recall"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
+    region_abnormal_scores["f1"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
 
 
 def update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal):
@@ -135,12 +138,15 @@ def update_region_selection_metrics(region_selection_scores, selected_regions, r
 
     region_selection_scores["all"]["precision"](selected_regions.reshape(-1), region_has_sentence.reshape(-1))
     region_selection_scores["all"]["recall"](selected_regions.reshape(-1), region_has_sentence.reshape(-1))
+    region_selection_scores["all"]["f1"](selected_regions.reshape(-1), region_has_sentence.reshape(-1))
 
     region_selection_scores["normal"]["precision"](normal_selected_regions, normal_region_has_sentence)
     region_selection_scores["normal"]["recall"](normal_selected_regions, normal_region_has_sentence)
+    region_selection_scores["normal"]["f1"](normal_selected_regions, normal_region_has_sentence)
 
     region_selection_scores["abnormal"]["precision"](abnormal_selected_regions, abnormal_region_has_sentence)
     region_selection_scores["abnormal"]["recall"](abnormal_selected_regions, abnormal_region_has_sentence)
+    region_selection_scores["abnormal"]["f1"](abnormal_selected_regions, abnormal_region_has_sentence)
 
 
 def update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected):
@@ -263,7 +269,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     obj_detector_scores["sum_region_detected"] = torch.zeros(36, device=device)
 
     """
-    For the binary classifier for region selection, we want to compute the precision and recall for:
+    For the binary classifier for region selection, we want to compute the precision, recall and f1 for:
       - all regions
       - normal regions
       - abnormal regions
@@ -279,10 +285,11 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
         region_selection_scores[subset] = {
             "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
             "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
+            "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
         }
 
     """
-    For the binary classifier for region normal/abnormal detection, we want to compute the precision and recall for:
+    For the binary classifier for region normal/abnormal detection, we want to compute the precision, recall and f1 for:
       - all regions
 
     Evaluation according to:
@@ -294,6 +301,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     region_abnormal_scores = {
         "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
         "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
+        "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
     }
 
     # to recover from out of memory error if a batch has a sequence that is too long
