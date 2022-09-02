@@ -75,7 +75,7 @@ def update_normality_pool(model, normality_pool_dl):
     """
     with torch.no_grad():
         # list of 36 tensors, each of which will have the shape [NORMALITY_POOL_SIZE x 2048] in the end (i.e. normality pool for each region)
-        region_normality_pools = [torch.zeros(size=(0, 1024), device=device) for _ in range(36)]
+        region_normality_pools = [torch.zeros(size=(0, 2048), device=device) for _ in range(36)]
 
         for batch in normality_pool_dl:
             images = batch["images"]
@@ -240,7 +240,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, lr_schedu
                 obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
                 # sum up the rest of the losses
-                total_loss = obj_detector_losses + 3 * classifier_loss_region_selection + 3 * classifier_loss_region_abnormal
+                total_loss = obj_detector_losses + 10 * classifier_loss_region_selection + 10 * classifier_loss_region_abnormal
 
                 if not PRETRAIN_WITHOUT_LM_MODEL:
                     total_loss += 2 * language_model_loss
