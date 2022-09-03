@@ -167,9 +167,10 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    log.info("Initializing normality pool...")
-    update_normality_pool(model, normality_pool_dl)
-    log.info("Initializing normality pool finished!")
+    # TODO: enable CA again
+    # log.info("Initializing normality pool...")
+    # update_normality_pool(model, normality_pool_dl)
+    # log.info("Initializing normality pool finished!")
 
     for epoch in range(current_epoch, epochs):
         run_params["epoch"] = epoch
@@ -241,7 +242,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
                     obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
                     # sum up the rest of the losses
-                    total_loss = obj_detector_losses + 10 * classifier_loss_region_selection + 10 * classifier_loss_region_abnormal
+                    total_loss = obj_detector_losses + 5 * classifier_loss_region_selection + 5 * classifier_loss_region_abnormal
 
                     if not PRETRAIN_WITHOUT_LM_MODEL:
                         total_loss += 2 * language_model_loss
@@ -303,9 +304,10 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
                 # set the model back to training
                 model.train()
 
-                log.info("Updating normality pool...")
-                update_normality_pool(model, normality_pool_dl)
-                log.info("Updating normality pool finished!")
+                # TODO: enable CA again
+                # log.info("Updating normality pool...")
+                # update_normality_pool(model, normality_pool_dl)
+                # log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -626,7 +628,7 @@ def main():
         optimizer=opt,
         scaler=scaler,
         lr_scheduler=lr_scheduler,
-        epoch=current_epoch,
+        current_epoch=current_epoch,
         epochs=EPOCHS,
         overall_steps_taken=overall_steps_taken,
         lowest_val_loss=lowest_val_loss,
