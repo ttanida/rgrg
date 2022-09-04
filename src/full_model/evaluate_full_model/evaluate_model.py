@@ -98,7 +98,8 @@ def write_all_losses_and_scores_to_tensorboard(
     write_region_selection_scores(writer, overall_steps_taken, region_selection_scores)
     write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores)
 
-    if not PRETRAIN_WITHOUT_LM_MODEL:
+    # TODO: delete 2nd condition (since it's only there to save time)
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000:
         write_language_model_scores(writer, overall_steps_taken, language_model_scores)
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
@@ -474,7 +475,8 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         region_abnormal_scores,
     ) = get_val_losses_and_other_metrics(model, val_dl, log_file, epoch)
 
-    if PRETRAIN_WITHOUT_LM_MODEL:
+    # TODO: delete 2nd condition (since it's only there to save time)
+    if PRETRAIN_WITHOUT_LM_MODEL or overall_steps_taken <= 25000:
         language_model_scores = None
     else:
         language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
