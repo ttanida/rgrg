@@ -1,5 +1,5 @@
 # define configurations for training run
-RUN = 16
+RUN = 17
 RUN_COMMENT = """Train full model for 2 epoch with pre-trained weights from run 14 (weights of 5 for binary classifiers), CA enabled. Weight of 2 for language model loss."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512

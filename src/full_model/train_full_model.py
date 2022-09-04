@@ -171,6 +171,8 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
     update_normality_pool(model, normality_pool_dl)
     log.info("Initializing normality pool finished!")
 
+    bool_evaluate_language_model = True
+
     for epoch in range(current_epoch, epochs):
         run_params["epoch"] = epoch
         log.info(f"Training epoch {epoch}!\n")
@@ -297,8 +299,13 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_BATCHES or (num_batch + 1) == len(train_dl):
 
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path)
+                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path, bool_evaluate_language_model)
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
+
+                if bool_evaluate_language_model:
+                    bool_evaluate_language_model = False
+                else:
+                    bool_evaluate_language_model = True
 
                 # set the model back to training
                 model.train()
@@ -591,11 +598,11 @@ def main():
 
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    resume_training = False
-    checkpoint = torch.load("/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=torch.device("cpu"))
+    resume_training = True
+    checkpoint = torch.load("/u/home/tanida/runs/full_model/run_16/checkpoints/....pt", map_location=torch.device("cpu"))
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    model.load_state_dict(checkpoint["model"])
+    # model.load_state_dict(checkpoint["model"])
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
 

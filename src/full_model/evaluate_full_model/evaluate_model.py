@@ -52,6 +52,7 @@ def write_all_losses_and_scores_to_tensorboard(
     region_abnormal_scores,
     language_model_scores,
     current_lr,
+    bool_evaluate_language_model
 ):
     def write_losses(writer, overall_steps_taken, train_losses_dict, val_losses_dict):
         for loss_type in train_losses_dict:
@@ -99,7 +100,7 @@ def write_all_losses_and_scores_to_tensorboard(
     write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores)
 
     # TODO: delete 2nd condition (since it's only there to save time)
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000:
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000 and bool_evaluate_language_model:
         write_language_model_scores(writer, overall_steps_taken, language_model_scores)
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
@@ -456,7 +457,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path, bool_evaluate_language_model):
     model.eval()
 
     epoch = run_params["epoch"]
@@ -476,7 +477,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
     ) = get_val_losses_and_other_metrics(model, val_dl, log_file, epoch)
 
     # TODO: delete 2nd condition (since it's only there to save time)
-    if PRETRAIN_WITHOUT_LM_MODEL or overall_steps_taken <= 25000:
+    if (PRETRAIN_WITHOUT_LM_MODEL or overall_steps_taken <= 25000) or not bool_evaluate_language_model:
         language_model_scores = None
     else:
         language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
@@ -493,6 +494,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         region_abnormal_scores,
         language_model_scores,
         current_lr,
+        bool_evaluate_language_model
     )
 
     total_val_loss = val_losses_dict["total_loss"]
