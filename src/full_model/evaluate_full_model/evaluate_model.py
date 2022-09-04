@@ -476,11 +476,11 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         region_abnormal_scores,
     ) = get_val_losses_and_other_metrics(model, val_dl, log_file, epoch)
 
-    # TODO: delete 2nd condition (since it's only there to save time)
-    if (PRETRAIN_WITHOUT_LM_MODEL or overall_steps_taken <= 25000) or not bool_evaluate_language_model:
-        language_model_scores = None
-    else:
+    # TODO: delete 2nd and 3rd condition (since they are only there to save time)
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000 and bool_evaluate_language_model:
         language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
+    else:
+        language_model_scores = None
 
     current_lr = float(optimizer.param_groups[0]["lr"])
 

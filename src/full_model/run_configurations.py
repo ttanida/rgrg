@@ -1,6 +1,6 @@
 # define configurations for training run
 RUN = 17
-RUN_COMMENT = """Train full model for 2 epoch with pre-trained weights from run 14 (weights of 5 for binary classifiers), CA enabled. Weight of 2 for language model loss."""
+RUN_COMMENT = """Train full model for 1 epoch with pre-trained weights from run 15 (weights of 5 for binary classifiers), and CA disabled. Weight of 2 for language model loss."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
 NORMALITY_POOL_SIZE = 500
@@ -10,7 +10,7 @@ PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
 BATCH_SIZE = 2
 EFFECTIVE_BATCH_SIZE = 64  # batch size after gradient accumulation
 NUM_WORKERS = 10
-EPOCHS = 2
+EPOCHS = 1
 LR = 1e-3
 # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 # EVALUATE_EVERY_K_BATCHES should be divisible by ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE

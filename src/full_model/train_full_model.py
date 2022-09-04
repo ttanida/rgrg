@@ -167,9 +167,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    log.info("Initializing normality pool...")
-    update_normality_pool(model, normality_pool_dl)
-    log.info("Initializing normality pool finished!")
+    # log.info("Initializing normality pool...")
+    # update_normality_pool(model, normality_pool_dl)
+    # log.info("Initializing normality pool finished!")
 
     bool_evaluate_language_model = True
 
@@ -310,9 +310,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
                 # set the model back to training
                 model.train()
 
-                log.info("Updating normality pool...")
-                update_normality_pool(model, normality_pool_dl)
-                log.info("Updating normality pool finished!")
+                # log.info("Updating normality pool...")
+                # update_normality_pool(model, normality_pool_dl)
+                # log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -598,11 +598,11 @@ def main():
 
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    resume_training = True
-    checkpoint = torch.load("/u/home/tanida/runs/full_model/run_16/checkpoints/....pt", map_location=torch.device("cpu"))
+    resume_training = False
+    checkpoint = torch.load("/u/home/tanida/runs/full_model/run_15/checkpoints/checkpoint_val_loss_31.716_epoch_5.pt", map_location=torch.device("cpu"))
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    # model.load_state_dict(checkpoint["model"])
+    model.load_state_dict(checkpoint["model"])
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
 
