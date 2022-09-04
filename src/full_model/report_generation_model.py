@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from src.binary_classifier.binary_classifier_region_abnormal import BinaryClassifierRegionAbnormal
 from src.binary_classifier.binary_classifier_region_selection import BinaryClassifierRegionSelection
-# from src.contrastive_attention.contrastive_attention import ContrastiveAttention
+from src.contrastive_attention.contrastive_attention import ContrastiveAttention
 from src.object_detector.object_detector import ObjectDetector
 from src.language_model.language_model import LanguageModel
 
@@ -29,8 +29,8 @@ class ReportGenerationModel(nn.Module):
         path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_6/weights/val_loss_13.724_epoch_4.pth"
         self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
-        # self.contrastive_attention = ContrastiveAttention()
-        self.contrastive_attention = nn.Linear(2048, 1024)
+        self.contrastive_attention = ContrastiveAttention()
+        # self.contrastive_attention = nn.Linear(2048, 1024)
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()

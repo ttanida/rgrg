@@ -167,10 +167,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    # TODO: enable CA again
-    # log.info("Initializing normality pool...")
-    # update_normality_pool(model, normality_pool_dl)
-    # log.info("Initializing normality pool finished!")
+    log.info("Initializing normality pool...")
+    update_normality_pool(model, normality_pool_dl)
+    log.info("Initializing normality pool finished!")
 
     for epoch in range(current_epoch, epochs):
         run_params["epoch"] = epoch
@@ -304,10 +303,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
                 # set the model back to training
                 model.train()
 
-                # TODO: enable CA again
-                # log.info("Updating normality pool...")
-                # update_normality_pool(model, normality_pool_dl)
-                # log.info("Updating normality pool finished!")
+                log.info("Updating normality pool...")
+                update_normality_pool(model, normality_pool_dl)
+                log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -593,11 +591,11 @@ def main():
 
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    checkpoint = None
-    # checkpoint = torch.load(check_point_path)
+    resume_training = False
+    checkpoint = torch.load("/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=torch.device("cpu"))
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    # model.load_state_dict(torch.load("/u/home/tanida/runs/full_model/run_9/weights/val_loss_33.325_epoch_3.pth"))
+    model.load_state_dict(checkpoint["model"])
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
 
@@ -605,7 +603,7 @@ def main():
     overall_steps_taken = 0
     lowest_val_loss = np.inf
 
-    if checkpoint:
+    if resume_training:
         model.load_state_dict(checkpoint["model"])
         opt.load_state_dict(checkpoint["optimizer"])
         scaler.load_state_dict(checkpoint["scaler"])
