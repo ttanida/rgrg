@@ -44,7 +44,11 @@ from src.full_model.run_configurations import (
     NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
     NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION,
     NUM_IMAGES_TO_PLOT,
-    BERTSCORE_SIMILARITY_THRESHOLD
+    BERTSCORE_SIMILARITY_THRESHOLD,
+    WEIGHT_OBJECT_DETECTOR_LOSS,
+    WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS,
+    WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS,
+    WEIGHT_LANGUAGE_MODEL_LOSS,
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -119,7 +123,24 @@ def update_normality_pool(model, normality_pool_dl):
         model.contrastive_attention.update_normality_pool(normality_pool)
 
 
-def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, lr_scheduler, current_epoch, epochs, overall_steps_taken, lowest_val_loss, checkpoints_folder_path, tokenizer, generated_sentences_and_reports_folder_path, writer, log_file):
+def train_model(
+    model,
+    train_dl,
+    val_dl,
+    normality_pool_dl,
+    optimizer,
+    scaler,
+    lr_scheduler,
+    current_epoch,
+    epochs,
+    overall_steps_taken,
+    lowest_val_loss,
+    checkpoints_folder_path,
+    tokenizer,
+    generated_sentences_and_reports_folder_path,
+    writer,
+    log_file,
+):
     """
     Train a model on train set and evaluate on validation set.
     Saves best model w.r.t. val loss.
@@ -167,9 +188,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    # log.info("Initializing normality pool...")
-    # update_normality_pool(model, normality_pool_dl)
-    # log.info("Initializing normality pool finished!")
+    log.info("Initializing normality pool...")
+    update_normality_pool(model, normality_pool_dl)
+    log.info("Initializing normality pool finished!")
 
     bool_evaluate_language_model = True
 
@@ -213,7 +234,7 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
                 attention_mask = None
 
             try:
-                with torch.autocast(device_type='cuda', dtype=torch.float16):
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
                     output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
                     # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
@@ -243,10 +264,14 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
                     obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
                     # sum up the rest of the losses
-                    total_loss = obj_detector_losses + 5 * classifier_loss_region_selection + 5 * classifier_loss_region_abnormal
+                    total_loss = (
+                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses
+                        + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection
+                        + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
+                    )
 
                     if not PRETRAIN_WITHOUT_LM_MODEL:
-                        total_loss += 2 * language_model_loss
+                        total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
 
                 scaler.scale(total_loss).backward()
 
@@ -299,7 +324,19 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_BATCHES or (num_batch + 1) == len(train_dl):
 
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
-                evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path, bool_evaluate_language_model)
+                evaluate_model(
+                    model,
+                    train_losses_dict,
+                    val_dl,
+                    lr_scheduler,
+                    optimizer,
+                    scaler,
+                    writer,
+                    tokenizer,
+                    run_params,
+                    generated_sentences_and_reports_folder_path,
+                    bool_evaluate_language_model,
+                )
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
                 if bool_evaluate_language_model:
@@ -310,9 +347,9 @@ def train_model(model, train_dl, val_dl, normality_pool_dl, optimizer, scaler, l
                 # set the model back to training
                 model.train()
 
-                # log.info("Updating normality pool...")
-                # update_normality_pool(model, normality_pool_dl)
-                # log.info("Updating normality pool finished!")
+                log.info("Updating normality pool...")
+                update_normality_pool(model, normality_pool_dl)
+                log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -477,14 +514,18 @@ def get_datasets(config_file_path):
 
     datasets_as_dfs = {dataset: os.path.join(path_dataset_full_model, dataset) + ".csv" for dataset in ["train", "valid"]}
 
-    datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
+    datasets_as_dfs = {
+        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()
+    }
 
     # bbox_phrases is a list of str
     # replace each bbox_phrase that is empty (i.e. "") by "#"
     # this is done such that model learns to generate the "#" symbol instead of "" for empty sentences
     # this is done because generated sentences that are "" (i.e. have len = 0) will cause problems when computing e.g. Bleu scores
     for dataset_df in datasets_as_dfs.values():
-        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases])
+        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(
+            lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases]
+        )
 
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
@@ -562,7 +603,11 @@ def create_run_folder():
         "NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE,
         "NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION": NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION,
         "NUM_IMAGES_TO_PLOT": NUM_IMAGES_TO_PLOT,
-        "BERTSCORE_SIMILARITY_THRESHOLD": BERTSCORE_SIMILARITY_THRESHOLD
+        "BERTSCORE_SIMILARITY_THRESHOLD": BERTSCORE_SIMILARITY_THRESHOLD,
+        "WEIGHT_OBJECT_DETECTOR_LOSS": WEIGHT_OBJECT_DETECTOR_LOSS,
+        "WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS": WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS,
+        "WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS": WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS,
+        "WEIGHT_LANGUAGE_MODEL_LOSS": WEIGHT_LANGUAGE_MODEL_LOSS,
     }
 
     with open(config_file_path, "w") as f:
@@ -574,13 +619,7 @@ def create_run_folder():
 
 
 def main():
-    (
-        checkpoints_folder_path,
-        tensorboard_folder_path,
-        config_file_path,
-        generated_sentences_and_reports_folder_path,
-        log_file
-    ) = create_run_folder()
+    (checkpoints_folder_path, tensorboard_folder_path, config_file_path, generated_sentences_and_reports_folder_path, log_file) = create_run_folder()
 
     # the datasets still contain the untokenized phrases
     raw_train_dataset, raw_val_dataset = get_datasets(config_file_path)
@@ -599,7 +638,9 @@ def main():
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     resume_training = False
-    checkpoint = torch.load("/u/home/tanida/runs/full_model/run_15/checkpoints/checkpoint_val_loss_31.716_epoch_5.pt", map_location=torch.device("cpu"))
+    checkpoint = torch.load(
+        "/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=torch.device("cpu")
+    )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     model.load_state_dict(checkpoint["model"])
@@ -641,7 +682,7 @@ def main():
         tokenizer=tokenizer,
         generated_sentences_and_reports_folder_path=generated_sentences_and_reports_folder_path,
         writer=writer,
-        log_file=log_file
+        log_file=log_file,
     )
 
 

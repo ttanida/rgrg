@@ -1,6 +1,6 @@
 # define configurations for training run
-RUN = 17
-RUN_COMMENT = """Train full model for 1 epoch with pre-trained weights from run 15 (weights of 5 for binary classifiers), and CA disabled. Weight of 2 for language model loss."""
+RUN = 18
+RUN_COMMENT = """Same as run 16, but weights of language model loss increased to 5."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
 NORMALITY_POOL_SIZE = 500
@@ -10,8 +10,8 @@ PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
 BATCH_SIZE = 2
 EFFECTIVE_BATCH_SIZE = 64  # batch size after gradient accumulation
 NUM_WORKERS = 10
-EPOCHS = 1
-LR = 1e-3
+EPOCHS = 20
+LR = 1e-4
 # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 # EVALUATE_EVERY_K_BATCHES should be divisible by ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
 EVALUATE_EVERY_K_BATCHES = 4800
@@ -21,6 +21,10 @@ NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated reports with their gt reference reports to a txt file
-NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 150  # for evaluation of bleu, rouge-l and meteor
+NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 100  # for evaluation of bleu, rouge-l and meteor
 NUM_IMAGES_TO_PLOT = 8
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9  # threshold for discarding generated sentences that are too similar
+WEIGHT_OBJECT_DETECTOR_LOSS = 1
+WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS = 5
+WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS = 5
+WEIGHT_LANGUAGE_MODEL_LOSS = 5
