@@ -1,5 +1,5 @@
 # define configurations for training run
-RUN = 19
+RUN = 20
 RUN_COMMENT = """Resume run 17 for 1 more epoch."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512

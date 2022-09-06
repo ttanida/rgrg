@@ -265,9 +265,7 @@ def train_model(
 
                     # sum up the rest of the losses
                     total_loss = (
-                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses
-                        + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection
-                        + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
+                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
                     )
 
                     if not PRETRAIN_WITHOUT_LM_MODEL:
@@ -639,11 +637,14 @@ def main():
 
     resume_training = True
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_18/checkpoints/checkpoint_val_loss_7.232_epoch_0.pt", map_location=torch.device("cpu")
+        "/u/home/tanida/runs/full_model/run_17/checkpoints/checkpoint_val_loss_7.351_epoch_0.pt", map_location=device
     )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     # model.load_state_dict(checkpoint["model"])
+    model.to(device, non_blocking=True)
+    model.train()
+
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
 
@@ -659,10 +660,10 @@ def main():
         overall_steps_taken = checkpoint["overall_steps_taken"]
         lowest_val_loss = checkpoint["lowest_val_loss"]
 
-    model.to(device, non_blocking=True)
-    model.train()
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
+
+    del checkpoint
 
     log.info("Starting training!")
 
