@@ -188,9 +188,9 @@ def train_model(
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    log.info("Initializing normality pool...")
-    update_normality_pool(model, normality_pool_dl)
-    log.info("Initializing normality pool finished!")
+    # log.info("Initializing normality pool...")
+    # update_normality_pool(model, normality_pool_dl)
+    # log.info("Initializing normality pool finished!")
 
     bool_evaluate_language_model = True
 
@@ -347,9 +347,9 @@ def train_model(
                 # set the model back to training
                 model.train()
 
-                log.info("Updating normality pool...")
-                update_normality_pool(model, normality_pool_dl)
-                log.info("Updating normality pool finished!")
+                # log.info("Updating normality pool...")
+                # update_normality_pool(model, normality_pool_dl)
+                # log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -637,13 +637,13 @@ def main():
 
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    resume_training = False
+    resume_training = True
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=torch.device("cpu")
+        "/u/home/tanida/runs/full_model/run_18/checkpoints/checkpoint_val_loss_7.232_epoch_0.pt", map_location=torch.device("cpu")
     )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    model.load_state_dict(checkpoint["model"])
+    # model.load_state_dict(checkpoint["model"])
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
 
@@ -655,7 +655,7 @@ def main():
         model.load_state_dict(checkpoint["model"])
         opt.load_state_dict(checkpoint["optimizer"])
         scaler.load_state_dict(checkpoint["scaler"])
-        current_epoch = checkpoint["current_epoch"]
+        current_epoch = 1  # checkpoint["current_epoch"]
         overall_steps_taken = checkpoint["overall_steps_taken"]
         lowest_val_loss = checkpoint["lowest_val_loss"]
 
