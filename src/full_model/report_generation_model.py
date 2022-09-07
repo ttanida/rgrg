@@ -135,11 +135,13 @@ class ReportGenerationModel(nn.Module):
 
         # valid_input_ids can be empty if during:
         # training:
-        #   - the regions that have a gt sentence (specified by region_has_sentence) were all not detected (specified by class_detected)
+        #   - the regions that have a gt sentence (specified by region_has_sentence) were all not detected (specified by class_detected).
+        #   This can happend if e.g. a lateral chest x-ray was erroneously included in the dataset (and hence the object detector not detecting
+        #   any regions, since it was trained on frontal chest x-rays)
         # evaluation:
         #   - no regions were selected by the binary classifier (specified by selected_regions)
         #   - the regions that were selected by the binary classifier for region selection were all not detected (also specified by selected_regions,
-        #   since class_detected is encoded in selected_regions)
+        #   since class_detected is encoded in selected_regions). Again, the reason might be a bad input image
         #
         # empty valid_input_ids (and thus empty valid_attention_mask, valid_region_features) will throw an exception in the language model,
         # which is why we have to return early

@@ -238,6 +238,8 @@ def train_model(
                     output = model(images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal)
 
                     # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
+                    # this can happen if e.g. the object detector did not detect any regions in an image (e.g. there are a couple of lateral chest x-rays in ChestImaGenome,
+                    # even though the dataset should only include frontal chest x-rays. These bad input images can trigger output == -1)
                     if output == -1:
                         with open(run_params["log_file"], "a") as f:
                             f.write("Training:\n")
