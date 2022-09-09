@@ -188,9 +188,9 @@ def train_model(
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    # log.info("Initializing normality pool...")
-    # update_normality_pool(model, normality_pool_dl)
-    # log.info("Initializing normality pool finished!")
+    log.info("Initializing normality pool...")
+    update_normality_pool(model, normality_pool_dl)
+    log.info("Initializing normality pool finished!")
 
     bool_evaluate_language_model = True
 
@@ -347,9 +347,9 @@ def train_model(
                 # set the model back to training
                 model.train()
 
-                # log.info("Updating normality pool...")
-                # update_normality_pool(model, normality_pool_dl)
-                # log.info("Updating normality pool finished!")
+                log.info("Updating normality pool...")
+                update_normality_pool(model, normality_pool_dl)
+                log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -639,7 +639,7 @@ def main():
 
     resume_training = True
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_17/checkpoints/checkpoint_val_loss_7.351_epoch_0.pt", map_location=device
+        "/u/home/tanida/runs/full_model/run_16/checkpoints/checkpoint_val_loss_7.200_epoch_0.pt", map_location=device
     )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
