@@ -507,7 +507,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         run_params["lowest_val_loss"] = total_val_loss
         run_params["best_epoch"] = epoch
 
-        save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_epoch_{epoch}.pt")
+        save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
 
         checkpoint = {
             "model": model.state_dict(),
