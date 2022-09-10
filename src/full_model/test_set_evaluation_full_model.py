@@ -75,7 +75,7 @@ def write_sentences_and_reports_to_file(
     gen_and_ref_reports_to_save_to_file
 ):
     def write_sentences(generated_sentences, reference_sentences, is_abnormal):
-        txt_file_name = f"generated{'' if not is_abnormal else '_abnormal'}_sentences"
+        txt_file_name = f"generated{'' if not is_abnormal else '_abnormal'}_sentences.txt"
         txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", txt_file_name)
 
         with open(txt_file_name, "w") as f:
@@ -87,7 +87,7 @@ def write_sentences_and_reports_to_file(
     def write_reports(generated_reports, reference_reports, removed_similar_generated_sentences):
         txt_file_name = os.path.join(
             "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
-            "generated_reports",
+            "generated_reports.txt",
         )
 
         with open(txt_file_name, "w") as f:
@@ -549,7 +549,8 @@ def print_all_scores(
     language_model_scores,
 ):
     def write_obj_detector_scores(obj_detector_scores, txt_file_name):
-        print(f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}")
+        with open(txt_file_name, "a") as f:
+            f.write(f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}\n")
 
         # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
         anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
@@ -558,32 +559,32 @@ def print_all_scores(
 
         for region_, avg_detections_region in zip(anatomical_regions, avg_detections_per_region):
             with open(txt_file_name, "a") as f:
-                f.write(f"num_detected_{region_}: {avg_detections_region}")
+                f.write(f"num_detected_{region_}: {avg_detections_region}\n")
 
         for region_, avg_iou_region in zip(anatomical_regions, avg_iou_per_region):
             with open(txt_file_name, "a") as f:
-                f.write(f"iou_{region_}: {avg_iou_region}")
+                f.write(f"iou_{region_}: {avg_iou_region}\n")
 
     def write_region_selection_scores(region_selection_scores, txt_file_name):
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
                 with open(txt_file_name, "a") as f:
-                    f.write(f"region_select_{subset}_{metric}: {score}")
+                    f.write(f"region_select_{subset}_{metric}: {score}\n")
 
     def write_region_abnormal_scores(region_abnormal_scores, txt_file_name):
         for metric, score in region_abnormal_scores.items():
             with open(txt_file_name, "a") as f:
-                f.write(f"region_abnormal_{metric}: {score}")
+                f.write(f"region_abnormal_{metric}: {score}\n")
 
     def write_language_model_scores(language_model_scores, txt_file_name):
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
                 with open(txt_file_name, "a") as f:
-                    f.write(f"language_model_{subset}_{metric}: {score}")
+                    f.write(f"language_model_{subset}_{metric}: {score}\n")
 
     txt_file_name = os.path.join(
         "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
-        "final_scores",
+        f"final_scores_bertscore_{BERTSCORE_SIMILARITY_THRESHOLD}.txt",
     )
 
     write_obj_detector_scores(obj_detector_scores, txt_file_name)
