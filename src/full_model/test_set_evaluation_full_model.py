@@ -548,7 +548,7 @@ def print_all_scores(
     region_abnormal_scores,
     language_model_scores,
 ):
-    def write_obj_detector_scores(obj_detector_scores):
+    def write_obj_detector_scores(obj_detector_scores, txt_file_name):
         print(f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}")
 
         # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
@@ -557,29 +557,39 @@ def print_all_scores(
         avg_iou_per_region = obj_detector_scores["avg_iou_per_region"]
 
         for region_, avg_detections_region in zip(anatomical_regions, avg_detections_per_region):
-            print(f"num_detected_{region_}: {avg_detections_region}")
+            with open(txt_file_name, "a") as f:
+                f.write(f"num_detected_{region_}: {avg_detections_region}")
 
         for region_, avg_iou_region in zip(anatomical_regions, avg_iou_per_region):
-            print(f"iou_{region_}: {avg_iou_region}")
+            with open(txt_file_name, "a") as f:
+                f.write(f"iou_{region_}: {avg_iou_region}")
 
-    def write_region_selection_scores(region_selection_scores):
+    def write_region_selection_scores(region_selection_scores, txt_file_name):
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
-                print(f"region_select_{subset}_{metric}: {score}")
+                with open(txt_file_name, "a") as f:
+                    f.write(f"region_select_{subset}_{metric}: {score}")
 
-    def write_region_abnormal_scores(region_abnormal_scores):
+    def write_region_abnormal_scores(region_abnormal_scores, txt_file_name):
         for metric, score in region_abnormal_scores.items():
-            print(f"region_abnormal_{metric}: {score}")
+            with open(txt_file_name, "a") as f:
+                f.write(f"region_abnormal_{metric}: {score}")
 
-    def write_language_model_scores(language_model_scores):
+    def write_language_model_scores(language_model_scores, txt_file_name):
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
-                print(f"language_model_{subset}_{metric}: {score}")
+                with open(txt_file_name, "a") as f:
+                    f.write(f"language_model_{subset}_{metric}: {score}")
 
-    write_obj_detector_scores(obj_detector_scores)
-    write_region_selection_scores(region_selection_scores)
-    write_region_abnormal_scores(region_abnormal_scores)
-    write_language_model_scores(language_model_scores)
+    txt_file_name = os.path.join(
+        "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
+        "final_scores",
+    )
+
+    write_obj_detector_scores(obj_detector_scores, txt_file_name)
+    write_region_selection_scores(region_selection_scores, txt_file_name)
+    write_region_abnormal_scores(region_abnormal_scores, txt_file_name)
+    write_language_model_scores(language_model_scores, txt_file_name)
 
 
 def update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected):
