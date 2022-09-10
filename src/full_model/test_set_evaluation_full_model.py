@@ -34,6 +34,7 @@ PRETRAIN_WITHOUT_LM_MODEL = False
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 30
+NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 500
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -436,7 +437,10 @@ def evaluate_language_model(model, test_loader, tokenizer):
     sentence_tokenizer = spacy.load("en_core_web_trf")
 
     with torch.no_grad():
-        for num_batch, batch in tqdm(enumerate(test_loader)):
+        for num_batch, batch in tqdm(enumerate(test_loader), total=NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION):
+            if num_batch >= NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION:
+                break
+
             images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
             region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 36]
 
