@@ -16,8 +16,6 @@ class BinaryClassifierRegionAbnormal(nn.Module):
         super().__init__()
 
         self.classifier = nn.Sequential(
-            # nn.Linear(in_features=2048, out_features=1024),
-            # nn.ReLU(),
             nn.Linear(in_features=1024, out_features=512),
             nn.ReLU(),
             nn.Linear(in_features=512, out_features=128),
@@ -32,11 +30,11 @@ class BinaryClassifierRegionAbnormal(nn.Module):
 
     def forward(
         self,
-        top_region_features,  # tensor of shape [batch_size x 36 x 1024]
-        class_detected,  # boolean tensor of shape [batch_size x 36], indicates if the object detector has detected the region/class or not
-        region_is_abnormal  # ground truth boolean tensor of shape [batch_size x 36], indicates if a region is abnormal (True) or not (False)
+        top_region_features,  # tensor of shape [batch_size x 29 x 1024]
+        class_detected,  # boolean tensor of shape [batch_size x 29], indicates if the object detector has detected the region/class or not
+        region_is_abnormal  # ground truth boolean tensor of shape [batch_size x 29], indicates if a region is abnormal (True) or not (False)
     ):
-        # logits of shape [batch_size x 36]
+        # logits of shape [batch_size x 29]
         logits = self.classifier(top_region_features).squeeze(dim=-1)
 
         # only compute loss for logits that correspond to a class that was detected
