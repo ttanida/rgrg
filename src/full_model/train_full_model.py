@@ -38,6 +38,8 @@ from src.full_model.run_configurations import (
     EVALUATE_EVERY_K_BATCHES,
     PATIENCE_LR_SCHEDULER,
     THRESHOLD_LR_SCHEDULER,
+    FACTOR_LR_SCHEDULER,
+    COOLDOWN_LR_SCHEDULER,
     NUM_BEAMS,
     MAX_NUM_TOKENS_GENERATE,
     NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
@@ -597,6 +599,8 @@ def create_run_folder():
         "EVALUATE_EVERY_K_BATCHES": EVALUATE_EVERY_K_BATCHES,
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
         "THRESHOLD_LR_SCHEDULER": THRESHOLD_LR_SCHEDULER,
+        "FACTOR_LR_SCHEDULER": FACTOR_LR_SCHEDULER,
+        "COOLDOWN_LR_SCHEDULER": COOLDOWN_LR_SCHEDULER,
         "NUM_BEAMS": NUM_BEAMS,
         "MAX_NUM_TOKENS_GENERATE": MAX_NUM_TOKENS_GENERATE,
         "NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE": NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE,
@@ -637,14 +641,14 @@ def main():
 
     train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    resume_training = True
+    resume_training = False
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_16/checkpoints/checkpoint_val_loss_7.200_epoch_0.pt", map_location=device
+        "/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=device
     )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    # model.load_state_dict(checkpoint["model"])
     model.to(device, non_blocking=True)
+    model.load_state_dict(checkpoint["model"])
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
@@ -658,11 +662,11 @@ def main():
         model.load_state_dict(checkpoint["model"])
         opt.load_state_dict(checkpoint["optimizer"])
         scaler.load_state_dict(checkpoint["scaler"])
-        current_epoch = 1  # checkpoint["current_epoch"]
+        current_epoch = checkpoint["current_epoch"]
         overall_steps_taken = checkpoint["overall_steps_taken"]
         lowest_val_loss = checkpoint["lowest_val_loss"]
 
-    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     del checkpoint

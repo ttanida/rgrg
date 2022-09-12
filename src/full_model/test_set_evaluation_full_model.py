@@ -22,7 +22,6 @@ from src.full_model.custom_dataset import CustomDataset
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.run_configurations import (
     IMAGE_INPUT_SIZE,
-    BATCH_SIZE,
     NUM_WORKERS,
     NUM_BEAMS,
     MAX_NUM_TOKENS_GENERATE,
@@ -30,8 +29,9 @@ from src.full_model.run_configurations import (
 import evaluate
 import spacy
 
+BATCH_SIZE = 4
 PRETRAIN_WITHOUT_LM_MODEL = False
-BERTSCORE_SIMILARITY_THRESHOLD = 0.8
+BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 500
@@ -993,7 +993,7 @@ def main():
     test_loader = get_data_loaders(tokenizer, test_dataset_complete)
 
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_20/checkpoints/checkpoint_val_loss_7.256_epoch_2.pt", map_location=torch.device("cpu")
+        "/u/home/tanida/runs/full_model/run_20/checkpoints/checkpoint_val_loss_7.273_epoch_2.pt", map_location=torch.device("cpu")
     )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
