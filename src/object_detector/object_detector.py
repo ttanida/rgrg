@@ -45,8 +45,8 @@ class ObjectDetector(nn.Module):
         # boolean to specify if feature vectors should be returned after roi pooling inside RoIHeads
         self.return_feature_vectors = return_feature_vectors
 
-        # 36 classes for 36 anatomical regions + background (defined as class 0)
-        self.num_classes = 37
+        # 29 classes for 29 anatomical regions + background (defined as class 0)
+        self.num_classes = 30
 
         resnet = models.resnet50(pretrained=True)
 
@@ -65,7 +65,7 @@ class ObjectDetector(nn.Module):
         self.roi_heads = self._create_roi_heads()
 
     def _create_rpn(self):
-        # since we have 36 anatomical regions of varying sizes and aspect ratios,
+        # since we have 29 anatomical regions of varying sizes and aspect ratios,
         # we have to define a custom anchor generator that generates anchors that suit
         # e.g. the spine (aspect ratio ~= 8.0) or the abdomen (aspect ratio ~= 0.6)
 
@@ -201,10 +201,10 @@ class ObjectDetector(nn.Module):
             (2) If object detector is trained/evaluated as part of the full model, then self.return_feature_vectors should be True and it returns
                 (I) in train mode:
                     - losses
-                    - top_region_features (FloatTensor(batch_size, 36, 1024)):
+                    - top_region_features (FloatTensor(batch_size, 29, 1024)):
                         - the features with the highest scores for each region and for each image in the batch
                         - these are needed to train the binary classifier ("Filter") and language model
-                    - class_detected (BoolTensor(batch_size, 36)):
+                    - class_detected (BoolTensor(batch_size, 29)):
                         - boolean is True if a region/class had the highest score (i.e. was top-1) for at least 1 RoI box
                         - if the value is False for any class, then this means the object detector effectively did not detect the region,
                         and it is thus filtered out from the next modules in the full model

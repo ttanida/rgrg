@@ -55,7 +55,7 @@ THRESHOLD_LR_SCHEDULER = 1e-3
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
-    # region_set always contains 6 region names
+    # region_set always contains 6 region names (except for region_set_5)
 
     # get a list of 6 boolean values that specify if that region was detected
     class_detected = [class_detected_img[region_index] for region_index in region_indices]
@@ -90,26 +90,24 @@ def plot_box(box, ax, clr, linestyle, class_detected=True):
 
 
 def plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, detections, targets, class_detected, num_images_to_plot=2):
-    # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-    # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+    # pred_boxes is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+    # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
     pred_boxes_batch = detections["top_region_boxes"]
 
     # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-    # gt_boxes is of shape [batch_size x 36 x 4]
+    # gt_boxes is of shape [batch_size x 29 x 4]
     gt_boxes_batch = torch.stack([t["boxes"] for t in targets], dim=0)
 
-    # plot 6 regions at a time, as to not overload the image with boxes
+    # plot 6 regions at a time, as to not overload the image with boxes (except for region_set_5, which has 5 regions)
     # the region_sets were chosen as to minimize overlap between the contained regions (i.e. better visibility)
     region_set_1 = ["right lung", "right costophrenic angle", "left lung", "left costophrenic angle", "cardiac silhouette", "spine"]
     region_set_2 = ["right upper lung zone", "right mid lung zone", "right lower lung zone", "left upper lung zone", "left mid lung zone", "left lower lung zone"]
-    region_set_3 = ["right hilar structures", "right apical zone", "right cardiophrenic angle", "left hilar structures", "left apical zone", "left cardiophrenic angle"]
-    region_set_4 = ["right hemidiaphragm", "left hemidiaphragm", "trachea", "right clavicle", "left clavicle", "aortic arch"]
-    region_set_5 = ["mediastinum", "left upper abdomen", "right upper abdomen", "svc", "cavoatrial junction", "carina"]
-    region_set_6 = ["right atrium", "descending aorta", "left cardiac silhouette", "upper mediastinum", "right cardiac silhouette", "abdomen"]
+    region_set_3 = ["right hilar structures", "right apical zone", "left hilar structures", "left apical zone", "right hemidiaphragm", "left hemidiaphragm"]
+    region_set_4 = ["trachea", "right clavicle", "left clavicle", "aortic arch", "abdomen", "right atrium"]
+    region_set_5 = ["mediastinum", "svc", "cavoatrial junction", "carina", "upper mediastinum"]
 
-    regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5, region_set_6]
-    region_colors = ["b", "g", "r", "c", "m", "y"]
+    regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5]
 
     for num_img in range(num_images_to_plot):
         image = images[num_img].cpu().numpy().transpose(1, 2, 0)
@@ -126,6 +124,10 @@ def plot_gt_and_pred_bboxes_to_tensorboard(writer, overall_steps_taken, images, 
             plt.axis('off')
 
             region_indices = [ANATOMICAL_REGIONS[region] for region in region_set]
+            region_colors = ["b", "g", "r", "c", "m", "y"]
+
+            if num_region_set == 4:
+                region_colors.pop()
 
             for region_index, color in zip(region_indices, region_colors):
                 box_gt = gt_boxes_img[region_index].tolist()
@@ -149,10 +151,10 @@ def compute_box_area(box):
     Calculate the area of a box given the 4 corner values.
 
     Args:
-        box (Tensor[batch_size x 36 x 4])
+        box (Tensor[batch_size x 29 x 4])
 
     Returns:
-        area (Tensor[batch_size x 36])
+        area (Tensor[batch_size x 29])
     """
     x0 = box[..., 0]
     y0 = box[..., 1]
@@ -163,25 +165,25 @@ def compute_box_area(box):
 
 
 def compute_intersection_and_union_area_per_class(detections, targets, class_detected):
-    # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-    # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+    # pred_boxes is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+    # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
     pred_boxes = detections["top_region_boxes"]
 
     # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-    # gt_boxes is of shape [batch_size x 36 x 4]
+    # gt_boxes is of shape [batch_size x 29 x 4]
     gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
 
-    # below tensors are of shape [batch_size x 36]
+    # below tensors are of shape [batch_size x 29]
     x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
     y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
     x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
     y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
 
-    # intersection_boxes is of shape [batch_size x 36 x 4]
+    # intersection_boxes is of shape [batch_size x 29 x 4]
     intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
 
-    # below tensors are of shape [batch_size x 36]
+    # below tensors are of shape [batch_size x 29]
     intersection_area = compute_box_area(intersection_boxes)
     pred_area = compute_box_area(pred_boxes)
     gt_area = compute_box_area(gt_boxes)
@@ -214,8 +216,8 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
 
     Returns:
         val_loss (float): val loss for val set
-        avg_num_detected_classes_per_image (float): since it's possible that certain classes/regions of all 36 regions are not detected in an image,
-        this metric counts how many classes are detected on average for an image. Ideally, this number should be 36.0
+        avg_num_detected_classes_per_image (float): since it's possible that certain classes/regions of all 29 regions are not detected in an image,
+        this metric counts how many classes are detected on average for an image. Ideally, this number should be 29.0
         avg_detections_per_class (list[float]): this metric counts how many times a class was detected in an image on average. E.g. if the value is 1.0,
         then the class was detected in all images of the val set
         avg_iou_per_class (list[float]): average IoU per class computed over all images in val set
@@ -231,19 +233,19 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
     num_images = 0
 
     # tensor for accumulating the number of times a class is detected over all images (will be divided by num_images at the end of get average)
-    sum_class_detected = torch.zeros(36, device=device)
+    sum_class_detected = torch.zeros(29, device=device)
 
     # tensor for accumulating the intersection area of each class (will be divided by union area of each class at the end of get the IoU for each class)
-    sum_intersection_area_per_class = torch.zeros(36, device=device)
+    sum_intersection_area_per_class = torch.zeros(29, device=device)
 
     # tensor for accumulating the union area of each class (will divide the intersection area of each class at the end of get the IoU for each class)
-    sum_union_area_per_class = torch.zeros(36, device=device)
+    sum_union_area_per_class = torch.zeros(29, device=device)
 
     with torch.no_grad():
         for batch_num, batch in tqdm(enumerate(val_dl)):
             # "targets" maps to a list of dicts, where each dict has the keys "boxes" and "labels" and corresponds to a single image
-            # "boxes" maps to a tensor of shape [36 x 4] and "labels" maps to a tensor of shape [36]
-            # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 36] (starting at 1, since 0 is background)
+            # "boxes" maps to a tensor of shape [29 x 4] and "labels" maps to a tensor of shape [29]
+            # note that the "labels" tensor is always sorted, i.e. it is of the form [1, 2, 3, ..., 29] (starting at 1, since 0 is background)
             images, targets = batch.values()
 
             batch_size = images.size(0)
@@ -253,10 +255,10 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
             # detections is a dict with keys "top_region_boxes" and "top_scores"
-            # "top_region_boxes" maps to a tensor of shape [batch_size x 36 x 4]
-            # "top_scores" maps to a tensor of shape [batch_size x 36]
+            # "top_region_boxes" maps to a tensor of shape [batch_size x 29 x 4]
+            # "top_scores" maps to a tensor of shape [batch_size x 29]
 
-            # class_detected is a tensor of shape [batch_size x 36]
+            # class_detected is a tensor of shape [batch_size x 29]
             loss_dict, detections, class_detected = model(images, targets)
 
             # sum up all 4 losses

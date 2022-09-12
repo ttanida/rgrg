@@ -77,10 +77,10 @@ class CustomRoIHeads(RoIHeads):
             -> output dict contains the keys "detections" and "class_detected":
 
             - "detections" maps to another dict with the keys "top_region_boxes" and "top_scores":
-                - "top_region_boxes" maps to a tensor of shape [batch_size, 36, 4] of the detected boxes with the highest score (i.e. top-1 score) per class
-                - "top_scores" maps to a tensor of shape [batch_size, 36] of the corresponding highest scores for the boxes
+                - "top_region_boxes" maps to a tensor of shape [batch_size, 29, 4] of the detected boxes with the highest score (i.e. top-1 score) per class
+                - "top_scores" maps to a tensor of shape [batch_size, 29] of the corresponding highest scores for the boxes
 
-            - "class_detected" maps to a boolean tensor of shape [batch_size, 36] that has a True value for a class if that class had the highest score (out of all classes)
+            - "class_detected" maps to a boolean tensor of shape [batch_size, 29] that has a True value for a class if that class had the highest score (out of all classes)
             for at least 1 proposed box. If a class has a False value, this means that for all hundreds of proposed boxes coming from the RPN for a single image,
             this class did not have the highest score (and thus was not predicted/detected as the class) for one of them. We use the boolean tensor of "class_detected"
             to mask out the boxes for these False/not-detected classes in "detections"
@@ -88,7 +88,7 @@ class CustomRoIHeads(RoIHeads):
         (2) object detector is used with full model + train mode:
             -> output dict contains the keys "top_region_features" and "class_detected":
 
-            - "top_region_features" maps to a tensor of shape [batch_size, 36, 1024] of the region features with the highest score (i.e. top-1 score) per class
+            - "top_region_features" maps to a tensor of shape [batch_size, 29, 1024] of the region features with the highest score (i.e. top-1 score) per class
             - "class_detected" same as above. Needed to mask out the region features for classes that were not detected later on in the full model
 
         (3) object detector is used with full model + eval mode:
@@ -126,11 +126,11 @@ class CustomRoIHeads(RoIHeads):
             pred_region_boxes_per_img = [None] * num_images  # dummy list such that we can still zip everything up
 
         output = {}
-        output["class_detected"] = []  # list collects the bool arrays of shape [36] that specify if a class was detected (True) for each image
-        output["top_region_features"] = []  # list collects the tensors of shape [36 x 1024] of the top region features for each image
+        output["class_detected"] = []  # list collects the bool arrays of shape [29] that specify if a class was detected (True) for each image
+        output["top_region_features"] = []  # list collects the tensors of shape [29 x 1024] of the top region features for each image
 
-        # list top_region_boxes collects the tensors of shape [36 x 4] of the top region boxes for each image
-        # list top_scores collects the tensors of shape [36] of the corresponding top scores for each image
+        # list top_region_boxes collects the tensors of shape [29 x 4] of the top region boxes for each image
+        # list top_scores collects the tensors of shape [29] of the corresponding top scores for each image
         output["detections"] = {
             "top_region_boxes": [],
             "top_scores": []
@@ -141,7 +141,7 @@ class CustomRoIHeads(RoIHeads):
             pred_classes = torch.argmax(pred_scores_img, dim=1)
 
             # create a mask that is 1 at the predicted class index for every box and 0 otherwise
-            mask_pred_classes = torch.nn.functional.one_hot(pred_classes, num_classes=36).to(pred_scores_img.device)
+            mask_pred_classes = torch.nn.functional.one_hot(pred_classes, num_classes=29).to(pred_scores_img.device)
 
             # by multiplying the pred_scores with the mask, we set to 0.0 all scores except for the top score in each row
             pred_top_scores_img = pred_scores_img * mask_pred_classes
@@ -150,7 +150,7 @@ class CustomRoIHeads(RoIHeads):
             top_scores, indices_with_top_scores = torch.max(pred_top_scores_img, dim=0)
 
             # check if all regions/classes have at least 1 box where they are the predicted class (i.e. have the highest score)
-            # this is done because we want to collect 36 region features (each with the highest score for the class) for 36 regions
+            # this is done because we want to collect 29 region features (each with the highest score for the class) for 29 regions
             num_predictions_per_class = torch.sum(mask_pred_classes, dim=0)
 
             # get a boolean array that is True for the classes that were detected
@@ -168,13 +168,13 @@ class CustomRoIHeads(RoIHeads):
                 output["top_region_features"].append(top_region_features)
 
             if not self.training:
-                # pred_region_boxes_img is of shape [num_boxes_in_image x 37 x 4]
+                # pred_region_boxes_img is of shape [num_boxes_in_image x 30 x 4]
 
                 # clip boxes so that they lie inside an image of size "img_shape"
                 pred_region_boxes_img = box_ops.clip_boxes_to_image(pred_region_boxes_img, img_shape)
 
                 # remove predictions with the background label
-                # pred_region_boxes_img is now of shape [num_boxes_in_image x 36 x 4]
+                # pred_region_boxes_img is now of shape [num_boxes_in_image x 29 x 4]
                 pred_region_boxes_img = pred_region_boxes_img[:, 1:]
 
                 # extract the region boxes with the top scores for each class
@@ -183,25 +183,25 @@ class CustomRoIHeads(RoIHeads):
                 # and thus the region box will be the 1st one in the tensor pred_region_boxes_img
                 # but since we have the boolean array class_detected, we can filter out this class (and its erroneous region box) later on
 
-                # since indices_with_top_scores is sorted from class 0 to class 35, we first use the indices to select the correct box_array (of shape [36 x 4]),
-                # and then the number in torch.arange (starting from 0 and ending at 35) will select the correct box for this class from the box_array
-                top_region_boxes = pred_region_boxes_img[indices_with_top_scores, torch.arange(start=0, end=36, dtype=torch.int64, device=indices_with_top_scores.device)]
+                # since indices_with_top_scores is sorted from class 0 to class 28, we first use the indices to select the correct box_array (of shape [29 x 4]),
+                # and then the number in torch.arange (starting from 0 and ending at 28) will select the correct box for this class from the box_array
+                top_region_boxes = pred_region_boxes_img[indices_with_top_scores, torch.arange(start=0, end=29, dtype=torch.int64, device=indices_with_top_scores.device)]
 
                 # note: top_region_boxes and top_scores are both ordered by class
                 # (i.e. class 0 will be the first row in top_region_boxes and the first value in top_scores,
-                # class 35 will be the last row in top_region_boxes and the last value in top_scores)
+                # class 28 will be the last row in top_region_boxes and the last value in top_scores)
                 output["detections"]["top_region_boxes"].append(top_region_boxes)
                 output["detections"]["top_scores"].append(top_scores)
 
         # convert lists into batched tensors
-        output["class_detected"] = torch.stack(output["class_detected"], dim=0)  # of shape [batch_size x 36]
+        output["class_detected"] = torch.stack(output["class_detected"], dim=0)  # of shape [batch_size x 29]
 
         if self.return_feature_vectors:
-            output["top_region_features"] = torch.stack(output["top_region_features"], dim=0)  # of shape [batch_size x 36 x 1024]
+            output["top_region_features"] = torch.stack(output["top_region_features"], dim=0)  # of shape [batch_size x 29 x 1024]
 
         if not self.training:
-            output["detections"]["top_region_boxes"] = torch.stack(output["detections"]["top_region_boxes"], dim=0)  # of shape [batch_size x 36 x 4]
-            output["detections"]["top_scores"] = torch.stack(output["detections"]["top_scores"], dim=0)  # of shape [batch_size x 36]
+            output["detections"]["top_region_boxes"] = torch.stack(output["detections"]["top_region_boxes"], dim=0)  # of shape [batch_size x 29 x 4]
+            output["detections"]["top_scores"] = torch.stack(output["detections"]["top_scores"], dim=0)  # of shape [batch_size x 29]
 
         return output
 
