@@ -112,14 +112,14 @@ def update_stats_for_image(image_scene_graph: dict, stats: dict) -> None:
     is_abnormal_dict = {}
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
-        stats["num_bboxes_with_phrases"] += 1
 
-        # bbox_names such as "left chest wall" or "right breast" don't appear in the 36 anatomical regions that have bbox coordiantes
+        # there are bbox_names such as "left chest wall" or "right breast" that are not part of the 29 anatomical regions
         # they are considered outliers
         if bbox_name not in ANATOMICAL_REGIONS:
             stats["num_outlier_bboxes"] += 1
             stats["outlier_bbox_counter_dict"][bbox_name] += 1
         else:
+            stats["num_bboxes_with_phrases"] += 1
             stats["bbox_with_phrases_counter_dict"][bbox_name] += 1
 
         is_abnormal = determine_if_abnormal(attribute["attributes"])
@@ -139,7 +139,18 @@ def get_num_rows(path_csv_file: str) -> int:
 
 
 def compute_stats_for_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> dict:
-    stats = {stat: 0 for stat in ["num_images", "num_ignored_images", "num_bboxes", "num_normal_bboxes", "num_abnormal_bboxes", "num_bboxes_with_phrases", "num_outlier_bboxes"]}
+    stats = {
+        stat: 0
+        for stat in [
+            "num_images",
+            "num_ignored_images",
+            "num_bboxes",
+            "num_normal_bboxes",
+            "num_abnormal_bboxes",
+            "num_bboxes_with_phrases",
+            "num_outlier_bboxes",
+        ]
+    }
     stats["bbox_with_phrases_counter_dict"] = defaultdict(int)
     stats["outlier_bbox_counter_dict"] = defaultdict(int)
 
@@ -166,7 +177,9 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str, image_ids_to_av
             if image_id in image_ids_to_avoid:
                 continue
 
-            chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
+            chest_imagenome_scene_graph_file_path = (
+                os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
+            )
 
             with open(chest_imagenome_scene_graph_file_path) as fp:
                 image_scene_graph = json.load(fp)
@@ -176,10 +189,14 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str, image_ids_to_av
             # returns a is_abnormal_dict that specifies if bboxes mentioned in report are normal or abnormal
             is_abnormal_dict = update_stats_for_image(image_scene_graph, stats)
 
-            # for each image, there are normally 36 bboxes for 36 anatomical regions, but there may be less occasionally
+            # for each image, there are normally 29 bboxes for 29 anatomical regions
             for anatomical_region in image_scene_graph["objects"]:
-                stats["num_bboxes"] += 1
                 bbox_name = anatomical_region["bbox_name"]
+
+                if bbox_name not in ANATOMICAL_REGIONS:
+                    continue
+
+                stats["num_bboxes"] += 1
 
                 if is_abnormal_dict.get(bbox_name, False):
                     stats["num_abnormal_bboxes"] += 1
@@ -192,15 +209,20 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str, image_ids_to_av
 
 
 def compute_and_print_stats_for_csv_files(csv_files_dict, image_ids_to_avoid):
-    """
-    total_num_ignored_images: images that are ignored because of failed x-rays
-    total_num_outlier_bboxes: bboxes that have bbox names (like 'left breast' etc.) that are not in the 36 anatomical regions are considered outliers
-    total_bbox_with_phrases_counter_dict: dict to count how often each of the 36 anatomical regions have phrases
-    total_outlier_bbox_counter_dict: dict to count how often each of the outlier regions have phrases
-    """
-    total_stats = {stat: 0 for stat in ["total_num_images", "total_num_ignored_images", "total_num_bboxes", "total_num_normal_bboxes", "total_num_abnormal_bboxes", "total_num_bboxes_with_phrases", "total_num_outlier_bboxes"]}
-    total_stats["total_bbox_with_phrases_counter_dict"] = defaultdict(int)
-    total_stats["total_outlier_bbox_counter_dict"] = defaultdict(int)
+    total_stats = {
+        stat: 0
+        for stat in [
+            "total_num_images",
+            "total_num_ignored_images",  # images that are ignored because of failed x-rays
+            "total_num_bboxes",
+            "total_num_normal_bboxes",
+            "total_num_abnormal_bboxes",
+            "total_num_bboxes_with_phrases",
+            "total_num_outlier_bboxes",  # bboxes that have bbox names (like 'left breast' etc.) that are not in the 29 anatomical regions are considered outliers
+        ]
+    }
+    total_stats["total_bbox_with_phrases_counter_dict"] = defaultdict(int)  # dict to count how often each of the 29 anatomical regions have phrases
+    total_stats["total_outlier_bbox_counter_dict"] = defaultdict(int)  # dict to count how often each of the outlier regions have phrases
 
     for dataset, path_csv_file in csv_files_dict.items():
         stats = compute_stats_for_csv_file(dataset, path_csv_file, image_ids_to_avoid)
