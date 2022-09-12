@@ -5,7 +5,7 @@ import torchxrayvision as xrv
 
 class ClassificationModel(nn.Module):
     """
-    Model to classify 36 anatomical regions and determine if they are normal/abnormal.
+    Model to classify 29 anatomical regions and determine if they are normal/abnormal.
 
     Note that all parameters are trainable (even those of feature_extractor), since requires_grad was not set to False explicitly.
     """
@@ -19,12 +19,12 @@ class ClassificationModel(nn.Module):
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
 
         # linear layers for classification
-        # 37 classes = 36 classes for 36 anatomical regions + 1 class for binary normal/abnormal classification of image region
+        # 30 classes = 29 classes for 29 anatomical regions + 1 class for binary normal/abnormal classification of image region
         self.classifier = nn.Sequential(
             nn.Linear(in_features=2048, out_features=512),
             nn.BatchNorm1d(num_features=512),
             nn.ReLU(),
-            nn.Linear(in_features=512, out_features=37)
+            nn.Linear(in_features=512, out_features=30)
         )
 
         # boolean to specify if feature vectors should be returned after avg_pool

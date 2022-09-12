@@ -59,7 +59,7 @@ def evaluate_model(model, val_dl, overall_steps_taken, writer):
         - val precision is_abnormal
         - val recall is_abnormal
         - val f1_score bboxes
-        - val f1_score bbox for 36 bbox regions
+        - val f1_score bbox for 29 bbox regions
     """
     # evaluating the model on the val set
     model.eval()
@@ -89,16 +89,16 @@ def evaluate_model(model, val_dl, overall_steps_taken, writer):
             batch_size = batch_images.size(0)
 
             batch_images = batch_images.to(device, non_blocking=True)  # shape: (BATCH_SIZE, 1, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE), with IMAGE_INPUT_SIZE usually 224
-            bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 35 specifying the class for each bbox image
+            bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 28 specifying the class for each bbox image
             is_abnormal_targets = is_abnormal_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), floats that are either 0. (normal) or 1. (abnormal) specifying if bbox image is normal/abnormal
 
-            # logits has output shape: (BATCH_SIZE, 37)
+            # logits has output shape: (BATCH_SIZE, 30)
             logits = model(batch_images)
 
-            # use the first 36 columns as logits for bbox classes, shape: (BATCH_SIZE, 36)
-            bbox_class_logits = logits[:, :36]
+            # use the first 29 columns as logits for bbox classes, shape: (BATCH_SIZE, 29)
+            bbox_class_logits = logits[:, :29]
 
-            # use the last column (i.e. 37th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
+            # use the last column (i.e. 30th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
             abnormal_logits = logits[:, -1]
 
             cross_entropy_loss = cross_entropy(bbox_class_logits, bbox_targets)
@@ -125,7 +125,7 @@ def evaluate_model(model, val_dl, overall_steps_taken, writer):
             # average=None: f1-score for each class are returned
             f1_scores_per_bbox_class_current_batch = f1_score(
                 bbox_targets.cpu(), preds_bbox.cpu(), average=None, labels=[i for i in range(num_classes)]
-            )  # list of 36 f1-scores (float values) for 36 regions
+            )  # list of 29 f1-scores (float values) for 29 regions
 
             for i in range(num_classes):
                 f1_scores_bboxes_class[i].append(f1_scores_per_bbox_class_current_batch[i])
@@ -212,16 +212,16 @@ def train_model(
             batch_size = batch_images.size(0)
 
             batch_images = batch_images.to(device, non_blocking=True)  # shape: (BATCH_SIZE, 1, IMAGE_INPUT_SIZE, IMAGE_INPUT_SIZE), with IMAGE_INPUT_SIZE usually 512
-            bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 35 specifying the class for each bbox image
+            bbox_targets = bbox_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), integers between 0 and 28 specifying the class for each bbox image
             is_abnormal_targets = is_abnormal_targets.to(device, non_blocking=True)  # shape: (BATCH_SIZE), floats that are either 0. (normal) or 1. (abnormal) specifying if bbox image is normal/abnormal
 
-            # logits has output shape: (BATCH_SIZE, 37)
+            # logits has output shape: (BATCH_SIZE, 30)
             logits = model(batch_images)
 
-            # use the first 36 columns as logits for bbox classes, shape: (BATCH_SIZE, 36)
-            bbox_class_logits = logits[:, :36]
+            # use the first 29 columns as logits for bbox classes, shape: (BATCH_SIZE, 29)
+            bbox_class_logits = logits[:, :29]
 
-            # use the last column (i.e. 37th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
+            # use the last column (i.e. 30th column) as logits for the is_abnormal binary class, shape: (BATCH_SIZE)
             abnormal_logits = logits[:, -1]
 
             # compute the (multi-class) cross entropy loss
