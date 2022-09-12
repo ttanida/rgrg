@@ -665,7 +665,7 @@ def print_model_summary(batch_size, seq_len, verbose):
     inputs = {}
     inputs["input_ids"] = torch.randint(low=0, high=50257, size=(batch_size, seq_len))
     inputs["attention_mask"] = torch.randint(low=0, high=2, size=(batch_size, seq_len))
-    inputs["image_hidden_states"] = torch.rand(batch_size, 2048)
+    inputs["image_hidden_states"] = torch.rand(batch_size, 1024)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
