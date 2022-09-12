@@ -9,7 +9,7 @@ from src.full_model.run_configurations import NORMALITY_POOL_SIZE
 class ContrastiveAttention(nn.Module):
     def __init__(self):
         super().__init__()
-        NUM_REGIONS = 36
+        NUM_REGIONS = 29
         INPUT_HIDDEN_DIM = 2048
         CA_HIDDEN_DIM = 512
 

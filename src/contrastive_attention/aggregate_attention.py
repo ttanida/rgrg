@@ -12,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class AggregateAttention(nn.Module):
     def __init__(self):
         super().__init__()
-        NUM_REGIONS = 36
+        NUM_REGIONS = 29
         CA_HIDDEN_DIM = 512
 
         self.wx = nn.Parameter(torch.empty(AGGREGATE_ATTENTION_NUM, NUM_REGIONS, CA_HIDDEN_DIM, CA_HIDDEN_DIM), requires_grad=True)
@@ -40,7 +40,7 @@ class AggregateAttention(nn.Module):
         Forward method implements equations 4 - 6 in paper.
 
         b = batch_size
-        r = region_number (i.e. 36)
+        r = region_number (i.e. 29)
         a = aggregate_attention_num (i.e. num of closest images by aggregation, most likely 6)
         d = dimensionality (i.e. CA_HIDDEN_DIM)
         n = normality_pool_size (most likely 100 or 1000)

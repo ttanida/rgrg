@@ -10,7 +10,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DifferentiateAttention(nn.Module):
     def __init__(self):
         super().__init__()
-        NUM_REGIONS = 36
+        NUM_REGIONS = 29
         CA_HIDDEN_DIM = 512
         OUTPUT_HIDDEN_DIM = 1024
 
@@ -46,9 +46,9 @@ class DifferentiateAttention(nn.Module):
         Forward method implements equations 7 - 10 in paper.
 
         b = batch_size
-        r = region_number (i.e. 36)
+        r = region_number (i.e. 29)
         a = aggregate_attention_num (i.e. num of closest images by aggregation, most likely 6)
-        d = dimensionality (i.e. 2048)
+        d = dimensionality (i.e. 512)
         """
         # top_region_features of shape [b x r x 1 x d] after unsqueeze
         top_region_features = torch.unsqueeze(top_region_features, dim=2)
