@@ -127,10 +127,10 @@ def get_generated_sentence_for_region(
     """
     Args:
         generated_sentences_for_selected_regions (List[str]): holds the generated sentences for all regions that were selected in the batch, i.e. of length "num_regions_selected_in_batch"
-        selected_regions (Tensor[bool]): of shape [batch_size x 36], specifies for each region if it was selected to get a sentences generated (True) or not by the binary classifier for region selection.
+        selected_regions (Tensor[bool]): of shape [batch_size x 29], specifies for each region if it was selected to get a sentences generated (True) or not by the binary classifier for region selection.
         Ergo has exactly "num_regions_selected_in_batch" True values.
         num_img (int): specifies the image we are currently processing in the batch, its value is in the range [0, batch_size-1]
-        region_index (int): specifies the region we are currently processing of a single image, its value is in the range [0, 35]
+        region_index (int): specifies the region we are currently processing of a single image, its value is in the range [0, 28]
 
     Returns:
         str: generated sentence for region specified by num_img and region_index
@@ -145,7 +145,7 @@ def get_generated_sentence_for_region(
     num_img = 0
     region_index = 2
 
-    In this toy example, the batch_size = 2 and there are only 3 regions in total for simplicity (instead of the 36).
+    In this toy example, the batch_size = 2 and there are only 3 regions in total for simplicity (instead of the 29).
     The generated_sentences_for_selected_regions is of len 2, meaning num_regions_selected_in_batch = 2.
     Therefore, the selected_regions boolean tensor also has exactly 2 True values.
 
@@ -260,8 +260,8 @@ def get_generated_and_reference_reports(
     """
     Args:
         generated_sentences_for_selected_regions (List[str]): of length "num_regions_selected_in_batch"
-        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 36 (the inner list holds all reference phrases of a single image)
-        selected_regions ([batch_size x 36]): boolean array that has exactly "num_regions_selected_in_batch" True values
+        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 29 (the inner list holds all reference phrases of a single image)
+        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
         sentence_tokenizer: used in get_ref_report_single_image to
 
     Return:
@@ -379,7 +379,7 @@ def get_generated_and_reference_reports(
     def get_reference_reports():
         reference_reports = []
 
-        # ref_sents_single_image is a List[str] containing 36 reference sentences for 36 regions of a single image
+        # ref_sents_single_image is a List[str] containing 29 reference sentences for 29 regions of a single image
         for ref_sents_single_image in reference_sentences:
             ref_report_single_image = get_ref_report_single_image(ref_sents_single_image)
             reference_reports.append(ref_report_single_image)
@@ -395,10 +395,10 @@ def get_generated_and_reference_reports(
 def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions):
     """
     Args:
-        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 36 (the inner list holds all reference phrases of a single image)
-        selected_regions ([batch_size x 36]): boolean array that has exactly "num_regions_selected_in_batch" True values
+        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 29 (the inner list holds all reference phrases of a single image)
+        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
     """
-    # array of shape [batch_size x 36]
+    # array of shape [batch_size x 29]
     reference_sentences = np.asarray(reference_sentences)
 
     ref_sentences_for_selected_regions = reference_sentences[selected_regions]
@@ -442,7 +442,7 @@ def evaluate_language_model(model, test_loader, tokenizer):
                 break
 
             images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
-            region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 36]
+            region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
 
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             reference_sentences = batch["reference_sentences"]
@@ -597,9 +597,9 @@ def update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_re
     """
     Args:
         region_abnormal_scores (Dict)
-        predicted_abnormal_regions (Tensor[bool]): shape [batch_size x 36]
-        region_is_abnormal (Tensor[bool]): shape [batch_size x 36]
-        class_detected (Tensor[bool]): shape [batch_size x 36]
+        predicted_abnormal_regions (Tensor[bool]): shape [batch_size x 29]
+        region_is_abnormal (Tensor[bool]): shape [batch_size x 29]
+        class_detected (Tensor[bool]): shape [batch_size x 29]
 
     We only update/compute the scores for regions that were actually detected by the object detector (specified by class_detected).
     """
@@ -615,9 +615,9 @@ def update_region_selection_metrics(region_selection_scores, selected_regions, r
     """
     Args:
         region_selection_scores (Dict[str, Dict])
-        selected_regions (Tensor[bool]): shape [batch_size x 36]
-        region_has_sentence (Tensor[bool]): shape [batch_size x 36]
-        region_is_abnormal (Tensor[bool]): shape [batch_size x 36]
+        selected_regions (Tensor[bool]): shape [batch_size x 29]
+        region_has_sentence (Tensor[bool]): shape [batch_size x 29]
+        region_is_abnormal (Tensor[bool]): shape [batch_size x 29]
     """
     normal_selected_regions = selected_regions[~region_is_abnormal]
     normal_region_has_sentence = region_has_sentence[~region_is_abnormal]
@@ -644,10 +644,10 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
         Calculate the area of a box given the 4 corner values.
 
         Args:
-            box (Tensor[batch_size x 36 x 4])
+            box (Tensor[batch_size x 29 x 4])
 
         Returns:
-            area (Tensor[batch_size x 36])
+            area (Tensor[batch_size x 29])
         """
         x0 = box[..., 0]
         y0 = box[..., 1]
@@ -657,25 +657,25 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
         return (x1 - x0) * (y1 - y0)
 
     def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
-        # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-        # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+        # pred_boxes is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+        # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
         # the 2nd to the 2nd class and so on
         pred_boxes = detections["top_region_boxes"]
 
         # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-        # gt_boxes is of shape [batch_size x 36 x 4]
+        # gt_boxes is of shape [batch_size x 29 x 4]
         gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
 
-        # below tensors are of shape [batch_size x 36]
+        # below tensors are of shape [batch_size x 29]
         x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
         y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
         x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
         y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
 
-        # intersection_boxes is of shape [batch_size x 36 x 4]
+        # intersection_boxes is of shape [batch_size x 29 x 4]
         intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
 
-        # below tensors are of shape [batch_size x 36]
+        # below tensors are of shape [batch_size x 29]
         intersection_area = compute_box_area(intersection_boxes)
         pred_area = compute_box_area(pred_boxes)
         gt_area = compute_box_area(gt_boxes)
@@ -865,9 +865,9 @@ def get_datasets():
 
 def get_test_losses_and_other_metrics(model, test_loader):
     obj_detector_scores = {}
-    obj_detector_scores["sum_intersection_area_per_region"] = torch.zeros(36, device=device)
-    obj_detector_scores["sum_union_area_per_region"] = torch.zeros(36, device=device)
-    obj_detector_scores["sum_region_detected"] = torch.zeros(36, device=device)
+    obj_detector_scores["sum_intersection_area_per_region"] = torch.zeros(29, device=device)
+    obj_detector_scores["sum_union_area_per_region"] = torch.zeros(29, device=device)
+    obj_detector_scores["sum_region_detected"] = torch.zeros(29, device=device)
 
     region_selection_scores = {}
     for subset in ["all", "normal", "abnormal"]:
@@ -942,9 +942,9 @@ def get_test_losses_and_other_metrics(model, test_loader):
                 _,
                 _,
                 detections,
-                class_detected,  # bool tensor of shape [batch_size x 36]
-                selected_regions,  # bool tensor of shape [batch_size x 36]
-                predicted_abnormal_regions,  # bool tensor of shape [batch_size x 36]
+                class_detected,  # bool tensor of shape [batch_size x 29]
+                selected_regions,  # bool tensor of shape [batch_size x 29]
+                predicted_abnormal_regions,  # bool tensor of shape [batch_size x 29]
             ) = output
 
             # update scores for object detector metrics

@@ -11,7 +11,7 @@ evaluate_model and its sub-functions evaluate among other things:
     - total val loss as well as the val losses of each individual module (i.e. model component)
     - object detector:
         - average IoU of region (ideally 1.0 for every region)
-        - average num detected regions per image (ideally 36.0)
+        - average num detected regions per image (ideally 29.0)
         - average num each region is detected in an image (ideally 1.0 for every region)
     - binary classifier region selection:
         - precision, recall, f1 for all regions, regions that have gt = normal (i.e. the region was considered normal by the radiologist),
@@ -110,9 +110,9 @@ def update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_re
     """
     Args:
         region_abnormal_scores (Dict)
-        predicted_abnormal_regions (Tensor[bool]): shape [batch_size x 36]
-        region_is_abnormal (Tensor[bool]): shape [batch_size x 36]
-        class_detected (Tensor[bool]): shape [batch_size x 36]
+        predicted_abnormal_regions (Tensor[bool]): shape [batch_size x 29]
+        region_is_abnormal (Tensor[bool]): shape [batch_size x 29]
+        class_detected (Tensor[bool]): shape [batch_size x 29]
 
     We only update/compute the scores for regions that were actually detected by the object detector (specified by class_detected).
     """
@@ -128,9 +128,9 @@ def update_region_selection_metrics(region_selection_scores, selected_regions, r
     """
     Args:
         region_selection_scores (Dict[str, Dict])
-        selected_regions (Tensor[bool]): shape [batch_size x 36]
-        region_has_sentence (Tensor[bool]): shape [batch_size x 36]
-        region_is_abnormal (Tensor[bool]): shape [batch_size x 36]
+        selected_regions (Tensor[bool]): shape [batch_size x 29]
+        region_has_sentence (Tensor[bool]): shape [batch_size x 29]
+        region_is_abnormal (Tensor[bool]): shape [batch_size x 29]
     """
     normal_selected_regions = selected_regions[~region_is_abnormal]
     normal_region_has_sentence = region_has_sentence[~region_is_abnormal]
@@ -157,10 +157,10 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
         Calculate the area of a box given the 4 corner values.
 
         Args:
-            box (Tensor[batch_size x 36 x 4])
+            box (Tensor[batch_size x 29 x 4])
 
         Returns:
-            area (Tensor[batch_size x 36])
+            area (Tensor[batch_size x 29])
         """
         x0 = box[..., 0]
         y0 = box[..., 1]
@@ -170,25 +170,25 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
         return (x1 - x0) * (y1 - y0)
 
     def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
-        # pred_boxes is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-        # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+        # pred_boxes is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+        # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
         # the 2nd to the 2nd class and so on
         pred_boxes = detections["top_region_boxes"]
 
         # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-        # gt_boxes is of shape [batch_size x 36 x 4]
+        # gt_boxes is of shape [batch_size x 29 x 4]
         gt_boxes = torch.stack([t["boxes"] for t in targets], dim=0)
 
-        # below tensors are of shape [batch_size x 36]
+        # below tensors are of shape [batch_size x 29]
         x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
         y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
         x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
         y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
 
-        # intersection_boxes is of shape [batch_size x 36 x 4]
+        # intersection_boxes is of shape [batch_size x 29 x 4]
         intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
 
-        # below tensors are of shape [batch_size x 36]
+        # below tensors are of shape [batch_size x 29]
         intersection_area = compute_box_area(intersection_boxes)
         pred_area = compute_box_area(pred_boxes)
         gt_area = compute_box_area(gt_boxes)
@@ -250,7 +250,7 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     """
     For the object detector, besides the obj_detector_val_loss, we also want to compute:
       - the average IoU for each region,
-      - average number of detected regions per image (ideally 36.0)
+      - average number of detected regions per image (ideally 29.0)
       - average number each region is detected in an image (ideally 1.0 for all regions)
 
     To compute these metrics, we allocate several tensors:
@@ -266,9 +266,9 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
     and these averages will be summed up to get the average number of detected regions in an image)
     """
     obj_detector_scores = {}
-    obj_detector_scores["sum_intersection_area_per_region"] = torch.zeros(36, device=device)
-    obj_detector_scores["sum_union_area_per_region"] = torch.zeros(36, device=device)
-    obj_detector_scores["sum_region_detected"] = torch.zeros(36, device=device)
+    obj_detector_scores["sum_intersection_area_per_region"] = torch.zeros(29, device=device)
+    obj_detector_scores["sum_union_area_per_region"] = torch.zeros(29, device=device)
+    obj_detector_scores["sum_region_detected"] = torch.zeros(29, device=device)
 
     """
     For the binary classifier for region selection, we want to compute the precision, recall and f1 for:
@@ -389,14 +389,14 @@ def get_val_losses_and_other_metrics(model, val_dl, log_file, epoch):
                     classifier_loss_region_abnormal,
                     language_model_loss,
                     detections,
-                    class_detected,  # bool tensor of shape [batch_size x 36]
-                    selected_regions,  # bool tensor of shape [batch_size x 36]
-                    predicted_abnormal_regions,  # bool tensor of shape [batch_size x 36]
+                    class_detected,  # bool tensor of shape [batch_size x 29]
+                    selected_regions,  # bool tensor of shape [batch_size x 29]
+                    predicted_abnormal_regions,  # bool tensor of shape [batch_size x 29]
                 ) = output
 
             # detections is a dict with keys "top_region_boxes" and "top_scores"
-            # "top_region_boxes" maps to a tensor of shape [batch_size x 36 x 4]
-            # "top_scores" maps to a tensor of shape [batch_size x 36]
+            # "top_region_boxes" maps to a tensor of shape [batch_size x 29 x 4]
+            # "top_scores" maps to a tensor of shape [batch_size x 29]
 
             # sum up all 4 losses from the object detector
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())

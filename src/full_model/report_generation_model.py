@@ -43,10 +43,10 @@ class ReportGenerationModel(nn.Module):
         self,
         images: torch.FloatTensor,  # images is of shape [batch_size x 1 x 512 x 512] (whole gray-scale images of size 512 x 512)
         image_targets: List[Dict],  # contains a dict for every image with keys "boxes" and "labels"
-        input_ids: torch.LongTensor,  # shape [(batch_size * 36) x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
-        attention_mask: torch.FloatTensor,  # shape [(batch_size * 36) x seq_len]
-        region_has_sentence: torch.BoolTensor,  # shape [batch_size x 36], ground truth boolean mask that indicates if a region has a sentence or not
-        region_is_abnormal: torch.BoolTensor,  # shape [batch_size x 36], ground truth boolean mask that indicates if a region has is abnormal or not
+        input_ids: torch.LongTensor,  # shape [(batch_size * 29) x seq_len], 1 sentence for every region for every image (sentence can be empty, i.e. "")
+        attention_mask: torch.FloatTensor,  # shape [(batch_size * 29) x seq_len]
+        region_has_sentence: torch.BoolTensor,  # shape [batch_size x 29], ground truth boolean mask that indicates if a region has a sentence or not
+        region_is_abnormal: torch.BoolTensor,  # shape [batch_size x 29], ground truth boolean mask that indicates if a region has is abnormal or not
         return_loss: bool = True,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -56,8 +56,8 @@ class ReportGenerationModel(nn.Module):
         Forward method is used for training and evaluation of model.
         Generate method is used for inference.
         """
-        # top_region_features of shape [batch_size x 36 x 1024] (i.e. 1 feature vector for every region for every image in batch)
-        # class_detected is a boolean tensor of shape [batch_size x 36]. Its value is True for a class if the object detector detected the class/region in the image
+        # top_region_features of shape [batch_size x 29 x 1024] (i.e. 1 feature vector for every region for every image in batch)
+        # class_detected is a boolean tensor of shape [batch_size x 29]. Its value is True for a class if the object detector detected the class/region in the image
 
         if self.training:
             obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
@@ -66,7 +66,7 @@ class ReportGenerationModel(nn.Module):
             del images
             del image_targets
 
-            # top_region_features is of shape [batch_size x 36 x 1024] after applying contrastive attention
+            # top_region_features is of shape [batch_size x 29 x 1024] after applying contrastive attention
             # the features now have contrastive information encoded in them
             top_region_features = self.contrastive_attention(top_region_features)
 
@@ -183,20 +183,20 @@ class ReportGenerationModel(nn.Module):
 
     def get_valid_decoder_input_for_training(
         self,
-        class_detected,  # shape [batch_size x 36]
-        region_has_sentence,  # shape [batch_size x 36]
-        input_ids,  # shape [(batch_size * 36) x seq_len]
-        attention_mask,  # shape [(batch_size * 36) x seq_len]
-        region_features,  # shape [batch_size x 36 x 1024]
+        class_detected,  # shape [batch_size x 29]
+        region_has_sentence,  # shape [batch_size x 29]
+        input_ids,  # shape [(batch_size * 29) x seq_len]
+        attention_mask,  # shape [(batch_size * 29) x seq_len]
+        region_features,  # shape [batch_size x 29 x 1024]
     ):
         """
         We want to train the decoder only on region features (and corresponding input_ids/attention_mask) whose corresponding sentences are non-empty and
         that were detected by the object detector.
         """
-        # valid is of shape [batch_size x 36]
+        # valid is of shape [batch_size x 29]
         valid = torch.logical_and(class_detected, region_has_sentence)
 
-        # reshape to [(batch_size * 36)], such that we can apply the mask to input_ids and attention_mask
+        # reshape to [(batch_size * 29)], such that we can apply the mask to input_ids and attention_mask
         valid_reshaped = valid.reshape(-1)
 
         valid_input_ids = input_ids[valid_reshaped]  # of shape [num_detected_regions_with_non_empty_gt_phrase_in_batch x seq_len]
@@ -207,15 +207,15 @@ class ReportGenerationModel(nn.Module):
 
     def get_valid_decoder_input_for_evaluation(
         self,
-        selected_regions,  # shape [batch_size x 36]
-        input_ids,  # shape [(batch_size * 36) x seq_len]
-        attention_mask  # shape [(batch_size * 36) x seq_len]
+        selected_regions,  # shape [batch_size x 29]
+        input_ids,  # shape [(batch_size * 29) x seq_len]
+        attention_mask  # shape [(batch_size * 29) x seq_len]
     ):
         """
         For evaluation, we want to evaluate the decoder on the top_region_features selected by the classifier to get a sentence generated.
         We also have to get the corresponding input_ids and attention_mask accordingly.
         """
-        # reshape to [(batch_size * 36)]
+        # reshape to [(batch_size * 29)]
         selected_regions = selected_regions.reshape(-1)
 
         valid_input_ids = input_ids[selected_regions]  # of shape [num_regions_selected_in_batch x seq_len]
@@ -235,15 +235,15 @@ class ReportGenerationModel(nn.Module):
         early_stopping: bool = False,
     ):
         """
-        In inference mode, we usually input 1 image (with 36 regions) at a time.
+        In inference mode, we usually input 1 image (with 29 regions) at a time.
 
-        The object detector first finds the region features for all 36 regions.
+        The object detector first finds the region features for all 29 regions.
 
-        The binary classifier takes the region_features of shape [batch_size=1, 36, 1024] and returns:
+        The binary classifier takes the region_features of shape [batch_size=1, 29, 1024] and returns:
             - selected_region_features: shape [num_regions_selected_in_batch, 1024],
             all region_features which were selected by the classifier to get a sentence generated (and which were also detected by the object detector)
 
-            - selected_regions: shape [batch_size x 36], boolean matrix that indicates which regions were selected to get a sentences generated
+            - selected_regions: shape [batch_size x 29], boolean matrix that indicates which regions were selected to get a sentences generated
             (these regions must also have been detected by the object detector).
             This is needed in case we want to find the corresponding reference sentences to compute scores for metrics such as BertScore or BLEU.
 
@@ -254,16 +254,16 @@ class ReportGenerationModel(nn.Module):
         We also return detections, such that we can map each generated sentence to a bounding box.
         We also return class_detected to know which regions were not detected by the object detector (can be plotted).
         """
-        # top_region_features of shape [batch_size x 36 x 1024]
+        # top_region_features of shape [batch_size x 29 x 1024]
         _, detections, top_region_features, class_detected = self.object_detector(images)
 
         del images
 
-        # top_region_features is of shape [batch_size x 36 x 1024] after applying contrastive_attention
+        # top_region_features is of shape [batch_size x 29 x 1024] after applying contrastive_attention
         top_region_features = self.contrastive_attention(top_region_features)
 
         # selected_region_features is of shape [num_regions_selected_in_batch x 1024]
-        # selected_regions is of shape [batch_size x 36] and is True for regions that should get a sentence
+        # selected_regions is of shape [batch_size x 29] and is True for regions that should get a sentence
         # (it has exactly num_regions_selected_in_batch True values)
         selected_regions, selected_region_features = self.binary_classifier_region_selection(
             top_region_features, class_detected, return_loss=False

@@ -33,11 +33,11 @@ class CustomCollator:
         image_targets = []
 
         # allocate an empty tensor region_has_sentence that will store all bbox_phrase_exists tensors of the batch
-        bbox_phrase_exists_size = batch[0]["bbox_phrase_exists"].size()  # should be torch.Size([36])
+        bbox_phrase_exists_size = batch[0]["bbox_phrase_exists"].size()  # should be torch.Size([29])
         region_has_sentence = torch.empty(size=(len(batch), *bbox_phrase_exists_size), dtype=torch.bool)
 
         # allocate an empty tensor region_is_abnormal that will store all bbox_is_abnormal tensors of the batch
-        bbox_is_abnormal_size = batch[0]["bbox_is_abnormal"].size()  # should be torch.Size([36])
+        bbox_is_abnormal_size = batch[0]["bbox_is_abnormal"].size()  # should be torch.Size([29])
         region_is_abnormal = torch.empty(size=(len(batch), *bbox_is_abnormal_size), dtype=torch.bool)
 
         if self.is_val and not self.pretrain_without_lm_model:
@@ -69,16 +69,16 @@ class CustomCollator:
         else:
             # batch is now a list that only contains dicts with keys input_ids and attention_mask (both of which are List[List[int]])
             # i.e. batch is of type List[Dict[str, List[List[int]]]]
-            # each dict specifies the input_ids and attention_mask of a single image, thus the outer list always has 36 elements (i.e. inner lists)
-            # for sentences describing 36 regions
+            # each dict specifies the input_ids and attention_mask of a single image, thus the outer list always has 29 elements (i.e. inner lists)
+            # for sentences describing 29 regions
             # we want to pad all input_ids and attention_mask to the max sequence length in the batch
             # we can use the pad method of the tokenizer for this, however it requires the input to be of type Dict[str, List[List[int]]
             # thus we first transform the batch into a dict with keys "input_ids" and "attention_mask", both of which are List[List[int]]
-            # that hold the input_ids and attention_mask of all the regions in the batch (i.e. the outer list will have (batch_size * 36) elements)
+            # that hold the input_ids and attention_mask of all the regions in the batch (i.e. the outer list will have (batch_size * 29) elements)
             dict_with_ii_and_am = self.transform_to_dict_with_inputs_ids_and_attention_masks(batch)
 
             # we can now apply the pad method, which will pad the input_ids and attention_mask to the longest sequence in the batch
-            # the keys "input_ids" and "attention_mask" in dict_with_ii_and_am will each map to a tensor of shape [(batch_size * 36), (longest) seq_len (in batch)]
+            # the keys "input_ids" and "attention_mask" in dict_with_ii_and_am will each map to a tensor of shape [(batch_size * 29), (longest) seq_len (in batch)]
             dict_with_ii_and_am = self.tokenizer.pad(dict_with_ii_and_am, padding="longest", return_tensors="pt")
 
             # treat dict_with_ii_and_am as the batch variable now (since it is a dict, and we can use it to store all the other keys as well)

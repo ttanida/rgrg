@@ -121,7 +121,7 @@ def write_sentences_and_reports_to_file(
 def get_plot_title(region_set, region_indices, region_colors, class_detected_img) -> str:
     """
     Get a plot title like in the below example.
-    1 region_set always contains 6 regions.
+    1 region_set always contains 6 regions (except for region_set_5, which has 5 regions).
     The characters in the brackets represent the colors of the corresponding bboxes (e.g. b = blue),
     "nd" stands for "not detected" in case the region was not detected by the object detector.
 
@@ -148,10 +148,10 @@ def get_generated_sentence_for_region(
     """
     Args:
         generated_sentences_for_selected_regions (List[str]): holds the generated sentences for all regions that were selected in the batch, i.e. of length "num_regions_selected_in_batch"
-        selected_regions (Tensor[bool]): of shape [batch_size x 36], specifies for each region if it was selected to get a sentences generated (True) or not by the binary classifier for region selection.
+        selected_regions (Tensor[bool]): of shape [batch_size x 29], specifies for each region if it was selected to get a sentences generated (True) or not by the binary classifier for region selection.
         Ergo has exactly "num_regions_selected_in_batch" True values.
         num_img (int): specifies the image we are currently processing in the batch, its value is in the range [0, batch_size-1]
-        region_index (int): specifies the region we are currently processing of a single image, its value is in the range [0, 35]
+        region_index (int): specifies the region we are currently processing of a single image, its value is in the range [0, 28]
 
     Returns:
         str: generated sentence for region specified by num_img and region_index
@@ -166,7 +166,7 @@ def get_generated_sentence_for_region(
     num_img = 0
     region_index = 2
 
-    In this toy example, the batch_size = 2 and there are only 3 regions in total for simplicity (instead of the 36).
+    In this toy example, the batch_size = 2 and there are only 3 regions in total for simplicity (instead of the 29).
     The generated_sentences_for_selected_regions is of len 2, meaning num_regions_selected_in_batch = 2.
     Therefore, the selected_regions boolean tensor also has exactly 2 True values.
 
@@ -308,61 +308,24 @@ def plot_detections_and_sentences_to_tensorboard(
     reference_sentences,
     generated_sentences_for_selected_regions,
 ):
-    # pred_boxes_batch is of shape [batch_size x 36 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
-    # they are sorted in the 2nd dimension, meaning the 1st of the 36 boxes corresponds to the 1st region/class,
+    # pred_boxes_batch is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+    # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
     # the 2nd to the 2nd class and so on
     pred_boxes_batch = detections["top_region_boxes"]
 
     # image_targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image
-    # gt_boxes is of shape [batch_size x 36 x 4]
+    # gt_boxes is of shape [batch_size x 29 x 4]
     gt_boxes_batch = torch.stack([t["boxes"] for t in image_targets], dim=0)
 
-    # plot 6 regions at a time, as to not overload the image with boxes
+    # plot 6 regions at a time, as to not overload the image with boxes (except for region_set_5, which has 5 regions)
     # the region_sets were chosen as to minimize overlap between the contained regions (i.e. better visibility)
-    region_set_1 = [
-        "right lung",
-        "right costophrenic angle",
-        "left lung",
-        "left costophrenic angle",
-        "cardiac silhouette",
-        "spine",
-    ]
-    region_set_2 = [
-        "right upper lung zone",
-        "right mid lung zone",
-        "right lower lung zone",
-        "left upper lung zone",
-        "left mid lung zone",
-        "left lower lung zone",
-    ]
-    region_set_3 = [
-        "right hilar structures",
-        "right apical zone",
-        "right cardiophrenic angle",
-        "left hilar structures",
-        "left apical zone",
-        "left cardiophrenic angle",
-    ]
-    region_set_4 = [
-        "right hemidiaphragm",
-        "left hemidiaphragm",
-        "trachea",
-        "right clavicle",
-        "left clavicle",
-        "aortic arch",
-    ]
-    region_set_5 = ["mediastinum", "left upper abdomen", "right upper abdomen", "svc", "cavoatrial junction", "carina"]
-    region_set_6 = [
-        "right atrium",
-        "descending aorta",
-        "left cardiac silhouette",
-        "upper mediastinum",
-        "right cardiac silhouette",
-        "abdomen",
-    ]
+    region_set_1 = ["right lung", "right costophrenic angle", "left lung", "left costophrenic angle", "cardiac silhouette", "spine"]
+    region_set_2 = ["right upper lung zone", "right mid lung zone", "right lower lung zone", "left upper lung zone", "left mid lung zone", "left lower lung zone"]
+    region_set_3 = ["right hilar structures", "right apical zone", "left hilar structures", "left apical zone", "right hemidiaphragm", "left hemidiaphragm"]
+    region_set_4 = ["trachea", "right clavicle", "left clavicle", "aortic arch", "abdomen", "right atrium"]
+    region_set_5 = ["mediastinum", "svc", "cavoatrial junction", "carina", "upper mediastinum"]
 
-    regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5, region_set_6]
-    region_colors = ["b", "g", "r", "c", "m", "y"]
+    regions_sets = [region_set_1, region_set_2, region_set_3, region_set_4, region_set_5]
 
     # put channel dimension (1st dim) last (0-th dim is batch-dim)
     images = images.numpy().transpose(0, 2, 3, 1)
@@ -382,6 +345,10 @@ def plot_detections_and_sentences_to_tensorboard(
             plt.axis("on")
 
             region_indices = [ANATOMICAL_REGIONS[region] for region in region_set]
+            region_colors = ["b", "g", "r", "c", "m", "y"]
+
+            if num_region_set == 4:
+                region_colors.pop()
 
             region_set_text = ""
 
@@ -509,8 +476,8 @@ def get_generated_and_reference_reports(
     """
     Args:
         generated_sentences_for_selected_regions (List[str]): of length "num_regions_selected_in_batch"
-        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 36 (the inner list holds all reference phrases of a single image)
-        selected_regions ([batch_size x 36]): boolean array that has exactly "num_regions_selected_in_batch" True values
+        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 29 (the inner list holds all reference phrases of a single image)
+        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
         sentence_tokenizer: used in get_ref_report_single_image to
 
     Return:
@@ -628,7 +595,7 @@ def get_generated_and_reference_reports(
     def get_reference_reports():
         reference_reports = []
 
-        # ref_sents_single_image is a List[str] containing 36 reference sentences for 36 regions of a single image
+        # ref_sents_single_image is a List[str] containing 29 reference sentences for 29 regions of a single image
         for ref_sents_single_image in reference_sentences:
             ref_report_single_image = get_ref_report_single_image(ref_sents_single_image)
             reference_reports.append(ref_report_single_image)
@@ -644,10 +611,10 @@ def get_generated_and_reference_reports(
 def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions):
     """
     Args:
-        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 36 (the inner list holds all reference phrases of a single image)
-        selected_regions ([batch_size x 36]): boolean array that has exactly "num_regions_selected_in_batch" True values
+        reference_sentences (List[List[str]]): outer list has len batch_size, inner list has len 29 (the inner list holds all reference phrases of a single image)
+        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
     """
-    # array of shape [batch_size x 36]
+    # array of shape [batch_size x 29]
     reference_sentences = np.asarray(reference_sentences)
 
     ref_sentences_for_selected_regions = reference_sentences[selected_regions]
@@ -700,7 +667,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
             images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
             image_targets = batch["image_targets"]
-            region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 36]
+            region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
 
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             reference_sentences = batch["reference_sentences"]
