@@ -10,14 +10,14 @@ The specific information of each row are:
     - study_id: id of the study of that patient (since a patient can have several studies done to document the progression of a disease etc.)
     - image_id: id of the single image
     - mimic_image_file_path: file path to the jpg of the single image on the workstation
-    - bbox_coordinates (List[List[int]]): a nested list with the outer list of length 36 and the innter list of length 4. Contains 4 bbox coordinates
-    of all 36 regions of a single image. Images that did not have bbox coordinates specified for all 36 regions were ignored
-    - bbox_labels (List[int]): a list of length 36 that has region/class labels corresponding to the bbox_coordinates. For every image, the bbox_labels list
-    is actually the same and is of the form [1, 2, 3, ..., 35, 36]. It starts at 1 since 0 is considered the background class for object detectors.
-    - bbox_phrases (List[str]): a list of length 36 that has the reference phrases for every bbox of a single image. Note that a lot of these reference phrases
-    will be "" (i.e. empty), since a radiology report describing an image will usually not contain phrases for all 36 regions.
-    - bbox_phrase_exists (List[bool]): a list of length 36 that indicates if a bbox has a reference phrase (True) or not
-    - bbox_is_abnormal (List[bool]): a list of length 36 that indicates if a bbox was described as abnormal (True) by its reference phrase or not. bboxes that do
+    - bbox_coordinates (List[List[int]]): a nested list with the outer list of length 29 and the inner list of length 4. Contains 4 bbox coordinates
+    of all 29 regions of a single image. Images that did not have bbox coordinates specified for all 29 regions were ignored
+    - bbox_labels (List[int]): a list of length 29 that has region/class labels corresponding to the bbox_coordinates. For every image, the bbox_labels list
+    is actually the same and is of the form [1, 2, 3, ..., 28, 29]. It starts at 1 since 0 is considered the background class for object detectors.
+    - bbox_phrases (List[str]): a list of length 29 that has the reference phrases for every bbox of a single image. Note that a lot of these reference phrases
+    will be "" (i.e. empty), since a radiology report describing an image will usually not contain phrases for all 29 regions.
+    - bbox_phrase_exists (List[bool]): a list of length 29 that indicates if a bbox has a reference phrase (True) or not
+    - bbox_is_abnormal (List[bool]): a list of length 29 that indicates if a bbox was described as abnormal (True) by its reference phrase or not. bboxes that do
     not have a reference phrase are considered normal by default.
 """
 import csv

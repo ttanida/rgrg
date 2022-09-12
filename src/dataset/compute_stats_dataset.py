@@ -257,7 +257,7 @@ def get_images_to_avoid():
 
 def get_train_val_test_csv_files():
     path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
-    return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
+    return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["valid", "test", "train"]}
 
 
 def main():
