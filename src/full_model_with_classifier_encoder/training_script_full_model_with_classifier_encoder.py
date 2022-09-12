@@ -102,7 +102,7 @@ def evaluate_model_on_metrics(model, val_dl, tokenizer, generated_sentences_fold
         "reference_sentences": []
     }
 
-    # since generating sentences takes a long time (generating sentences for 36 regions takes around 8 seconds),
+    # since generating sentences takes a long time (generating sentences for 29 regions takes around 8 seconds),
     # we only generate NUM_SENTENCES_TO_GENERATE sentences
     num_batches_to_process = NUM_SENTENCES_TO_GENERATE // BATCH_SIZE
 
