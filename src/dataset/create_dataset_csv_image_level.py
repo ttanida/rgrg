@@ -32,7 +32,7 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_full_dataset = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
+path_to_full_dataset = "/u/home/tanida/datasets/dataset-full-model-complete"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -213,7 +213,7 @@ def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[tup
     for attribute in image_scene_graph["attributes"]:
         bbox_name = attribute["bbox_name"]
 
-        # ignore bbox_names such as "left chest wall" or "right breast" that don't appear in the 36 anatomical regions that have bbox coordiantes
+        # ignore bbox_names such as "left chest wall" or "right breast" that are not part of the 29 anatomical regions
         if bbox_name not in ANATOMICAL_REGIONS:
             continue
 
@@ -309,12 +309,16 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             bbox_phrase_exist_vars = []
             bbox_is_abnormal_vars = []
 
-            # counter to make sure that all 36 regions are processed in for loop
+            # counter to make sure that all 29 regions are processed in for loop
             num_regions = 0
 
-            # iterate over all 36 anatomical regions of the given image (note: there are not always 36 regions present for all images)
+            # iterate over all 29 anatomical regions of the given image
             for anatomical_region in image_scene_graph["objects"]:
                 bbox_name = anatomical_region["bbox_name"]
+
+                # ignore bbox_names such as "left chest wall" or "right breast" that are not part of the 29 anatomical regions
+                if bbox_name not in ANATOMICAL_REGIONS:
+                    continue
 
                 # get the bbox coordinates for the region
                 x1 = anatomical_region["original_x1"]
@@ -322,10 +326,10 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 x2 = anatomical_region["original_x2"]
                 y2 = anatomical_region["original_y2"]
 
-                # check if any bbox coordinates are faulty (of all 36 regions)
+                # check if any bbox coordinates are faulty (of all 29 regions)
                 # if there is at least 1 region with faulty bbox coordinates, then break out of loop
-                # this will ensure that num_regions counter will not reach 36, and thus:
-                # -> only images with correct bbox coordinates for all 36 regions will be added to dataset
+                # this will ensure that num_regions counter will not reach 29, and thus:
+                # -> only images with correct bbox coordinates for all 29 regions will be added to dataset
                 if coordinates_faulty(height, width, x1, y1, x2, y2):
                     break
 
@@ -355,8 +359,8 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
                 num_regions += 1
 
-            if num_regions == 36:
-                # only add image information to dataset if information of all 36 regions is included
+            if num_regions == 29:
+                # only add image information to dataset if information of all 29 regions is included
                 new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
                 new_rows.append(new_image_row)
                 index += 1
@@ -380,7 +384,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
 
-def create_new_dataframes(csv_files_dict, image_ids_to_avoid):
+def create_new_csv_files(csv_files_dict, image_ids_to_avoid):
     if os.path.exists(path_to_full_dataset):
         log.error(f"Full dataset folder already exists at {path_to_full_dataset}.")
         log.error("Delete dataset folder before running script to create new folder!")
@@ -423,7 +427,7 @@ def main():
     # from model training and validation
     image_ids_to_avoid = get_images_to_avoid()
 
-    create_new_dataframes(csv_files_dict, image_ids_to_avoid)
+    create_new_csv_files(csv_files_dict, image_ids_to_avoid)
 
 
 if __name__ == "__main__":
