@@ -2,7 +2,6 @@ from typing import Optional, List, Dict, Tuple
 
 import torch
 from torch import Tensor
-import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models.detection.roi_heads import RoIHeads, fastrcnn_loss
 from torchvision.ops import boxes as box_ops
@@ -55,9 +54,6 @@ class CustomRoIHeads(RoIHeads):
         # return_feature_vectors == True if we train/evaluate the object detector as part of the full model
         self.return_feature_vectors = return_feature_vectors
 
-        # AdaptiveAvgPool2d to get box features after roi pooling from [num_proposals, 1024, 8, 8] to [num_proposals, 1024, 1, 1]
-        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=1)
-
     def get_top_region_features_detections_class_detected(
         self,
         box_features,
@@ -88,7 +84,7 @@ class CustomRoIHeads(RoIHeads):
         (2) object detector is used with full model + train mode:
             -> output dict contains the keys "top_region_features" and "class_detected":
 
-            - "top_region_features" maps to a tensor of shape [batch_size, 29, 1024] of the region features with the highest score (i.e. top-1 score) per class
+            - "top_region_features" maps to a tensor of shape [batch_size, 29, (2048 * 8 * 8)] of the region features with the highest score (i.e. top-1 score) per class
             - "class_detected" same as above. Needed to mask out the region features for classes that were not detected later on in the full model
 
         (3) object detector is used with full model + eval mode:
@@ -127,7 +123,7 @@ class CustomRoIHeads(RoIHeads):
 
         output = {}
         output["class_detected"] = []  # list collects the bool arrays of shape [29] that specify if a class was detected (True) for each image
-        output["top_region_features"] = []  # list collects the tensors of shape [29 x 1024] of the top region features for each image
+        output["top_region_features"] = []  # list collects the tensors of shape [29 x (2048 * 8 * 8)] of the top region features for each image
 
         # list top_region_boxes collects the tensors of shape [29 x 4] of the top region boxes for each image
         # list top_scores collects the tensors of shape [29] of the corresponding top scores for each image
@@ -197,7 +193,7 @@ class CustomRoIHeads(RoIHeads):
         output["class_detected"] = torch.stack(output["class_detected"], dim=0)  # of shape [batch_size x 29]
 
         if self.return_feature_vectors:
-            output["top_region_features"] = torch.stack(output["top_region_features"], dim=0)  # of shape [batch_size x 29 x 1024]
+            output["top_region_features"] = torch.stack(output["top_region_features"], dim=0)  # of shape [batch_size x 29 x (2048 * 8 * 8)]
 
         if not self.training:
             output["detections"]["top_region_boxes"] = torch.stack(output["detections"]["top_region_boxes"], dim=0)  # of shape [batch_size x 29 x 4]
@@ -226,12 +222,12 @@ class CustomRoIHeads(RoIHeads):
             labels = None
             regression_targets = None
 
-        # box_features_after_roi_pool has shape [overall_num_proposals_for_all_images x 2048 x 8 x 8]
-        box_features_after_roi_pool = self.box_roi_pool(features, proposals, image_shapes)
+        # box_roi_pool_feature_maps has shape [overall_num_proposals_for_all_images x 2048 x 8 x 8]
+        box_roi_pool_feature_maps = self.box_roi_pool(features, proposals, image_shapes)
 
-        # box_features has shape [overall_num_proposals_for_all_images x 1024]
-        box_features = self.box_head(box_features_after_roi_pool)
-        class_logits, box_regression = self.box_predictor(box_features)
+        # box_feature_vectors has shape [overall_num_proposals_for_all_images x 1024]
+        box_feature_vectors = self.box_head(box_roi_pool_feature_maps)
+        class_logits, box_regression = self.box_predictor(box_feature_vectors)
 
         detector_losses = {}
 
@@ -247,13 +243,10 @@ class CustomRoIHeads(RoIHeads):
         # if we evaluate the object detector (in isolation or as part of the full model), we need the "detections"
         # if we do either of them, we always need "class_detected" (see doc_string of method for details)
         if self.return_feature_vectors or not self.training:
-            # take the box features after the roi pool and transform from [num_proposals, 2048, 8, 8] to [num_proposals, 2048, 1, 1]
-            box_features_after_roi_pool = self.avg_pool(box_features_after_roi_pool)
+            # box_features of shape [overall_num_proposals_for_all_images x (2048 * 8 * 8)]
+            box_features = box_roi_pool_feature_maps.flatten(start_dim=1)
 
-            # remove all dims of size 1
-            box_features_after_roi_pool = torch.squeeze(box_features_after_roi_pool)
-
-            output = self.get_top_region_features_detections_class_detected(box_features_after_roi_pool, box_regression, class_logits, proposals, image_shapes)
+            output = self.get_top_region_features_detections_class_detected(box_features, box_regression, class_logits, proposals, image_shapes)
 
             roi_heads_output["class_detected"] = output["class_detected"]
 

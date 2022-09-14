@@ -228,7 +228,7 @@ class LanguageModel(nn.Module):
 
         # small neural network to transform embeddings coming from the image feature space into embeddings in the text feature space
         self.feature_space_transformation_nn = nn.Sequential(
-            nn.Linear(in_features=1024, out_features=1024),
+            nn.Linear(in_features=(2048 * 8 * 8), out_features=1024),
             nn.ReLU(),
             nn.Linear(in_features=1024, out_features=1024)
         )
@@ -258,7 +258,7 @@ class LanguageModel(nn.Module):
     def forward(self,
                 input_ids: torch.LongTensor,  # shape [batch_size x seq_len]
                 attention_mask: torch.FloatTensor,  # shape [batch_size x seq_len]
-                image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim] (with image_hidden_dim = 2048)
+                image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim] (with image_hidden_dim = 2048 * 8 * 8)
                 return_loss: bool = False,
                 past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
                 position_ids: Optional[torch.LongTensor] = None,
@@ -604,7 +604,6 @@ class LanguageModel(nn.Module):
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
             max_length=max_length,
-            # beam_indices=None,
         )
 
         return sequence_outputs["sequences"]
@@ -665,7 +664,7 @@ def print_model_summary(batch_size, seq_len, verbose):
     inputs = {}
     inputs["input_ids"] = torch.randint(low=0, high=50257, size=(batch_size, seq_len))
     inputs["attention_mask"] = torch.randint(low=0, high=2, size=(batch_size, seq_len))
-    inputs["image_hidden_states"] = torch.rand(batch_size, 1024)
+    inputs["image_hidden_states"] = torch.rand(batch_size, (2048 * 8 * 8))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

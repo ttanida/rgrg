@@ -9,9 +9,9 @@ class BinaryClassifierRegionSelection(nn.Module):
         super().__init__()
 
         self.classifier = nn.Sequential(
-            nn.Linear(in_features=1024, out_features=512),
+            nn.Linear(in_features=(2048 * 8 * 8), out_features=1024),
             nn.ReLU(),
-            nn.Linear(in_features=512, out_features=128),
+            nn.Linear(in_features=1024, out_features=128),
             nn.ReLU(),
             nn.Linear(in_features=128, out_features=1)
         )
@@ -23,7 +23,7 @@ class BinaryClassifierRegionSelection(nn.Module):
 
     def forward(
         self,
-        top_region_features,  # tensor of shape [batch_size x 29 x 1024]
+        top_region_features,  # tensor of shape [batch_size x 29 x (2048 * 8 * 8)]
         class_detected,  # boolean tensor of shape [batch_size x 29], indicates if the object detector has detected the region/class or not
         return_loss,  # boolean value that is True if we need the loss (necessary for training and evaluation)
         region_has_sentence=None  # boolean tensor of shape [batch_size x 29], indicates if a region has a sentence (True) or not (False) as the ground truth
@@ -57,7 +57,7 @@ class BinaryClassifierRegionSelection(nn.Module):
             selected_regions[~class_detected] = False
 
             # selected_region_features are inputted into the decoder during evaluation and inference to generate the sentences
-            # selected_region_features is of shape [num_regions_selected_in_batch, 1024]
+            # selected_region_features is of shape [num_regions_selected_in_batch, (2048 * 8 * 8)]
             selected_region_features = top_region_features[selected_regions]
 
             # if in eval mode

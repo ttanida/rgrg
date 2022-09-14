@@ -201,9 +201,9 @@ class ObjectDetector(nn.Module):
             (2) If object detector is trained/evaluated as part of the full model, then self.return_feature_vectors should be True and it returns
                 (I) in train mode:
                     - losses
-                    - top_region_features (FloatTensor(batch_size, 29, 1024)):
-                        - the features with the highest scores for each region and for each image in the batch
-                        - these are needed to train the binary classifier ("Filter") and language model
+                    - top_region_features (FloatTensor(batch_size, 29, (2048 * 8 * 8))):
+                        - the features (i.e. flattened feature maps) with the highest scores for each region and for each image in the batch
+                        - these are needed to train the binary classifiers and language model
                     - class_detected (BoolTensor(batch_size, 29)):
                         - boolean is True if a region/class had the highest score (i.e. was top-1) for at least 1 RoI box
                         - if the value is False for any class, then this means the object detector effectively did not detect the region,
@@ -260,39 +260,3 @@ class ObjectDetector(nn.Module):
                 # we additionally need the detections to evaluate the object detector
                 # losses with be an empty dict if targets == None (i.e. during inference)
                 return losses, detections, top_region_features, class_detected
-
-
-# model = ObjectDetector()
-
-# device = torch.device("cpu")
-# model = ObjectDetector(return_feature_vectors=True)
-# model.eval()
-# model.to(device)
-
-# images = torch.rand(3, 1, 512, 512)
-# targets = [
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-#     {
-#         "boxes": torch.FloatTensor([[3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8], [3, 5, 7, 8]]),
-#         "labels": torch.tensor([2, 4, 3, 6], dtype=torch.int64),
-#     },
-# ]
-
-# summary(model, input_data=(images, targets))
-# summary(model)
-
-# losses, detections, top_region_features, class_detected = model(images)
-# print(losses)
-# print(detections)
-# print()
-# print(detections["top_region_boxes"].shape)
-# print(detections["top_scores"].shape)
-# print(top_region_features.shape)
-# print(class_detected.shape)
