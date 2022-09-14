@@ -39,7 +39,7 @@ torch.cuda.manual_seed_all(seed_val)
 # define configurations for training run
 RUN = 7
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train on full dataset with 29 regions. Reduced data augmentation."""
+RUN_COMMENT = """Train on full dataset with 29 regions. Reduced data augmentation. Use XRV model as backbone again."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.005  # 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.1  # 0.4

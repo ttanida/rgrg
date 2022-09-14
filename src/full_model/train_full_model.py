@@ -26,7 +26,6 @@ from src.full_model.run_configurations import (
     RUN_COMMENT,
     PRETRAIN_WITHOUT_LM_MODEL,
     IMAGE_INPUT_SIZE,
-    NORMALITY_POOL_SIZE,
     AGGREGATE_ATTENTION_NUM,
     PERCENTAGE_OF_TRAIN_SET_TO_USE,
     PERCENTAGE_OF_VAL_SET_TO_USE,
@@ -67,69 +66,10 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 
-def update_normality_pool(model, normality_pool_dl):
-    """
-    Creates a normality pool tensor of shape [29 x NORMALITY_POOL_SIZE x 2048].
-
-    This normality pool will be saved and used in the constrastive attention module to extract abnormal image features from input images
-    during training, evaluation and inference.
-
-    To create the normality pool, batches of a normality pool dataloader are iterated, until the normality pool is filled with exactly NORMALITY_POOL_SIZE number of
-    normal region features for all 29 regions.
-
-    The data of the normality_pool_dl is the same as the train_dl, however shuffling is off, as to ensure reproducibility.
-    """
-    with torch.no_grad():
-        # list of 29 tensors, each of which will have the shape [NORMALITY_POOL_SIZE x 2048] in the end (i.e. normality pool for each region)
-        region_normality_pools = [torch.zeros(size=(0, 2048), device=device) for _ in range(29)]
-
-        for batch in normality_pool_dl:
-            images = batch["images"]
-            image_targets = batch["image_targets"]
-            region_is_abnormal = batch["region_is_abnormal"]
-
-            images = images.to(device, non_blocking=True)
-            image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
-            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)  # of shape [batch_size x 29]
-
-            # top_region_features of shape [batch_size x 29 x 2048]
-            # class_detected of shape [batch_size x 29]
-            _, top_region_features, class_detected = model.object_detector(images, image_targets)
-
-            top_region_features = top_region_features.transpose(0, 1)  # of shape [29 x batch_size x 2048]
-            normal_and_detected = torch.logical_and(~region_is_abnormal, class_detected).transpose(0, 1)  # of shape [29 x batch_size]
-
-            all_region_normality_pools_are_full = True
-
-            # region_features of shape [batch_size x 2048]
-            # normal_detected of shape [batch_size]
-            for region_num, (region_features, normal_detected) in enumerate(zip(top_region_features, normal_and_detected)):
-                region_norm_pool = region_normality_pools[region_num]
-
-                if region_norm_pool.size(0) < NORMALITY_POOL_SIZE:
-                    all_region_normality_pools_are_full = False
-                    normal_detected_region_features = region_features[normal_detected]
-
-                    # only concat new region_features (to a region's normality pool) that are normal and were detected by the object_detector
-                    region_norm_pool = torch.cat([region_norm_pool, normal_detected_region_features], dim=0)
-                    region_normality_pools[region_num] = region_norm_pool
-
-            if all_region_normality_pools_are_full:
-                break
-
-        # trim each region_norm_pool to have size NORMALITY_POOL_SIZE
-        region_normality_pools = [region_norm_pool[:NORMALITY_POOL_SIZE] for region_norm_pool in region_normality_pools]
-
-        normality_pool = torch.stack(region_normality_pools, dim=0)  # of shape [29 x NORMALITY_POOL_SIZE x 2048]
-
-        model.contrastive_attention.update_normality_pool(normality_pool)
-
-
 def train_model(
     model,
     train_dl,
     val_dl,
-    normality_pool_dl,
     optimizer,
     scaler,
     lr_scheduler,
@@ -189,10 +129,6 @@ def train_model(
 
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
-
-    log.info("Initializing normality pool...")
-    update_normality_pool(model, normality_pool_dl)
-    log.info("Initializing normality pool finished!")
 
     bool_evaluate_language_model = True
 
@@ -322,7 +258,6 @@ def train_model(
             run_params["overall_steps_taken"] += 1
 
             # evaluate every k batches and at the end of each epoch
-            # also update normality pool
             if run_params["steps_taken"] >= EVALUATE_EVERY_K_BATCHES or (num_batch + 1) == len(train_dl):
 
                 log.info(f"Evaluating at step {run_params['overall_steps_taken']}!")
@@ -348,10 +283,6 @@ def train_model(
 
                 # set the model back to training
                 model.train()
-
-                log.info("Updating normality pool...")
-                update_normality_pool(model, normality_pool_dl)
-                log.info("Updating normality pool finished!")
 
                 # reset values for the next evaluation
                 for loss_type in train_losses_dict:
@@ -395,17 +326,8 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         num_workers=NUM_WORKERS,
         pin_memory=True,
     )
-    # normality_pool_loader uses train_dataset, but shuffle=False
-    normality_pool_loader = DataLoader(
-        train_dataset,
-        collate_fn=custom_collate_train,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        num_workers=NUM_WORKERS,
-        pin_memory=True,
-    )
 
-    return train_loader, val_loader, normality_pool_loader
+    return train_loader, val_loader
 
 
 def get_transforms(dataset: str):
@@ -583,7 +505,6 @@ def create_run_folder():
         "COMMENT": RUN_COMMENT,
         "PRETRAIN_WITHOUT_LM_MODEL": PRETRAIN_WITHOUT_LM_MODEL,
         "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
-        "NORMALITY_POOL_SIZE": NORMALITY_POOL_SIZE,
         "AGGREGATE_ATTENTION_NUM": AGGREGATE_ATTENTION_NUM,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
@@ -635,7 +556,7 @@ def main():
     train_dataset_complete = CustomDataset("train", tokenized_train_dataset, train_transforms, log)
     val_dataset_complete = CustomDataset("val", tokenized_val_dataset, val_transforms, log)
 
-    train_loader, val_loader, normality_pool_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
+    train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     resume_training = False
     checkpoint = torch.load(
@@ -673,7 +594,6 @@ def main():
         model=model,
         train_dl=train_loader,
         val_dl=val_loader,
-        normality_pool_dl=normality_pool_loader,
         optimizer=opt,
         scaler=scaler,
         lr_scheduler=lr_scheduler,
