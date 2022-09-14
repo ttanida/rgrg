@@ -423,15 +423,11 @@ def get_transforms(dataset: str):
             # LongestMaxSize: resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio
             # INTER_AREA works best for shrinking images
             A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
-            A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1),
-            A.GaussianBlur(blur_limit=(1, 1)),
-            A.ColorJitter(hue=0.0, saturation=0.0),  # <- reduce
-            A.Sharpen(alpha=(0.1, 0.2), lightness=0.0),  # <- reduce
+            A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.2),
             # randomly (by default prob=0.5) translate and rotate image
             # mode and cval specify that black pixels are used to fill in newly created pixels
             # translate between -2% and 2% of the image height/width, rotate between -2 and 2 degrees
             A.Affine(mode=cv2.BORDER_CONSTANT, cval=0, translate_percent=(-0.02, 0.02), rotate=(-2, 2)),
-            A.GaussNoise(),  # <- reduce
             # PadIfNeeded: pads both sides of the shorter edge with 0's (black pixels)
             A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
             A.Normalize(mean=mean, std=std),
