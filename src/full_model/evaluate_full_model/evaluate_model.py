@@ -499,7 +499,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
 
     total_val_loss = val_losses_dict["total_loss"]
 
-    # decrease lr by 1e-1 if total_val_loss has not decreased after certain number of evaluations
+    # decrease lr if total_val_loss has not decreased after certain number of evaluations
     lr_scheduler.step(total_val_loss)
 
     # save model every time the val loss has decreased
@@ -507,6 +507,22 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         run_params["lowest_val_loss"] = total_val_loss
         run_params["best_epoch"] = epoch
 
+        save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
+
+        checkpoint = {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "scaler": scaler.state_dict(),
+            "current_epoch": epoch,
+            "overall_steps_taken": overall_steps_taken,
+            "lowest_val_loss": total_val_loss,
+        }
+
+        torch.save(checkpoint, save_path)
+
+    # save model every time report level BLEU-4 is better than a certain threshold
+    bleu_4_report_level = language_model_scores["report"]["bleu_4"]
+    if bleu_4_report_level > 0.137:
         save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
 
         checkpoint = {
