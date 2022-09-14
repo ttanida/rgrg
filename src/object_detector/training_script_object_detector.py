@@ -37,21 +37,22 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 # define configurations for training run
-RUN = 6
+RUN = 7
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Backbone changed to ResNet-50 pre-trained on ImageNet. Train on full dataset."""
+RUN_COMMENT = """Train on full dataset with 29 regions. Reduced data augmentation."""
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
-BATCH_SIZE = 16
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.005  # 1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.1  # 0.4
+BATCH_SIZE = 32
 EFFECTIVE_BATCH_SIZE = 64
 NUM_WORKERS = 8
 EPOCHS = 20
 LR = 1e-3
 EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
-PATIENCE = 80  # number of evaluations to wait before early stopping
 PATIENCE_LR_SCHEDULER = 7  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 THRESHOLD_LR_SCHEDULER = 1e-3
+FACTOR_LR_SCHEDULER = 0.5
+COOLDOWN_LR_SCHEDULER = 5
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
@@ -259,7 +260,8 @@ def get_val_loss_and_other_metrics(model, val_dl, writer, overall_steps_taken):
             # "top_scores" maps to a tensor of shape [batch_size x 29]
 
             # class_detected is a tensor of shape [batch_size x 29]
-            loss_dict, detections, class_detected = model(images, targets)
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                loss_dict, detections, class_detected = model(images, targets)
 
             # sum up all 4 losses
             loss = sum(loss for loss in loss_dict.values())
@@ -299,9 +301,9 @@ def train_model(
     train_dl,
     val_dl,
     optimizer,
+    scaler,
     lr_scheduler,
     epochs,
-    patience,
     weights_folder_path,
     writer
 ):
@@ -340,16 +342,13 @@ def train_model(
     # the best_model_state is the one where the val loss is the lowest overall
     best_model_state = None
 
-    # parameter to determine early stopping
-    num_evaluations_without_decrease_val_loss = 0
-
     overall_steps_taken = 0  # for logging to tensorboard
 
     # for gradient accumulation
     ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
 
     for epoch in range(epochs):
-        log.info(f"\nTraining epoch {epoch}!\n")
+        log.info(f"Training epoch {epoch}!")
 
         train_loss = 0.0
         steps_taken = 0
@@ -362,15 +361,17 @@ def train_model(
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
             targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in targets]
 
-            loss_dict = model(images, targets)
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                loss_dict = model(images, targets)
 
-            # sum up all 4 losses
-            loss = sum(loss for loss in loss_dict.values())
+                # sum up all 4 losses
+                loss = sum(loss for loss in loss_dict.values())
 
-            loss.backward()
+            scaler.scale(loss).backward()
 
             if (num_batch + 1) % ACCUMULATION_STEPS == 0:
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
 
             train_loss += loss.item() * batch_size
@@ -379,7 +380,7 @@ def train_model(
 
             # evaluate every k steps and also at the end of an epoch
             if steps_taken >= EVALUATE_EVERY_K_STEPS or (num_batch + 1) == len(train_dl):
-                log.info(f"\nEvaluating at step {overall_steps_taken}!\n")
+                log.info(f"Evaluating at step {overall_steps_taken}!")
 
                 # normalize the train loss by steps_taken
                 train_loss /= steps_taken
@@ -401,31 +402,21 @@ def train_model(
                 current_lr = float(optimizer.param_groups[0]["lr"])
                 writer.add_scalar("lr", current_lr, overall_steps_taken)
 
-                log.info(f"\nMetrics evaluated at step {overall_steps_taken}!\n")
+                log.info(f"Metrics evaluated at step {overall_steps_taken}!")
 
                 # set the model back to training
                 model.train()
 
-                # decrease lr by 1e-1 if val loss has not decreased after certain number of evaluations
+                # decrease lr if val loss has not decreased after certain number of evaluations
                 lr_scheduler.step(val_loss)
 
                 if val_loss < lowest_val_loss:
-                    num_evaluations_without_decrease_val_loss = 0
                     lowest_val_loss = val_loss
                     best_epoch = epoch
                     best_model_save_path = os.path.join(
                         weights_folder_path, f"val_loss_{lowest_val_loss:.3f}_epoch_{epoch}.pth"
                     )
                     best_model_state = deepcopy(model.state_dict())
-                else:
-                    num_evaluations_without_decrease_val_loss += 1
-
-                if num_evaluations_without_decrease_val_loss >= patience:
-                    # save the model with the overall lowest val loss
-                    torch.save(best_model_state, best_model_save_path)
-                    log.info(f"\nEarly stopping at epoch ({epoch}/{epochs})!")
-                    log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
-                    return None
 
                 # log to console at the end of an epoch
                 if (num_batch + 1) == len(train_dl):
@@ -438,7 +429,7 @@ def train_model(
         # save the current best model weights at the end of each epoch
         torch.save(best_model_state, best_model_save_path)
 
-    log.info("\nFinished training!")
+    log.info("Finished training!")
     log.info(f"Lowest overall val loss: {lowest_val_loss:.3f} at epoch {best_epoch}")
     return None
 
@@ -595,9 +586,10 @@ def create_run_folder():
         "EPOCHS": EPOCHS,
         "LR": LR,
         "EVALUATE_EVERY_K_STEPS": EVALUATE_EVERY_K_STEPS,
-        "PATIENCE": PATIENCE,
         "PATIENCE_LR_SCHEDULER": PATIENCE_LR_SCHEDULER,
-        "THRESHOLD_LR_SCHEDULER": THRESHOLD_LR_SCHEDULER
+        "THRESHOLD_LR_SCHEDULER": THRESHOLD_LR_SCHEDULER,
+        "FACTOR_LR_SCHEDULER": FACTOR_LR_SCHEDULER,
+        "COOLDOWN_LR_SCHEDULER": COOLDOWN_LR_SCHEDULER
     }
 
     with open(config_file_path, "w") as f:
@@ -609,8 +601,6 @@ def create_run_folder():
 
 
 def main():
-    torch.cuda.empty_cache()
-
     weights_folder_path, tensorboard_folder_path, config_file_path = create_run_folder()
 
     datasets_as_dfs = get_datasets_as_dfs(config_file_path)
@@ -627,10 +617,11 @@ def main():
     model.to(device, non_blocking=True)
     model.train()
 
-    opt = AdamW(model.parameters(), lr=LR)
-    lr_scheduler = ReduceLROnPlateau(opt, mode="min", patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER)
-    writer = SummaryWriter(log_dir=tensorboard_folder_path)
+    scaler = torch.cuda.amp.GradScaler()
 
+    opt = AdamW(model.parameters(), lr=LR)
+    lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
+    writer = SummaryWriter(log_dir=tensorboard_folder_path)
     log.info("\nStarting training!\n")
 
     train_model(
@@ -638,9 +629,9 @@ def main():
         train_dl=train_loader,
         val_dl=val_loader,
         optimizer=opt,
+        scaler=scaler,
         lr_scheduler=lr_scheduler,
         epochs=EPOCHS,
-        patience=PATIENCE,
         weights_folder_path=weights_folder_path,
         writer=writer
     )
