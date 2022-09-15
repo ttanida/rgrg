@@ -8,16 +8,18 @@ from tqdm import tqdm
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
 
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
+path_to_txt_file_to_log_stats = "/u/home/tanida/datasets/dataset_stats.txt"
 
 
 def print_stats_counter_dicts(counter_dict):
     """Print the counts in descending order"""
-    total_count = sum(value for value in counter_dict.values())
-    for bbox_name, count in sorted(counter_dict.items(), key=lambda k_v: k_v[1], reverse=True):
-        print(f"\t\t{bbox_name}: {count:,} ({(count/total_count) * 100:.2f}%)")
+    with open(path_to_txt_file_to_log_stats, "a") as f:
+        total_count = sum(value for value in counter_dict.values())
+        for bbox_name, count in sorted(counter_dict.items(), key=lambda k_v: k_v[1], reverse=True):
+            f.write(f"\n\t\t{bbox_name}: {count:,} ({(count/total_count) * 100:.2f}%)")
 
 
-def print_stats(dataset: str, stats: dict) -> None:
+def log_stats_to_txt_file(dataset: str, stats: dict) -> None:
     if dataset != "Total":
         num_images = stats["num_images"]
         num_ignored_images = stats["num_ignored_images"]
@@ -39,26 +41,25 @@ def print_stats(dataset: str, stats: dict) -> None:
         bbox_with_phrases_counter_dict = stats["total_bbox_with_phrases_counter_dict"]
         outlier_bbox_counter_dict = stats["total_outlier_bbox_counter_dict"]
 
-    print(f"\n{dataset}:")
-    print(f"\t{num_images:,} images in total")
-    print(f"\t{num_ignored_images} images were ignored (due to faulty x-rays etc.)")
+    with open(path_to_txt_file_to_log_stats, "a") as f:
+        f.write(f"\n\n{dataset}:")
+        f.write(f"\n\t{num_images:,} images in total")
+        f.write(f"\n\t{num_ignored_images} images were ignored (due to faulty x-rays etc.)")
 
-    print(f"\n\t{num_bboxes:,} bboxes in total")
-    print(f"\t{num_normal_bboxes:,} normal bboxes in total")
-    print(f"\t{num_abnormal_bboxes:,} abnormal bboxes in total")
-    print(f"\t{num_bboxes_with_phrases:,} bboxes have corresponding phrases")
-    print(f"\t-> {(num_bboxes_with_phrases/num_bboxes) * 100:.2f}% of bboxes have corresponding phrases")
+        f.write(f"\n\n\t{num_bboxes:,} bboxes in total")
+        f.write(f"\n\t{num_normal_bboxes:,} normal bboxes in total")
+        f.write(f"\n\t{num_abnormal_bboxes:,} abnormal bboxes in total")
+        f.write(f"\n\t{num_bboxes_with_phrases:,} bboxes have corresponding phrases")
+        f.write(f"\n\t-> {(num_bboxes_with_phrases/num_bboxes) * 100:.2f}% of bboxes have corresponding phrases")
 
-    print(f"\n\t{num_outlier_bboxes:,} bboxes with phrases have 'outlier' anatomical region names")
-    print(f"\t-> {(num_outlier_bboxes/num_bboxes_with_phrases) * 100:.2f}% of bboxes with phrases have 'outlier' names")
+        f.write(f"\n\n\t{num_outlier_bboxes:,} bboxes with phrases have 'outlier' anatomical region names")
+        f.write(f"\n\t-> {(num_outlier_bboxes/num_bboxes_with_phrases) * 100:.2f}% of bboxes with phrases have 'outlier' names")
 
-    print("\n\tCounts and percentages of 'outlier' bboxes:")
-    print_stats_counter_dicts(outlier_bbox_counter_dict)
+        f.write("\n\n\tCounts and percentages of 'outlier' bboxes:")
+        print_stats_counter_dicts(outlier_bbox_counter_dict)
 
-    print("\n\tCounts and percentages of normal bboxes with phrases:")
-    print_stats_counter_dicts(bbox_with_phrases_counter_dict)
-
-    print()
+        f.write("\n\n\tCounts and percentages of normal bboxes with phrases:")
+        print_stats_counter_dicts(bbox_with_phrases_counter_dict)
 
 
 def coordinates_faulty(height, width, x1, y1, x2, y2) -> bool:
@@ -203,7 +204,7 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str, image_ids_to_av
                 else:
                     stats["num_normal_bboxes"] += 1
 
-    print_stats(dataset=dataset, stats=stats)
+    log_stats_to_txt_file(dataset=dataset, stats=stats)
 
     return stats
 
@@ -234,7 +235,7 @@ def compute_and_print_stats_for_csv_files(csv_files_dict, image_ids_to_avoid):
                 for bbox_name, count in value.items():  # value is a counter dict in this case
                     total_stats["total_" + key][bbox_name] += count
 
-    print_stats(dataset="Total", stats=total_stats)
+    log_stats_to_txt_file(dataset="Total", stats=total_stats)
 
 
 def get_images_to_avoid():

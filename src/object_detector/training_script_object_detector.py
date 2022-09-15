@@ -36,19 +36,21 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
+path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete"
+
 # define configurations for training run
 RUN = 7
 # can be useful to add additional information to run_config.txt file
 RUN_COMMENT = """Train on full dataset with 29 regions. Reduced data augmentation. Use XRV model as backbone again."""
 IMAGE_INPUT_SIZE = 512
-PERCENTAGE_OF_TRAIN_SET_TO_USE = 0.005  # 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.1  # 0.4
-BATCH_SIZE = 32
+PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
+BATCH_SIZE = 16
 EFFECTIVE_BATCH_SIZE = 64
 NUM_WORKERS = 8
 EPOCHS = 20
 LR = 1e-3
-EVALUATE_EVERY_K_STEPS = 500  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
+EVALUATE_EVERY_K_STEPS = 1000  # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduce before lr is reduced
 THRESHOLD_LR_SCHEDULER = 1e-3
 FACTOR_LR_SCHEDULER = 0.5
@@ -520,8 +522,6 @@ def get_transforms(dataset: str):
 
 
 def get_datasets_as_dfs(config_file_path):
-    path_dataset_object_detector = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
-
     usecols = ["mimic_image_file_path", "bbox_coordinates", "bbox_labels"]
 
     # since bbox_coordinates and bbox_labels are stored as strings in the csv_file, we have to apply

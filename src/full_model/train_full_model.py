@@ -65,6 +65,8 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
+path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete"
+
 
 def train_model(
     model,
@@ -411,8 +413,6 @@ def get_tokenizer():
 
 
 def get_datasets(config_file_path):
-    path_dataset_full_model = "/u/home/tanida/datasets/dataset-for-full-model-original-bbox-coordinates"
-
     usecols = [
         "mimic_image_file_path",
         "bbox_coordinates",

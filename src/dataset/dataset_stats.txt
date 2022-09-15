@@ -1,0 +1,217 @@
+
+
+train:
+	166,521 images in total
+	17 images were ignored (due to faulty x-rays etc.)
+
+	4,787,754 bboxes in total
+	4,095,462 normal bboxes in total
+	692,292 abnormal bboxes in total
+	1,495,717 bboxes have corresponding phrases
+	-> 31.24% of bboxes have corresponding phrases
+
+	114,038 bboxes with phrases have 'outlier' anatomical region names
+	-> 7.62% of bboxes with phrases have 'outlier' names
+	Counts and percentages of 'outlier' bboxes:
+		neck: 36,298 (31.83%)
+		right chest wall: 30,054 (26.35%)
+		left chest wall: 28,673 (25.14%)
+		right shoulder: 9,546 (8.37%)
+		left shoulder: 6,225 (5.46%)
+		right arm: 731 (0.64%)
+		unknown: 655 (0.57%)
+		right breast: 633 (0.56%)
+		left arm: 613 (0.54%)
+		left breast: 610 (0.53%)
+	Counts and percentages of normal bboxes with phrases:
+		left lung: 162,111 (10.84%)
+		right lung: 161,948 (10.83%)
+		cardiac silhouette: 126,953 (8.49%)
+		left costophrenic angle: 122,278 (8.18%)
+		mediastinum: 120,480 (8.05%)
+		right costophrenic angle: 120,277 (8.04%)
+		right hilar structures: 96,099 (6.42%)
+		left hilar structures: 95,212 (6.37%)
+		upper mediastinum: 66,528 (4.45%)
+		left lower lung zone: 62,919 (4.21%)
+		right lower lung zone: 56,171 (3.76%)
+		abdomen: 33,738 (2.26%)
+		spine: 27,306 (1.83%)
+		right clavicle: 22,694 (1.52%)
+		left clavicle: 22,517 (1.51%)
+		trachea: 22,347 (1.49%)
+		left mid lung zone: 20,103 (1.34%)
+		right mid lung zone: 19,353 (1.29%)
+		right apical zone: 18,204 (1.22%)
+		right hemidiaphragm: 17,327 (1.16%)
+		left apical zone: 16,924 (1.13%)
+		aortic arch: 16,559 (1.11%)
+		svc: 13,758 (0.92%)
+		left hemidiaphragm: 13,235 (0.88%)
+		right upper lung zone: 11,502 (0.77%)
+		carina: 10,061 (0.67%)
+		left upper lung zone: 9,292 (0.62%)
+		right atrium: 6,124 (0.41%)
+		cavoatrial junction: 3,697 (0.25%)
+
+valid:
+	23,953 images in total
+	2 images were ignored (due to faulty x-rays etc.)
+
+	688,310 bboxes in total
+	589,866 normal bboxes in total
+	98,444 abnormal bboxes in total
+	214,269 bboxes have corresponding phrases
+	-> 31.13% of bboxes have corresponding phrases
+
+	16,157 bboxes with phrases have 'outlier' anatomical region names
+	-> 7.54% of bboxes with phrases have 'outlier' names
+	Counts and percentages of 'outlier' bboxes:
+		neck: 5,226 (32.35%)
+		right chest wall: 4,275 (26.46%)
+		left chest wall: 4,091 (25.32%)
+		right shoulder: 1,249 (7.73%)
+		left shoulder: 909 (5.63%)
+		unknown: 94 (0.58%)
+		right arm: 93 (0.58%)
+		left arm: 85 (0.53%)
+		right breast: 74 (0.46%)
+		left breast: 61 (0.38%)
+	Counts and percentages of normal bboxes with phrases:
+		left lung: 23,346 (10.90%)
+		right lung: 23,301 (10.87%)
+		cardiac silhouette: 18,225 (8.51%)
+		left costophrenic angle: 17,565 (8.20%)
+		right costophrenic angle: 17,367 (8.11%)
+		mediastinum: 17,145 (8.00%)
+		right hilar structures: 13,749 (6.42%)
+		left hilar structures: 13,611 (6.35%)
+		upper mediastinum: 9,507 (4.44%)
+		left lower lung zone: 9,006 (4.20%)
+		right lower lung zone: 7,978 (3.72%)
+		abdomen: 4,764 (2.22%)
+		spine: 3,959 (1.85%)
+		right clavicle: 3,375 (1.58%)
+		left clavicle: 3,366 (1.57%)
+		trachea: 3,147 (1.47%)
+		left mid lung zone: 2,799 (1.31%)
+		right mid lung zone: 2,731 (1.27%)
+		right apical zone: 2,552 (1.19%)
+		right hemidiaphragm: 2,424 (1.13%)
+		left apical zone: 2,405 (1.12%)
+		aortic arch: 2,316 (1.08%)
+		svc: 1,943 (0.91%)
+		left hemidiaphragm: 1,917 (0.89%)
+		right upper lung zone: 1,602 (0.75%)
+		carina: 1,385 (0.65%)
+		left upper lung zone: 1,331 (0.62%)
+		right atrium: 914 (0.43%)
+		cavoatrial junction: 539 (0.25%)
+
+test:
+	47,393 images in total
+	4 images were ignored (due to faulty x-rays etc.)
+
+	1,363,531 bboxes in total
+	1,164,714 normal bboxes in total
+	198,817 abnormal bboxes in total
+	426,810 bboxes have corresponding phrases
+	-> 31.30% of bboxes have corresponding phrases
+
+	32,383 bboxes with phrases have 'outlier' anatomical region names
+	-> 7.59% of bboxes with phrases have 'outlier' names
+	Counts and percentages of 'outlier' bboxes:
+		neck: 10,188 (31.46%)
+		right chest wall: 8,472 (26.16%)
+		left chest wall: 8,020 (24.77%)
+		right shoulder: 2,808 (8.67%)
+		left shoulder: 1,949 (6.02%)
+		right breast: 205 (0.63%)
+		right arm: 203 (0.63%)
+		left breast: 189 (0.58%)
+		unknown: 177 (0.55%)
+		left arm: 172 (0.53%)
+	Counts and percentages of normal bboxes with phrases:
+		left lung: 46,142 (10.81%)
+		right lung: 46,133 (10.81%)
+		cardiac silhouette: 36,331 (8.51%)
+		left costophrenic angle: 34,891 (8.17%)
+		right costophrenic angle: 34,528 (8.09%)
+		mediastinum: 34,104 (7.99%)
+		right hilar structures: 27,228 (6.38%)
+		left hilar structures: 27,017 (6.33%)
+		upper mediastinum: 18,916 (4.43%)
+		left lower lung zone: 18,022 (4.22%)
+		right lower lung zone: 15,951 (3.74%)
+		abdomen: 9,700 (2.27%)
+		spine: 7,898 (1.85%)
+		right clavicle: 6,525 (1.53%)
+		left clavicle: 6,451 (1.51%)
+		trachea: 6,165 (1.44%)
+		left mid lung zone: 5,859 (1.37%)
+		right mid lung zone: 5,685 (1.33%)
+		right apical zone: 5,234 (1.23%)
+		right hemidiaphragm: 4,991 (1.17%)
+		left apical zone: 4,962 (1.16%)
+		aortic arch: 4,708 (1.10%)
+		svc: 3,913 (0.92%)
+		left hemidiaphragm: 3,711 (0.87%)
+		right upper lung zone: 3,355 (0.79%)
+		carina: 2,847 (0.67%)
+		left upper lung zone: 2,745 (0.64%)
+		right atrium: 1,777 (0.42%)
+		cavoatrial junction: 1,021 (0.24%)
+
+Total:
+	237,867 images in total
+	23 images were ignored (due to faulty x-rays etc.)
+
+	6,839,595 bboxes in total
+	5,850,042 normal bboxes in total
+	989,553 abnormal bboxes in total
+	2,136,796 bboxes have corresponding phrases
+	-> 31.24% of bboxes have corresponding phrases
+
+	162,578 bboxes with phrases have 'outlier' anatomical region names
+	-> 7.61% of bboxes with phrases have 'outlier' names
+	Counts and percentages of 'outlier' bboxes:
+		neck: 51,712 (31.81%)
+		right chest wall: 42,801 (26.33%)
+		left chest wall: 40,784 (25.09%)
+		right shoulder: 13,603 (8.37%)
+		left shoulder: 9,083 (5.59%)
+		right arm: 1,027 (0.63%)
+		unknown: 926 (0.57%)
+		right breast: 912 (0.56%)
+		left arm: 870 (0.54%)
+		left breast: 860 (0.53%)
+	Counts and percentages of normal bboxes with phrases:
+		left lung: 231,599 (10.84%)
+		right lung: 231,382 (10.83%)
+		cardiac silhouette: 181,509 (8.49%)
+		left costophrenic angle: 174,734 (8.18%)
+		right costophrenic angle: 172,172 (8.06%)
+		mediastinum: 171,729 (8.04%)
+		right hilar structures: 137,076 (6.42%)
+		left hilar structures: 135,840 (6.36%)
+		upper mediastinum: 94,951 (4.44%)
+		left lower lung zone: 89,947 (4.21%)
+		right lower lung zone: 80,100 (3.75%)
+		abdomen: 48,202 (2.26%)
+		spine: 39,163 (1.83%)
+		right clavicle: 32,594 (1.53%)
+		left clavicle: 32,334 (1.51%)
+		trachea: 31,659 (1.48%)
+		left mid lung zone: 28,761 (1.35%)
+		right mid lung zone: 27,769 (1.30%)
+		right apical zone: 25,990 (1.22%)
+		right hemidiaphragm: 24,742 (1.16%)
+		left apical zone: 24,291 (1.14%)
+		aortic arch: 23,583 (1.10%)
+		svc: 19,614 (0.92%)
+		left hemidiaphragm: 18,863 (0.88%)
+		right upper lung zone: 16,459 (0.77%)
+		carina: 14,293 (0.67%)
+		left upper lung zone: 13,368 (0.63%)
+		right atrium: 8,815 (0.41%)
+		cavoatrial junction: 5,257 (0.25%)
