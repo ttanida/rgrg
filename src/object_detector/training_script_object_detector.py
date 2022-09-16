@@ -39,13 +39,13 @@ torch.cuda.manual_seed_all(seed_val)
 path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete"
 
 # define configurations for training run
-RUN = 7
+RUN = 8
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train on full dataset with 29 regions. Reduced data augmentation. Use XRV model as backbone again."""
+RUN_COMMENT = """Train on full dataset with 29 regions. Change data augmentation RandomBrightnessContrast to ColorJitter"""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
-PERCENTAGE_OF_VAL_SET_TO_USE = 0.4
-BATCH_SIZE = 16
+PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
+BATCH_SIZE = 32
 EFFECTIVE_BATCH_SIZE = 64
 NUM_WORKERS = 8
 EPOCHS = 20
@@ -493,7 +493,7 @@ def get_transforms(dataset: str):
             # LongestMaxSize: resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio
             # INTER_AREA works best for shrinking images
             A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
-            A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.2),
+            A.ColorJitter(),
             # randomly (by default prob=0.5) translate and rotate image
             # mode and cval specify that black pixels are used to fill in newly created pixels
             # translate between -2% and 2% of the image height/width, rotate between -2 and 2 degrees
