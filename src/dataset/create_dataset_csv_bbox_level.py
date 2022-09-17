@@ -36,7 +36,7 @@ from tqdm import tqdm
 
 from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_chest_imagenome_customized = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-10%-of-full-dataset"
+path_to_full_dataset_bbox_level = "/u/home/tanida/datasets/chest-imagenome-dataset-customized-10%-of-full-dataset"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 
@@ -51,7 +51,7 @@ NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 600000
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
-    new_csv_file_path = os.path.join(path_to_chest_imagenome_customized, dataset)
+    new_csv_file_path = os.path.join(path_to_full_dataset_bbox_level, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
     with open(new_csv_file_path, "w") as fp:
@@ -365,12 +365,12 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
 
 
 def create_new_csv_files(csv_files_dict, image_ids_to_avoid):
-    if os.path.exists(path_to_chest_imagenome_customized):
-        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_chest_imagenome_customized}.")
+    if os.path.exists(path_to_full_dataset_bbox_level):
+        log.error(f"Customized chest imagenome dataset folder already exists at {path_to_full_dataset_bbox_level}.")
         log.error("Delete dataset folder before running script to create new folder!")
         return None
 
-    os.mkdir(path_to_chest_imagenome_customized)
+    os.mkdir(path_to_full_dataset_bbox_level)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file, image_ids_to_avoid)
 
