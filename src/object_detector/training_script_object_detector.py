@@ -36,16 +36,16 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete"
+path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions"
 
 # define configurations for training run
-RUN = 8
+RUN = 9
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train on full dataset with 29 regions. Change data augmentation RandomBrightnessContrast to ColorJitter"""
+RUN_COMMENT = """Train on full dataset with 29 regions and without check for 29 regions. Add data augmentation of GaussNoise."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 EFFECTIVE_BATCH_SIZE = 64
 NUM_WORKERS = 8
 EPOCHS = 20
@@ -529,7 +529,10 @@ def get_datasets_as_dfs(config_file_path):
     # the literal_eval func to convert them to python lists
     converters = {"bbox_coordinates": literal_eval, "bbox_labels": literal_eval}
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
+    datasets_as_dfs = {"train": "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions/train.csv"}
+    datasets_as_dfs["valid"] = "/u/home/tanida/datasets/dataset-full-model-complete/valid.csv"
+
+    # datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])

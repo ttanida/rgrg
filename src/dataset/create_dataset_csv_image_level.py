@@ -10,14 +10,16 @@ The specific information of each row are:
     - study_id: id of the study of that patient (since a patient can have several studies done to document the progression of a disease etc.)
     - image_id: id of the single image
     - mimic_image_file_path: file path to the jpg of the single image on the workstation
-    - bbox_coordinates (List[List[int]]): a nested list with the outer list of length 29 and the inner list of length 4. Contains 4 bbox coordinates
-    of all 29 regions of a single image. Images that did not have bbox coordinates specified for all 29 regions were ignored
-    - bbox_labels (List[int]): a list of length 29 that has region/class labels corresponding to the bbox_coordinates. For every image, the bbox_labels list
-    is actually the same and is of the form [1, 2, 3, ..., 28, 29]. It starts at 1 since 0 is considered the background class for object detectors.
-    - bbox_phrases (List[str]): a list of length 29 that has the reference phrases for every bbox of a single image. Note that a lot of these reference phrases
+    - bbox_coordinates (List[List[int]]): a nested list where the outer list (usually) has a length of 29 and the inner list always a length of 4 (for 4 bbox coordinates).
+    Contains the bbox coordinates for all (usually 29) regions of a single image. There are some images that don't have bbox coordinates for all 29 regions
+    (see log_file_dataset_creation.txt), thus it's possible that the outer list does not have length 29.
+    - bbox_labels (List[int]): a list of (usually) length 29 that has region/class labels corresponding to the bbox_coordinates. Usually, the bbox_labels list will be
+    of the form [1, 2, 3, ..., 28, 29], i.e. continuously counting from 1 to 29. It starts at 1 since 0 is considered the background class for object detectors.
+    However, since some images don't have bbox coordinates for all 29 regions, it's possible that there are missing numbers in the list.
+    - bbox_phrases (List[str]): a list of (usually) length 29 that has the reference phrases for every bbox of a single image. Note that a lot of these reference phrases
     will be "" (i.e. empty), since a radiology report describing an image will usually not contain phrases for all 29 regions.
-    - bbox_phrase_exists (List[bool]): a list of length 29 that indicates if a bbox has a reference phrase (True) or not
-    - bbox_is_abnormal (List[bool]): a list of length 29 that indicates if a bbox was described as abnormal (True) by its reference phrase or not. bboxes that do
+    - bbox_phrase_exists (List[bool]): a list of (usually) length 29 that indicates if a bbox has a reference phrase (True) or not
+    - bbox_is_abnormal (List[bool]): a list of (usually) length 29 that indicates if a bbox was described as abnormal (True) by its reference phrase or not. bboxes that do
     not have a reference phrase are considered normal by default.
 """
 import csv
@@ -32,9 +34,11 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_full_dataset = "/u/home/tanida/datasets/dataset-full-model-complete"
+path_to_full_dataset = "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
+# to log certain statistics during dataset creation
+path_to_log_file = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/dataset/log_file_dataset_creation.txt"
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
@@ -235,10 +239,12 @@ def get_total_num_rows(path_csv_file: str) -> int:
         return sum(1 for row in csv_reader)
 
 
-def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
+def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
     """
     Args:
+        dataset (str): either "train", "valid" or "test
         path_csv_file (str): path to one of the csv files in the folder silver_dataset/splits of the chest-imagenome-dataset
+        image_ids_to_avoid (set): as specified in "silver_dataset/splits/images_to_avoid.csv"
 
     Returns:
         new_rows (list[list]): inner list contains information about a single image:
@@ -246,8 +252,11 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             - study_id
             - image_id
             - file path to image in mimic-cxr-jpg dataset on workstation
-            - bbox coordinates as a list of lists, where each inner list contains 4 bbox coordinates
-            - labels as a list, with class labels for each ground-truth box
+            - bbox_coordinates is a list of lists, where each inner list contains 4 bbox coordinates
+            - bbox_labels is a list with class labels for each ground-truth box
+            - bbox_phrases is a list with phrases for each bbox
+            - bbox_phrase_exist_vars is a list that specifies if a phrase is non-empty (True) or empty (False) for a given bbox
+            - bbox_is_abnormal_vars is a list that specifies if a region depicted in a bbox is abnormal (True) or normal (False)
     """
     new_rows = []
     index = 0
@@ -256,6 +265,12 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
     # used in function convert_phrases_to_single_string
     sentence_tokenizer = spacy.load("en_core_web_trf")
+
+    # stats will be logged in path_to_log_file
+    num_images_ignored_or_avoided = 0
+    num_faulty_bboxes = 0
+    num_images_without_29_regions = 0
+    missing_images = []
 
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
@@ -274,6 +289,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             # all images in set image_ids_to_avoid are image IDs for images in the gold standard dataset,
             # which should all be excluded from model training and validation
             if image_id in IMAGE_IDS_TO_IGNORE or image_id in image_ids_to_avoid:
+                num_images_ignored_or_avoided += 1
                 continue
 
             # image_file_path is of the form "files/p10/p10000980/s50985099/6ad03ed1-97ee17ee-9cf8b320-f7011003-cd93b42d.dcm"
@@ -283,7 +299,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             mimic_image_file_path = os.path.join(path_to_mimic_cxr, image_file_path)
 
             if not os.path.exists(mimic_image_file_path):
-                # print("Does not exist: ", image_file_path)
+                missing_images.append(mimic_image_file_path)
                 continue
 
             chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
@@ -309,7 +325,9 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             bbox_phrase_exist_vars = []
             bbox_is_abnormal_vars = []
 
-            # counter to make sure that all 29 regions are processed in for loop
+            # counter to see if given image contains bbox coordinates for all 29 regions
+            # if image does not bbox coordinates for 29 regions, it's still added to the dataset,
+            # but num_images_without_29_regions will be increased by 1
             num_regions = 0
 
             # iterate over all 29 anatomical regions of the given image
@@ -326,12 +344,10 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 x2 = anatomical_region["original_x2"]
                 y2 = anatomical_region["original_y2"]
 
-                # check if any bbox coordinates are faulty (of all 29 regions)
-                # if there is at least 1 region with faulty bbox coordinates, then break out of loop
-                # this will ensure that num_regions counter will not reach 29, and thus:
-                # -> only images with correct bbox coordinates for all 29 regions will be added to dataset
+                # check if any bbox coordinates are faulty
                 if coordinates_faulty(height, width, x1, y1, x2, y2):
-                    break
+                    num_faulty_bboxes += 1
+                    continue
 
                 # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
                 # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
@@ -359,14 +375,24 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
 
                 num_regions += 1
 
-            if num_regions == 29:
-                # only add image information to dataset if information of all 29 regions is included
-                new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
-                new_rows.append(new_image_row)
-                index += 1
+            new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
+            new_rows.append(new_image_row)
+            index += 1
+
+            if num_regions != 29:
+                num_images_without_29_regions += 1
 
             if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
                 return new_rows
+
+    with open(path_to_log_file, "a") as f:
+        f.write(f"{dataset}:\n")
+        f.write(f"\tnum_images_ignored_or_avoided: {num_images_ignored_or_avoided}\n")
+        f.write(f"\tnum_missing_images: {len(missing_images)}\n")
+        for missing_img in missing_images:
+            f.write(f"\t\tmissing_img: {missing_img}\n")
+        f.write(f"\tnum_faulty_bboxes: {num_faulty_bboxes}\n")
+        f.write(f"\tnum_images_without_29_regions: {num_images_without_29_regions}\n\n")
 
     return new_rows
 
@@ -376,7 +402,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
 
     # get rows to create new csv_file
     # new_rows is a list of lists, where an inner list specifies all information about a single image
-    new_rows = get_rows(path_csv_file, image_ids_to_avoid)
+    new_rows = get_rows(dataset, path_csv_file, image_ids_to_avoid)
 
     # write those rows into a new csv file
     write_rows_in_new_csv_file(dataset, new_rows)

@@ -12,6 +12,7 @@ train:
 
 	114,038 bboxes with phrases have 'outlier' anatomical region names
 	-> 7.62% of bboxes with phrases have 'outlier' names
+
 	Counts and percentages of 'outlier' bboxes:
 		neck: 36,298 (31.83%)
 		right chest wall: 30,054 (26.35%)
@@ -23,6 +24,7 @@ train:
 		right breast: 633 (0.56%)
 		left arm: 613 (0.54%)
 		left breast: 610 (0.53%)
+
 	Counts and percentages of normal bboxes with phrases:
 		left lung: 162,111 (10.84%)
 		right lung: 161,948 (10.83%)
@@ -66,6 +68,7 @@ valid:
 
 	16,157 bboxes with phrases have 'outlier' anatomical region names
 	-> 7.54% of bboxes with phrases have 'outlier' names
+
 	Counts and percentages of 'outlier' bboxes:
 		neck: 5,226 (32.35%)
 		right chest wall: 4,275 (26.46%)
@@ -77,6 +80,7 @@ valid:
 		left arm: 85 (0.53%)
 		right breast: 74 (0.46%)
 		left breast: 61 (0.38%)
+
 	Counts and percentages of normal bboxes with phrases:
 		left lung: 23,346 (10.90%)
 		right lung: 23,301 (10.87%)
@@ -120,6 +124,7 @@ test:
 
 	32,383 bboxes with phrases have 'outlier' anatomical region names
 	-> 7.59% of bboxes with phrases have 'outlier' names
+
 	Counts and percentages of 'outlier' bboxes:
 		neck: 10,188 (31.46%)
 		right chest wall: 8,472 (26.16%)
@@ -131,6 +136,7 @@ test:
 		left breast: 189 (0.58%)
 		unknown: 177 (0.55%)
 		left arm: 172 (0.53%)
+
 	Counts and percentages of normal bboxes with phrases:
 		left lung: 46,142 (10.81%)
 		right lung: 46,133 (10.81%)
@@ -174,6 +180,7 @@ Total:
 
 	162,578 bboxes with phrases have 'outlier' anatomical region names
 	-> 7.61% of bboxes with phrases have 'outlier' names
+
 	Counts and percentages of 'outlier' bboxes:
 		neck: 51,712 (31.81%)
 		right chest wall: 42,801 (26.33%)
@@ -185,6 +192,7 @@ Total:
 		right breast: 912 (0.56%)
 		left arm: 870 (0.54%)
 		left breast: 860 (0.53%)
+
 	Counts and percentages of normal bboxes with phrases:
 		left lung: 231,599 (10.84%)
 		right lung: 231,382 (10.83%)
