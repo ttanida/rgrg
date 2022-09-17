@@ -347,7 +347,8 @@ def get_transforms(dataset: str):
             # LongestMaxSize: resizes the longer edge to IMAGE_INPUT_SIZE while maintaining the aspect ratio
             # INTER_AREA works best for shrinking images
             A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
-            A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.2),
+            A.ColorJitter(hue=0.0),
+            A.GaussNoise(),
             # randomly (by default prob=0.5) translate and rotate image
             # mode and cval specify that black pixels are used to fill in newly created pixels
             # translate between -2% and 2% of the image height/width, rotate between -2 and 2 degrees
