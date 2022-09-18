@@ -191,8 +191,6 @@ def compute_intersection_and_union_area_per_class(detections, targets, class_det
     pred_area = compute_box_area(pred_boxes)
     gt_area = compute_box_area(gt_boxes)
 
-    union_area = (pred_area + gt_area) - intersection_area
-
     # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
     valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
 
@@ -201,6 +199,8 @@ def compute_intersection_and_union_area_per_class(detections, targets, class_det
 
     # set all non-valid intersection areas to 0
     intersection_area = torch.where(valid_intersection, intersection_area, torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device))
+
+    union_area = (pred_area + gt_area) - intersection_area
 
     # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
     intersection_area = torch.sum(intersection_area, dim=0)
@@ -529,10 +529,7 @@ def get_datasets_as_dfs(config_file_path):
     # the literal_eval func to convert them to python lists
     converters = {"bbox_coordinates": literal_eval, "bbox_labels": literal_eval}
 
-    datasets_as_dfs = {"train": "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions/train.csv"}
-    datasets_as_dfs["valid"] = "/u/home/tanida/datasets/dataset-full-model-complete/valid.csv"
-
-    # datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
+    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid"]}
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])

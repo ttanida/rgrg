@@ -680,8 +680,6 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
         pred_area = compute_box_area(pred_boxes)
         gt_area = compute_box_area(gt_boxes)
 
-        union_area = (pred_area + gt_area) - intersection_area
-
         # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
         valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
 
@@ -694,6 +692,8 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
             intersection_area,
             torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device),
         )
+
+        union_area = (pred_area + gt_area) - intersection_area
 
         # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
         intersection_area = torch.sum(intersection_area, dim=0)

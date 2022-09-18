@@ -13,7 +13,6 @@ from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
 from src.object_detector.custom_roi_heads import CustomRoIHeads
 from src.object_detector.custom_rpn import CustomRegionProposalNetwork
 from src.object_detector.image_list import ImageList
-import torchxrayvision as xrv
 
 
 class ObjectDetector(nn.Module):

@@ -16,8 +16,8 @@ class BinaryClassifierRegionSelection(nn.Module):
             nn.Linear(in_features=128, out_features=1)
         )
 
-        # since we have around 2.2x more regions without sentences than regions with sentences (see compute_stats_dataset.py),
-        # we set pos_weight=2.2 to put 3.2 more weight on the loss of regions with sentences
+        # since we have around 2.2x more regions without sentences than regions with sentences (see dataset/dataset_stats.txt generated from compute_stats_dataset.py),
+        # we set pos_weight=2.2 to put 2.2 more weight on the loss of regions with sentences
         pos_weight = torch.tensor([2.2], device=device)
         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 

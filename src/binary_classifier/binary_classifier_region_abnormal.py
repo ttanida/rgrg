@@ -23,7 +23,7 @@ class BinaryClassifierRegionAbnormal(nn.Module):
             nn.Linear(in_features=128, out_features=1)
         )
 
-        # since we have around 6.0x more normal regions than abnormal regions (see compute_stats_dataset.py),
+        # since we have around 6.0x more normal regions than abnormal regions (see dataset/dataset_stats.txt generated from compute_stats_dataset.py),
         # we set pos_weight=6.0 to put 6.0 more weight on the loss of abnormal regions
         pos_weight = torch.tensor([6.0], device=device)
         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)

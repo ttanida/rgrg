@@ -16,11 +16,19 @@ The specific information of each row are:
     - bbox_labels (List[int]): a list of (usually) length 29 that has region/class labels corresponding to the bbox_coordinates. Usually, the bbox_labels list will be
     of the form [1, 2, 3, ..., 28, 29], i.e. continuously counting from 1 to 29. It starts at 1 since 0 is considered the background class for object detectors.
     However, since some images don't have bbox coordinates for all 29 regions, it's possible that there are missing numbers in the list.
-    - bbox_phrases (List[str]): a list of (usually) length 29 that has the reference phrases for every bbox of a single image. Note that a lot of these reference phrases
+    - bbox_phrases (List[str]): a list of (always) length 29 that has the reference phrases for every bbox of a single image. Note that a lot of these reference phrases
     will be "" (i.e. empty), since a radiology report describing an image will usually not contain phrases for all 29 regions.
-    - bbox_phrase_exists (List[bool]): a list of (usually) length 29 that indicates if a bbox has a reference phrase (True) or not
-    - bbox_is_abnormal (List[bool]): a list of (usually) length 29 that indicates if a bbox was described as abnormal (True) by its reference phrase or not. bboxes that do
+    - bbox_phrase_exists (List[bool]): a list of (always) length 29 that indicates if a bbox has a reference phrase (True) or not
+    - bbox_is_abnormal (List[bool]): a list of (always) length 29 that indicates if a bbox was described as abnormal (True) by its reference phrase or not. bboxes that do
     not have a reference phrase are considered normal by default.
+
+For the validation set, we only include images that have bbox_coordinates, bbox_labels for all 29 regions.
+This is done because:
+    1. We will usually not evaluate on the whole validation set (which contains 23,953 images), but only on a fraction of it (e.g. 5% - 20%).
+    2. Writing code that evaluates on all 29 regions is easier and more performant (-> e.g. batching possible). If there are some images with < 29 regions,
+    then the code has to accomodate them, making vectorization more difficult.
+
+In summary, train and test set contain images with < 29 regions, but val set only contains images with exactly 29 regions.
 """
 import csv
 import json
@@ -215,16 +223,16 @@ def convert_phrases_to_single_string(phrases: list[str], sentence_tokenizer) -> 
 def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[tuple]:
     attributes_dict = {}
     for attribute in image_scene_graph["attributes"]:
-        bbox_name = attribute["bbox_name"]
+        region_name = attribute["bbox_name"]
 
-        # ignore bbox_names such as "left chest wall" or "right breast" that are not part of the 29 anatomical regions
-        if bbox_name not in ANATOMICAL_REGIONS:
+        # ignore region_names such as "left chest wall" or "right breast" that are not part of the 29 anatomical regions
+        if region_name not in ANATOMICAL_REGIONS:
             continue
 
         phrases = convert_phrases_to_single_string(attribute["phrases"], sentence_tokenizer)
         is_abnormal = determine_if_abnormal(attribute["attributes"])
 
-        attributes_dict[bbox_name] = (phrases, is_abnormal)
+        attributes_dict[region_name] = (phrases, is_abnormal)
 
     return attributes_dict
 
@@ -326,58 +334,67 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             bbox_is_abnormal_vars = []
 
             # counter to see if given image contains bbox coordinates for all 29 regions
-            # if image does not bbox coordinates for 29 regions, it's still added to the dataset,
-            # but num_images_without_29_regions will be increased by 1
+            # if image does not bbox coordinates for 29 regions, it's still added to the train and test dataset,
+            # but not the val dataset (see reasoning in the module docstring on top of this file)
             num_regions = 0
 
-            # iterate over all 29 anatomical regions of the given image
-            for anatomical_region in image_scene_graph["objects"]:
-                bbox_name = anatomical_region["bbox_name"]
+            for anatomical_region in ANATOMICAL_REGIONS:
+                anatomical_region_obj_key = f"{image_id}_{anatomical_region}"
 
-                # ignore bbox_names such as "left chest wall" or "right breast" that are not part of the 29 anatomical regions
-                if bbox_name not in ANATOMICAL_REGIONS:
-                    continue
-
-                # get the bbox coordinates for the region
-                x1 = anatomical_region["original_x1"]
-                y1 = anatomical_region["original_y1"]
-                x2 = anatomical_region["original_x2"]
-                y2 = anatomical_region["original_y2"]
-
-                # check if any bbox coordinates are faulty
-                if coordinates_faulty(height, width, x1, y1, x2, y2):
-                    num_faulty_bboxes += 1
-                    continue
-
-                # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
-                # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
-                # and set to height if y-coordinate > height
-                x1 = check_coordinate(x1, width)
-                y1 = check_coordinate(y1, height)
-                x2 = check_coordinate(x2, width)
-                y2 = check_coordinate(y2, height)
-
-                bbox_coords = [x1, y1, x2, y2]
+                # objects is a list of dicts where each dict contains the bbox coordinates for a single region
+                anatomical_region_obj_dict = image_scene_graph["objects"].get(anatomical_region_obj_key, None)
 
                 # since background has class label 0 for object detection, shift the remaining class labels by 1
-                class_label = ANATOMICAL_REGIONS[bbox_name] + 1
+                class_label = ANATOMICAL_REGIONS[anatomical_region] + 1
+
+                bbox_coordinates_faulty = False
+
+                if anatomical_region_obj_dict:
+                    # get the bbox coordinates for the region
+                    x1 = anatomical_region["original_x1"]
+                    y1 = anatomical_region["original_y1"]
+                    x2 = anatomical_region["original_x2"]
+                    y2 = anatomical_region["original_y2"]
+
+                    # check if bbox coordinates are faulty
+                    if coordinates_faulty(height, width, x1, y1, x2, y2):
+                        num_faulty_bboxes += 1
+                        bbox_coordinates_faulty = True
+                    else:
+                        # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
+                        # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
+                        # and set to height if y-coordinate > height
+                        x1 = check_coordinate(x1, width)
+                        y1 = check_coordinate(y1, height)
+                        x2 = check_coordinate(x2, width)
+                        y2 = check_coordinate(y2, height)
+
+                        bbox_coords = [x1, y1, x2, y2]
+
+                        num_regions += 1
+                else:
+                    bbox_coordinates_faulty = True
 
                 # get bbox_phrase (describing the region inside bbox) and bbox_is_abnormal boolean variable (indicating if region inside bbox is abnormal)
                 # if there is no phrase, then the region inside bbox is normal and thus has "" for bbox_phrase (empty phrase) and False for bbox_is_abnormal
-                bbox_phrase, bbox_is_abnormal = anatomical_region_attributes.get(bbox_name, ("", False))
+                bbox_phrase, bbox_is_abnormal = anatomical_region_attributes.get(anatomical_region, ("", False))
                 bbox_phrase_exist = True if bbox_phrase != "" else False
 
-                bbox_coordinates.append(bbox_coords)
-                bbox_labels.append(class_label)
+                # only add the bbox coordinates and bbox class label to the image information if it exists and is valid
+                if not bbox_coordinates_faulty:
+                    bbox_coordinates.append(bbox_coords)
+                    bbox_labels.append(class_label)
+
                 bbox_phrases.append(bbox_phrase)
                 bbox_phrase_exist_vars.append(bbox_phrase_exist)
                 bbox_is_abnormal_vars.append(bbox_is_abnormal)
 
-                num_regions += 1
-
-            new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
-            new_rows.append(new_image_row)
-            index += 1
+            # for val set, only add images that have information for all 29 regions
+            # for reasoning see module docstring on top of this file
+            if dataset in ["train", "test"] or (dataset == "valid" and num_regions == 29):
+                new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
+                new_rows.append(new_image_row)
+                index += 1
 
             if num_regions != 29:
                 num_images_without_29_regions += 1
