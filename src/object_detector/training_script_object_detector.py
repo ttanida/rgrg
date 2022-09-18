@@ -39,9 +39,9 @@ torch.cuda.manual_seed_all(seed_val)
 path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions"
 
 # define configurations for training run
-RUN = 9
+RUN = 10
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train on full dataset with 29 regions and without check for 29 regions. Add data augmentation of GaussNoise."""
+RUN_COMMENT = """Redo run 9, but change backbone to ResNet-50 pretrained on ImageNet."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2

@@ -5,6 +5,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 import torchvision
+import torchvision.models as models
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
 # from torchinfo import summary
@@ -48,10 +49,14 @@ class ObjectDetector(nn.Module):
         # 29 classes for 29 anatomical regions + background (defined as class 0)
         self.num_classes = 30
 
+        resnet = models.resnet50(pretrained=True)
+
+        # since we have grayscale images, we need to change the first conv layer to accept 1 in_channel (instead of 3)
+        resnet.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
         # use only the feature extractor of the pre-trained classification model
         # (i.e. use all children but the last 2, which are AdaptiveAvgPool2d and Linear)
-        resnet = xrv.models.ResNet(weights="resnet50-res512-all")
-        self.backbone = nn.Sequential(*list(resnet.model.children())[:-2])
+        self.backbone = nn.Sequential(*list(resnet.children())[:-2])
 
         # FasterRCNN needs to know the number of output channels of the backbone
         # for ResNet-50, it's 2048 (with feature maps of size 16x16)

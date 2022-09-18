@@ -52,10 +52,10 @@ def log_stats_to_txt_file(dataset: str, stats: dict) -> None:
         f.write(f"\n\t{num_bboxes_with_phrases:,} bboxes have corresponding phrases")
         f.write(f"\n\t-> {(num_bboxes_with_phrases/num_bboxes) * 100:.2f}% of bboxes have corresponding phrases")
 
-        f.write(f"\n\n\t{num_outlier_bboxes:,} bboxes with phrases have 'outlier' anatomical region names")
-        f.write(f"\n\t-> {(num_outlier_bboxes/num_bboxes_with_phrases) * 100:.2f}% of bboxes with phrases have 'outlier' names")
+        f.write(f"\n\n\t{num_outlier_bboxes:,} 'outlier' regions that don't have bboxes but have phrases:")
+        f.write(f"\n\t-> {(num_outlier_bboxes/num_bboxes_with_phrases) * 100:.2f}% of overall bboxes with phrases")
 
-        f.write("\n\n\tCounts and percentages of 'outlier' bboxes:")
+        f.write("\n\n\tCounts and percentages of 'outlier' regions without bboxes:")
         print_stats_counter_dicts(outlier_bbox_counter_dict)
 
         f.write("\n\n\tCounts and percentages of normal bboxes with phrases:")

@@ -8,10 +8,10 @@ train:
 	1,495,717 bboxes have corresponding phrases
 	-> 31.24% of bboxes have corresponding phrases
 
-	114,038 bboxes with phrases have 'outlier' anatomical region names
-	-> 7.62% of bboxes with phrases have 'outlier' names
+	114,038 'outlier' regions that don't have bboxes but have phrases:
+	-> 7.62% of overall bboxes with phrases
 
-	Counts and percentages of 'outlier' bboxes:
+	Counts and percentages of 'outlier' regions without bboxes:
 		neck: 36,298 (31.83%)
 		right chest wall: 30,054 (26.35%)
 		left chest wall: 28,673 (25.14%)
@@ -64,10 +64,10 @@ valid:
 	214,269 bboxes have corresponding phrases
 	-> 31.13% of bboxes have corresponding phrases
 
-	16,157 bboxes with phrases have 'outlier' anatomical region names
-	-> 7.54% of bboxes with phrases have 'outlier' names
+	16,157 'outlier' regions that don't have bboxes but have phrases:
+	-> 7.54% of overall bboxes with phrases
 
-	Counts and percentages of 'outlier' bboxes:
+	Counts and percentages of 'outlier' regions without bboxes:
 		neck: 5,226 (32.35%)
 		right chest wall: 4,275 (26.46%)
 		left chest wall: 4,091 (25.32%)
@@ -120,10 +120,10 @@ test:
 	426,810 bboxes have corresponding phrases
 	-> 31.30% of bboxes have corresponding phrases
 
-	32,383 bboxes with phrases have 'outlier' anatomical region names
-	-> 7.59% of bboxes with phrases have 'outlier' names
+	32,383 'outlier' regions that don't have bboxes but have phrases:
+	-> 7.59% of overall bboxes with phrases
 
-	Counts and percentages of 'outlier' bboxes:
+	Counts and percentages of 'outlier' regions without bboxes:
 		neck: 10,188 (31.46%)
 		right chest wall: 8,472 (26.16%)
 		left chest wall: 8,020 (24.77%)
