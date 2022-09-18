@@ -28,7 +28,7 @@ class CustomDataset(Dataset):
             bbox_phrase_exists = self.tokenized_dataset[index]["bbox_phrase_exists"]  # List[bool]
             bbox_is_abnormal = self.tokenized_dataset[index]["bbox_is_abnormal"]  # List[bool]
 
-            # we only need the reference phrases when computing the BLEU/BERTScore during evaluation with val and test set
+            # we only need the reference phrases when computing e.g. BLEU during evaluation with val
             if self.dataset_name != "train":
                 bbox_phrases = self.tokenized_dataset[index]["bbox_phrases"]  # List[str]
 

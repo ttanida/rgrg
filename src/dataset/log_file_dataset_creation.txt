@@ -4,3 +4,15 @@ train:
     num_faulty_bboxes: 1523
     num_images_without_29_regions: 9104
 
+valid:
+	num_images_ignored_or_avoided: 2
+	num_missing_images: 0
+	num_faulty_bboxes: 235
+	num_images_without_29_regions: 1391
+
+test:
+	num_images_ignored_or_avoided: 4
+	num_missing_images: 0
+	num_faulty_bboxes: 463
+	num_images_without_29_regions: 2420
+

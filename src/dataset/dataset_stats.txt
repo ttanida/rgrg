@@ -1,5 +1,3 @@
-
-
 train:
 	166,521 images in total
 	17 images were ignored (due to faulty x-rays etc.)
