@@ -28,7 +28,13 @@ This is done because:
     2. Writing code that evaluates on all 29 regions is easier and more performant (-> e.g. batching possible). If there are some images with < 29 regions,
     then the code has to accomodate them, making vectorization more difficult.
 
-In summary, train and test set contain images with < 29 regions, but val set only contains images with exactly 29 regions.
+For the test set, we split it into 1 test set that only contains images with bbox_coordinates, bbox_labels for all 29 regions (which are around 95% of all test set images),
+and 1 test set that contains the remaining images that do not have bbox_coordinates, bbox_labels for all 29 regions (the remaining 5% of test set images).
+
+This is done such that we can apply vectorized, efficient code to evaluate the 1st test set (which contains 95% of all test set images),
+and more inefficient code to evaluate the 2nd test set (which only contains 5% of test set iamges).
+
+The train set contains all train images, even those without bbox_coordinates, bbox_labels for all 29 regions.
 """
 import csv
 import json
@@ -42,7 +48,7 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 
-path_to_full_dataset_image_level = "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions"
+path_to_full_dataset_image_level = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 # to log certain statistics during dataset creation
@@ -59,16 +65,29 @@ NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
+    if dataset == "test":
+        new_rows, new_rows_less_than_29_regions = new_rows
+
     new_csv_file_path = os.path.join(path_to_full_dataset_image_level, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
 
-        header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
+        header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
 
         csv_writer.writerow(header)
         csv_writer.writerows(new_rows)
+
+    if dataset == "test":
+        # remove the ".csv"
+        new_csv_file_path = new_csv_file_path[:-4]
+        new_csv_file_path += "-2.csv"
+
+        with open(new_csv_file_path, "w") as fp:
+            csv_writer = csv.writer(fp)
+            csv_writer.writerow(header)
+            csv_writer.writerows(new_rows_less_than_29_regions)
 
 
 def check_coordinate(coordinate: int, dim: int) -> int:
@@ -267,7 +286,15 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             - bbox_is_abnormal_vars is a list that specifies if a region depicted in a bbox is abnormal (True) or normal (False)
     """
     new_rows = []
-    index = 0
+    num_rows_created = 0
+
+    # we split the test set into 1 that contains all images that have bbox coordinates for all 29 regions
+    # (which will be around 44969 images in total, or around 95% of all test set images),
+    # and 1 that contains the rest of the images (around 2420 images) that do not have bbox coordinates for all 29 regions
+    # this is done such that we can efficiently evaluate the first test set (since vectorized code can be written for it),
+    # and evaluate the second test set a bit more inefficiently (using for loops) afterwards
+    if dataset == "test":
+        new_rows_less_than_29_regions = []
 
     total_num_rows = get_total_num_rows(path_csv_file)
 
@@ -326,7 +353,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
 
             width, height = imagesize.get(mimic_image_file_path)
 
-            new_image_row = [index, subject_id, study_id, image_id, mimic_image_file_path]
+            new_image_row = [subject_id, study_id, image_id, mimic_image_file_path]
             bbox_coordinates = []
             bbox_labels = []
             bbox_phrases = []
@@ -338,69 +365,74 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             # but not the val dataset (see reasoning in the module docstring on top of this file)
             num_regions = 0
 
+            region_to_bbox_coordinates_dict = {}
+            # objects is a list of obj_dicts where each dict contains the bbox coordinates for a single region
+            for obj_dict in image_scene_graph["objects"]:
+                region_name = obj_dict["bbox_name"]
+                x1 = obj_dict["original_x1"]
+                y1 = obj_dict["original_y1"]
+                x2 = obj_dict["original_x2"]
+                y2 = obj_dict["original_y2"]
+
+                region_to_bbox_coordinates_dict[region_name] = [x1, y1, x2, y2]
+
             for anatomical_region in ANATOMICAL_REGIONS:
-                anatomical_region_obj_key = f"{image_id}_{anatomical_region}"
+                bbox_coords = region_to_bbox_coordinates_dict.get(anatomical_region, None)
 
-                # objects is a list of dicts where each dict contains the bbox coordinates for a single region
-                anatomical_region_obj_dict = image_scene_graph["objects"].get(anatomical_region_obj_key, None)
-
-                # since background has class label 0 for object detection, shift the remaining class labels by 1
-                class_label = ANATOMICAL_REGIONS[anatomical_region] + 1
-
-                bbox_coordinates_faulty = False
-
-                if anatomical_region_obj_dict:
-                    # get the bbox coordinates for the region
-                    x1 = anatomical_region["original_x1"]
-                    y1 = anatomical_region["original_y1"]
-                    x2 = anatomical_region["original_x2"]
-                    y2 = anatomical_region["original_y2"]
-
-                    # check if bbox coordinates are faulty
-                    if coordinates_faulty(height, width, x1, y1, x2, y2):
-                        num_faulty_bboxes += 1
-                        bbox_coordinates_faulty = True
-                    else:
-                        # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
-                        # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
-                        # and set to height if y-coordinate > height
-                        x1 = check_coordinate(x1, width)
-                        y1 = check_coordinate(y1, height)
-                        x2 = check_coordinate(x2, width)
-                        y2 = check_coordinate(y2, height)
-
-                        bbox_coords = [x1, y1, x2, y2]
-
-                        num_regions += 1
+                # if there are no bbox coordinates or they are faulty, then don't add them to image information
+                if bbox_coords is None or coordinates_faulty(height, width, *bbox_coords):
+                    num_faulty_bboxes += 1
                 else:
-                    bbox_coordinates_faulty = True
+                    x1, y1, x2, y2 = bbox_coords
+
+                    # it is possible that the bbox is only partially inside the image height and width (if e.g. x1 < 0, whereas x2 > 0)
+                    # to prevent these cases from raising an exception, we set the coordinates to 0 if coordinate < 0, set to width if x-coordinate > width
+                    # and set to height if y-coordinate > height
+                    x1 = check_coordinate(x1, width)
+                    y1 = check_coordinate(y1, height)
+                    x2 = check_coordinate(x2, width)
+                    y2 = check_coordinate(y2, height)
+
+                    bbox_coords = [x1, y1, x2, y2]
+
+                    # since background has class label 0 for object detection, shift the remaining class labels by 1
+                    class_label = ANATOMICAL_REGIONS[anatomical_region] + 1
+
+                    bbox_coordinates.append(bbox_coords)
+                    bbox_labels.append(class_label)
+
+                    num_regions += 1
 
                 # get bbox_phrase (describing the region inside bbox) and bbox_is_abnormal boolean variable (indicating if region inside bbox is abnormal)
                 # if there is no phrase, then the region inside bbox is normal and thus has "" for bbox_phrase (empty phrase) and False for bbox_is_abnormal
                 bbox_phrase, bbox_is_abnormal = anatomical_region_attributes.get(anatomical_region, ("", False))
                 bbox_phrase_exist = True if bbox_phrase != "" else False
 
-                # only add the bbox coordinates and bbox class label to the image information if it exists and is valid
-                if not bbox_coordinates_faulty:
-                    bbox_coordinates.append(bbox_coords)
-                    bbox_labels.append(class_label)
-
                 bbox_phrases.append(bbox_phrase)
                 bbox_phrase_exist_vars.append(bbox_phrase_exist)
                 bbox_is_abnormal_vars.append(bbox_is_abnormal)
 
-            # for val set, only add images that have information for all 29 regions
-            # for reasoning see module docstring on top of this file
-            if dataset in ["train", "test"] or (dataset == "valid" and num_regions == 29):
-                new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
+            new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
+
+            # for train set, add all images (even those that don't have bbox information for all 29 regions)
+            # for val set, only add images that have bbox information for all 29 regions
+            # for test set, distinguish between test set 1 that contains of test set images that have bbox information for all 29 regions
+            # (around 95% of all test set images)
+            if dataset == "train" or (dataset in ["valid", "test"] and num_regions == 29):
                 new_rows.append(new_image_row)
-                index += 1
+                num_rows_created += 1
+            # test set 2 will contain the remaining 5% of test set images, which do not have bbox information for all 29 regions
+            elif dataset == "test" and num_regions != 29:
+                new_rows_less_than_29_regions.append(new_image_row)
 
             if num_regions != 29:
                 num_images_without_29_regions += 1
 
-            if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
-                return new_rows
+            if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and num_rows_created >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
+                if dataset == "test":
+                    return new_rows, new_rows_less_than_29_regions
+                else:
+                    return new_rows
 
     with open(path_to_log_file, "a") as f:
         f.write(f"{dataset}:\n")
@@ -411,7 +443,10 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
         f.write(f"\tnum_faulty_bboxes: {num_faulty_bboxes}\n")
         f.write(f"\tnum_images_without_29_regions: {num_images_without_29_regions}\n\n")
 
-    return new_rows
+    if dataset == "test":
+        return new_rows, new_rows_less_than_29_regions
+    else:
+        return new_rows
 
 
 def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> None:
