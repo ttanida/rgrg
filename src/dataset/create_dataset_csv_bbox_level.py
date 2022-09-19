@@ -48,7 +48,7 @@ log = logging.getLogger(__name__)
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = 600000
 
 
-def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
+def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
     new_csv_file_path = os.path.join(path_to_full_dataset_bbox_level, dataset)
@@ -60,7 +60,7 @@ def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
         header = ["index", "subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_name", "x1", "y1", "x2", "y2", "phrases", "is_abnormal"]
 
         csv_writer.writerow(header)
-        csv_writer.writerows(new_rows)
+        csv_writer.writerows(csv_rows)
 
 
 def check_coordinate(coordinate: int, dim: int) -> int:
@@ -243,7 +243,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
         path_csv_file (str): path to one of the csv files in the folder silver_dataset/splits of the chest-imagenome-dataset
 
     Returns:
-        new_rows (list[list]): inner list contains information about a single bbox:
+        csv_rows (list[list]): inner list contains information about a single bbox:
             - subject_id
             - study_id
             - image_id
@@ -253,7 +253,7 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
             - phrases describing region inside bbox (if those phrases exist, else None)
             - is_abnormal, boolean variable specifying if region inside bbox is normal or abnormal
     """
-    new_rows = []
+    csv_rows = []
     index = 0
 
     total_num_rows = get_total_num_rows(path_csv_file)
@@ -339,27 +339,27 @@ def get_rows(path_csv_file: str, image_ids_to_avoid: set) -> list[list]:
                 phrases = anatomical_region_attributes[bbox_name][0]
                 is_abnormal = anatomical_region_attributes[bbox_name][1]
 
-                new_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2, phrases, is_abnormal]
+                csv_row = [index, subject_id, study_id, image_id, mimic_image_file_path, bbox_name, x1, y1, x2, y2, phrases, is_abnormal]
 
-                new_rows.append(new_row)
+                csv_rows.append(csv_row)
 
                 index += 1
 
                 if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and index >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
-                    return new_rows
+                    return csv_rows
 
-    return new_rows
+    return csv_rows
 
 
 def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> None:
     log.info(f"Creating new {dataset}.csv file...")
 
     # get rows to create new csv_file
-    # new_rows is a list of lists, where an inner list specifies all information about a single bbox of a single image
-    new_rows = get_rows(path_csv_file, image_ids_to_avoid)
+    # csv_rows is a list of lists, where an inner list specifies all information about a single bbox of a single image
+    csv_rows = get_rows(path_csv_file, image_ids_to_avoid)
 
     # write those rows into a new csv file
-    write_rows_in_new_csv_file(dataset, new_rows)
+    write_rows_in_new_csv_file(dataset, csv_rows)
 
     log.info(f"Creating new {dataset}.csv file... DONE!")
 

@@ -62,11 +62,11 @@ log = logging.getLogger(__name__)
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
 
-def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
+def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
     if dataset == "test":
-        new_rows, new_rows_less_than_29_regions = new_rows
+        csv_rows, csv_rows_less_than_29_regions = csv_rows
 
     new_csv_file_path = os.path.join(path_to_full_dataset_image_level, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
@@ -77,7 +77,7 @@ def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
         header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
 
         csv_writer.writerow(header)
-        csv_writer.writerows(new_rows)
+        csv_writer.writerows(csv_rows)
 
     if dataset == "test":
         # remove the ".csv"
@@ -87,7 +87,7 @@ def write_rows_in_new_csv_file(dataset: str, new_rows: list[list]) -> None:
         with open(new_csv_file_path, "w") as fp:
             csv_writer = csv.writer(fp)
             csv_writer.writerow(header)
-            csv_writer.writerows(new_rows_less_than_29_regions)
+            csv_writer.writerows(csv_rows_less_than_29_regions)
 
 
 def check_coordinate(coordinate: int, dim: int) -> int:
@@ -274,7 +274,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
         image_ids_to_avoid (set): as specified in "silver_dataset/splits/images_to_avoid.csv"
 
     Returns:
-        new_rows (list[list]): inner list contains information about a single image:
+        csv_rows (list[list]): inner list contains information about a single image:
             - subject_id
             - study_id
             - image_id
@@ -285,7 +285,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             - bbox_phrase_exist_vars is a list that specifies if a phrase is non-empty (True) or empty (False) for a given bbox
             - bbox_is_abnormal_vars is a list that specifies if a region depicted in a bbox is abnormal (True) or normal (False)
     """
-    new_rows = []
+    csv_rows = []
     num_rows_created = 0
 
     # we split the test set into 1 that contains all images that have bbox coordinates for all 29 regions
@@ -294,7 +294,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
     # this is done such that we can efficiently evaluate the first test set (since vectorized code can be written for it),
     # and evaluate the second test set a bit more inefficiently (using for loops) afterwards
     if dataset == "test":
-        new_rows_less_than_29_regions = []
+        csv_rows_less_than_29_regions = []
 
     total_num_rows = get_total_num_rows(path_csv_file)
 
@@ -419,20 +419,20 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             # for test set, distinguish between test set 1 that contains of test set images that have bbox information for all 29 regions
             # (around 95% of all test set images)
             if dataset == "train" or (dataset in ["valid", "test"] and num_regions == 29):
-                new_rows.append(new_image_row)
+                csv_rows.append(new_image_row)
                 num_rows_created += 1
             # test set 2 will contain the remaining 5% of test set images, which do not have bbox information for all 29 regions
             elif dataset == "test" and num_regions != 29:
-                new_rows_less_than_29_regions.append(new_image_row)
+                csv_rows_less_than_29_regions.append(new_image_row)
 
             if num_regions != 29:
                 num_images_without_29_regions += 1
 
             if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and num_rows_created >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
                 if dataset == "test":
-                    return new_rows, new_rows_less_than_29_regions
+                    return csv_rows, csv_rows_less_than_29_regions
                 else:
-                    return new_rows
+                    return csv_rows
 
     with open(path_to_log_file, "a") as f:
         f.write(f"{dataset}:\n")
@@ -444,20 +444,20 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
         f.write(f"\tnum_images_without_29_regions: {num_images_without_29_regions}\n\n")
 
     if dataset == "test":
-        return new_rows, new_rows_less_than_29_regions
+        return csv_rows, csv_rows_less_than_29_regions
     else:
-        return new_rows
+        return csv_rows
 
 
 def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> None:
     log.info(f"Creating new {dataset}.csv file...")
 
     # get rows to create new csv_file
-    # new_rows is a list of lists, where an inner list specifies all information about a single image
-    new_rows = get_rows(dataset, path_csv_file, image_ids_to_avoid)
+    # csv_rows is a list of lists, where an inner list specifies all information about a single image
+    csv_rows = get_rows(dataset, path_csv_file, image_ids_to_avoid)
 
     # write those rows into a new csv file
-    write_rows_in_new_csv_file(dataset, new_rows)
+    write_rows_in_new_csv_file(dataset, csv_rows)
 
     log.info(f"Creating new {dataset}.csv file... DONE!")
 
