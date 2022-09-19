@@ -26,7 +26,6 @@ from src.full_model.run_configurations import (
     RUN_COMMENT,
     PRETRAIN_WITHOUT_LM_MODEL,
     IMAGE_INPUT_SIZE,
-    AGGREGATE_ATTENTION_NUM,
     PERCENTAGE_OF_TRAIN_SET_TO_USE,
     PERCENTAGE_OF_VAL_SET_TO_USE,
     BATCH_SIZE,
@@ -65,7 +64,7 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions"
+path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete"
 
 
 def train_model(
@@ -506,7 +505,6 @@ def create_run_folder():
         "COMMENT": RUN_COMMENT,
         "PRETRAIN_WITHOUT_LM_MODEL": PRETRAIN_WITHOUT_LM_MODEL,
         "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
-        "AGGREGATE_ATTENTION_NUM": AGGREGATE_ATTENTION_NUM,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
         "BATCH_SIZE": BATCH_SIZE,
@@ -559,14 +557,14 @@ def main():
 
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
-    resume_training = False
-    checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=device
-    )
+    # resume_training = False
+    # checkpoint = torch.load(
+    #     "/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=device
+    # )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     model.to(device, non_blocking=True)
-    model.load_state_dict(checkpoint["model"])
+    # model.load_state_dict(checkpoint["model"])
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
@@ -576,18 +574,18 @@ def main():
     overall_steps_taken = 0
     lowest_val_loss = np.inf
 
-    if resume_training:
-        model.load_state_dict(checkpoint["model"])
-        opt.load_state_dict(checkpoint["optimizer"])
-        scaler.load_state_dict(checkpoint["scaler"])
-        current_epoch = checkpoint["current_epoch"]
-        overall_steps_taken = checkpoint["overall_steps_taken"]
-        lowest_val_loss = checkpoint["lowest_val_loss"]
+    # if resume_training:
+    #     model.load_state_dict(checkpoint["model"])
+    #     opt.load_state_dict(checkpoint["optimizer"])
+    #     scaler.load_state_dict(checkpoint["scaler"])
+    #     current_epoch = checkpoint["current_epoch"]
+    #     overall_steps_taken = checkpoint["overall_steps_taken"]
+    #     lowest_val_loss = checkpoint["lowest_val_loss"]
 
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
-    del checkpoint
+    # del checkpoint
 
     log.info("Starting training!")
 

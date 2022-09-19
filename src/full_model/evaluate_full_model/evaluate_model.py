@@ -520,18 +520,19 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
 
         torch.save(checkpoint, save_path)
 
-    # save model every time report level BLEU-4 is better than a certain threshold
-    bleu_4_report_level = language_model_scores["report"]["bleu_4"]
-    if bleu_4_report_level > 0.137:
-        save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000 and bool_evaluate_language_model:
+        # save model every time report level BLEU-4 is better than a certain threshold
+        bleu_4_report_level = language_model_scores["report"]["bleu_4"]
+        if bleu_4_report_level > 0.137:
+            save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
 
-        checkpoint = {
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "scaler": scaler.state_dict(),
-            "current_epoch": epoch,
-            "overall_steps_taken": overall_steps_taken,
-            "lowest_val_loss": total_val_loss,
-        }
+            checkpoint = {
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scaler": scaler.state_dict(),
+                "current_epoch": epoch,
+                "overall_steps_taken": overall_steps_taken,
+                "lowest_val_loss": total_val_loss,
+            }
 
-        torch.save(checkpoint, save_path)
+            torch.save(checkpoint, save_path)
