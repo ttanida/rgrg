@@ -25,6 +25,7 @@ from src.full_model.run_configurations import (
     RUN,
     RUN_COMMENT,
     PRETRAIN_WITHOUT_LM_MODEL,
+    PRETRAIN_LM_MODEL,
     IMAGE_INPUT_SIZE,
     PERCENTAGE_OF_TRAIN_SET_TO_USE,
     PERCENTAGE_OF_VAL_SET_TO_USE,
@@ -64,7 +65,9 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
+# TODO: change dataset
+# path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
+path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete"
 
 
 def train_model(
@@ -201,13 +204,12 @@ def train_model(
                             language_model_loss,
                         ) = output
 
-                    # TODO: delete pre-training of language model
-                    if epoch == 0:
+                    # sum up all 4 losses from the object detector
+                    obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
+
+                    if PRETRAIN_LM_MODEL:
                         total_loss = language_model_loss
                     else:
-                        # sum up all 4 losses from the object detector
-                        obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
-
                         # sum up the rest of the losses
                         total_loss = (
                             WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
@@ -505,6 +507,7 @@ def create_run_folder():
     config_parameters = {
         "COMMENT": RUN_COMMENT,
         "PRETRAIN_WITHOUT_LM_MODEL": PRETRAIN_WITHOUT_LM_MODEL,
+        "PRETRAIN_LM_MODEL": PRETRAIN_LM_MODEL,
         "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
@@ -563,7 +566,7 @@ def main():
         "/u/home/tanida/runs/full_model/run_23/checkpoints/checkpoint_val_loss_15.846_overall_steps_78225.pt", map_location=device
     )
 
-    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
+    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL, pretrain_lm_model=PRETRAIN_LM_MODEL)
     model.to(device, non_blocking=True)
     model.load_state_dict(checkpoint["model"])
     model.train()

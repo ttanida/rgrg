@@ -1,14 +1,15 @@
 # define configurations for training run
 RUN = 24
-RUN_COMMENT = """Train full model on new dataset with 29 regions."""
-PRETRAIN_WITHOUT_LM_MODEL = False
+RUN_COMMENT = """Pre-train language model for 1 epoch on new dataset with 29 regions."""
+PRETRAIN_WITHOUT_LM_MODEL = False  # train object detector + 2 binary classifiers
+PRETRAIN_LM_MODEL = True  # only train language model
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
 BATCH_SIZE = 2
 EFFECTIVE_BATCH_SIZE = 64  # batch size after gradient accumulation
 NUM_WORKERS = 10
-EPOCHS = 20
+EPOCHS = 1
 LR = 1e-4
 # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 # EVALUATE_EVERY_K_BATCHES should be divisible by ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
