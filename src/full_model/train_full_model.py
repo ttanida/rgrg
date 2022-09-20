@@ -65,9 +65,7 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-# TODO: change dataset
-# path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
-path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete"
+path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 
 
 def train_model(

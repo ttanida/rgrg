@@ -25,7 +25,7 @@ The specific information of each row are:
 For the validation set, we only include images that have bbox_coordinates, bbox_labels for all 29 regions.
 This is done because:
     1. We will usually not evaluate on the whole validation set (which contains 23,953 images), but only on a fraction of it (e.g. 5% - 20%).
-    2. Writing code that evaluates on all 29 regions is easier and more performant (-> e.g. batching possible). If there are some images with < 29 regions,
+    2. Writing code that evaluates on all 29 regions is easier and more performant (-> e.g. vectorization possible). If there are some images with < 29 regions,
     then the code has to accomodate them, making vectorization more difficult.
 
 For the test set, we split it into 1 test set that only contains images with bbox_coordinates, bbox_labels for all 29 regions (which are around 95% of all test set images),
