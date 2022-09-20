@@ -64,7 +64,7 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete"
+path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 
 
 def train_model(
@@ -201,16 +201,20 @@ def train_model(
                             language_model_loss,
                         ) = output
 
-                    # sum up all 4 losses from the object detector
-                    obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
+                    # TODO: delete pre-training of language model
+                    if epoch == 0:
+                        total_loss = language_model_loss
+                    else:
+                        # sum up all 4 losses from the object detector
+                        obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
-                    # sum up the rest of the losses
-                    total_loss = (
-                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
-                    )
+                        # sum up the rest of the losses
+                        total_loss = (
+                            WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
+                        )
 
-                    if not PRETRAIN_WITHOUT_LM_MODEL:
-                        total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
+                        if not PRETRAIN_WITHOUT_LM_MODEL:
+                            total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
 
                 scaler.scale(total_loss).backward()
 
@@ -277,10 +281,7 @@ def train_model(
                 )
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
 
-                if bool_evaluate_language_model:
-                    bool_evaluate_language_model = False
-                else:
-                    bool_evaluate_language_model = True
+                bool_evaluate_language_model = False if bool_evaluate_language_model else True
 
                 # set the model back to training
                 model.train()
@@ -558,13 +559,13 @@ def main():
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     # resume_training = False
-    # checkpoint = torch.load(
-    #     "/u/home/tanida/runs/full_model/run_14/checkpoints/checkpoint_val_loss_31.479_epoch_4.pt", map_location=device
-    # )
+    checkpoint = torch.load(
+        "/u/home/tanida/runs/full_model/run_23/checkpoints/checkpoint_val_loss_15.846_overall_steps_78225.pt", map_location=device
+    )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     model.to(device, non_blocking=True)
-    # model.load_state_dict(checkpoint["model"])
+    model.load_state_dict(checkpoint["model"])
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)

@@ -15,7 +15,6 @@ class ReportGenerationModel(nn.Module):
         - object detector encoder
         - binary classifier for selecting regions for sentence genneration
         - binary classifier for detecting if a region is abnormal or normal (to encode this information in the region feature vectors)
-        - contrastive attention to get better region features that have the contrastive abnormal information encoded in them
         - language model decoder
     """
 
@@ -25,15 +24,13 @@ class ReportGenerationModel(nn.Module):
         self.pretrain_without_lm_model = pretrain_without_lm_model
 
         self.object_detector = ObjectDetector(return_feature_vectors=True)
-        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_10/weights/val_loss_13.482_epoch_5.pth"
-        self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
+        # path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_10/weights/val_loss_13.482_epoch_5.pth"
+        # self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
         self.language_model = LanguageModel()
-        # path_to_best_language_model_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
-        # self.language_model.load_state_dict(torch.load(path_to_best_language_model_weights))
 
     def forward(
         self,

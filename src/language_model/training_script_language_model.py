@@ -444,7 +444,7 @@ def create_run_folder():
     Run folder will contain a folder for saving the trained weights, a folder for the tensorboard files
     as well as a config file that specifies the overall parameters used for training.
     """
-    run_folder_path_parent_dir = "/u/home/tanida/runs/decoder_model"
+    run_folder_path_parent_dir = "/u/home/tanida/runs/language_model"
 
     run_folder_path = os.path.join(run_folder_path_parent_dir, f"run_{RUN}")
     weights_folder_path = os.path.join(run_folder_path, "weights")
