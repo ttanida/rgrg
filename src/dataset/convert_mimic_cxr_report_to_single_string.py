@@ -42,11 +42,11 @@ def convert_mimic_cxr_report_to_single_str(study: str):
         could be "Recommend obtaining PA and lateral chest radiograph.". These sections are removed.
 
     Args:
-        study (str): e.g. "s56522600"
+        study (str): e.g. "s56522600.txt"
     Returns:
         report (str): single str that contains information of the findings and impression sections
     """
-    path_to_report_txt_file = os.path.join(path_to_folder_with_mimic_cxr_reports, study) + ".txt"
+    path_to_report_txt_file = os.path.join(path_to_folder_with_mimic_cxr_reports, study)
     with open(path_to_report_txt_file) as f:
         lines = f.readlines()
 
@@ -87,6 +87,8 @@ def get_report(remaining_lines):
     # remove unnecessary whitespaces
     report = " ".join(report.split())
 
+    report = remove_duplicate_sentences(report)
+
     return report
 
 
@@ -97,6 +99,20 @@ def remove_notification_recommendation(report):
             report = report[:start_index]
 
     return report
+
+
+def remove_duplicate_sentences(report):
+    # remove the last period
+    if report[-1] == ".":
+        report = report[:-1]
+
+    # dicts are insertion ordered as of Python 3.6
+    sentence_dict = {sentence: None for sentence in report.split(". ")}
+
+    report = ". ".join(sentence for sentence in sentence_dict)
+
+    # add last period
+    return report + "."
 
 
 def get_last_paragraph(lines):
