@@ -32,8 +32,8 @@ class ReportGenerationModel(nn.Module):
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()
 
         self.language_model = LanguageModel()
-        path_to_best_language_model_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
-        self.language_model.load_state_dict(torch.load(path_to_best_language_model_weights))
+        # path_to_best_language_model_weights = "/u/home/tanida/runs/decoder_model/run_3/weights/val_loss_18.717_epoch_2.pth"
+        # self.language_model.load_state_dict(torch.load(path_to_best_language_model_weights))
 
     def forward(
         self,
