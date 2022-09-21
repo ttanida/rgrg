@@ -100,7 +100,7 @@ def write_all_losses_and_scores_to_tensorboard(
     write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores)
 
     # TODO: delete 2nd condition (since it's only there to save time)
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 40000 and bool_evaluate_language_model:
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000 and bool_evaluate_language_model:
         write_language_model_scores(writer, overall_steps_taken, language_model_scores)
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
@@ -477,7 +477,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
     ) = get_val_losses_and_other_metrics(model, val_dl, log_file, epoch)
 
     # TODO: delete 2nd and 3rd condition (since they are only there to save time)
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 40000 and bool_evaluate_language_model:
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000 and bool_evaluate_language_model:
         language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
     else:
         language_model_scores = None
@@ -520,7 +520,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
 
         torch.save(checkpoint, save_path)
 
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 40000 and bool_evaluate_language_model:
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000 and bool_evaluate_language_model:
         # save model every time report level BLEU-4 is better than a certain threshold
         bleu_4_report_level = language_model_scores["report"]["bleu_4"]
         if bleu_4_report_level > 0.137:
