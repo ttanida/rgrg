@@ -32,7 +32,7 @@ class CustomDataset(Dataset):
                 # we only need the reference phrases when computing e.g. BLEU during evaluation
                 bbox_phrases = self.tokenized_dataset[index]["bbox_phrases"]  # List[str]
 
-                # we need the study_id to retrieve the corresponding mimic_cxr report during evaliation
+                # we need the study_id to retrieve the corresponding mimic_cxr report during evaluation
                 study_id = self.tokenized_dataset[index]["study_id"]  # str
 
             # cv2.imread by default loads an image with 3 channels
