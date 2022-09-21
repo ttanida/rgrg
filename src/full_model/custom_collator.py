@@ -20,6 +20,7 @@ class CustomCollator:
 
         For the val dataset, we have the additional key:
           - bbox_phrases
+          - study_id
         """
         # discard samples from batch where __getitem__ from custom_dataset failed (i.e. returned None)
         # otherwise, whole training loop would stop
@@ -45,6 +46,9 @@ class CustomCollator:
             # the inner list will hold all reference phrases for a single image
             bbox_phrases_batch = []
 
+            # also create a List[str] to hold the study ids for the images in the batch
+            study_ids = []
+
         for i, sample_dict in enumerate(batch):
             # remove image tensors from batch and store them in dedicated images_batch tensor
             images_batch[i] = sample_dict.pop("image")
@@ -63,6 +67,8 @@ class CustomCollator:
             if self.is_val and not self.pretrain_without_lm_model:
                 # remove list bbox_phrases from batch and store it in the list bbox_phrases_batch
                 bbox_phrases_batch.append(sample_dict.pop("bbox_phrases"))
+
+                study_ids.append(sample_dict.pop("study_id"))
 
         if self.pretrain_without_lm_model:
             batch = {}
@@ -92,6 +98,7 @@ class CustomCollator:
 
         if self.is_val and not self.pretrain_without_lm_model:
             batch["reference_sentences"] = bbox_phrases_batch
+            batch["study_ids"] = study_ids
 
         return batch
 

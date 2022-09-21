@@ -42,6 +42,7 @@ from src.full_model.run_configurations import (
 )
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+path_to_val_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports"
 
 
 def compute_final_language_model_scores(language_model_scores):
@@ -80,7 +81,7 @@ def write_sentences_and_reports_to_file(
                 # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
                 f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
-    def write_reports(generated_reports, reference_reports, removed_similar_generated_sentences):
+    def write_reports(generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences):
         txt_file_name = os.path.join(
             generated_sentences_and_reports_folder_path,
             "generated_reports",
@@ -88,11 +89,12 @@ def write_sentences_and_reports_to_file(
         )
 
         with open(txt_file_name, "w") as f:
-            for gen_report, ref_report, removed_similar_gen_sents in zip(
-                generated_reports, reference_reports, removed_similar_generated_sentences
+            for gen_report, ref_report, ref_report_mimic, removed_similar_gen_sents in zip(
+                generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences
             ):
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
+                f.write(f"Ref report mimic: {ref_report_mimic}\n\n")
                 f.write("Generated sentences that were removed:\n")
                 for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
                     f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
@@ -111,11 +113,12 @@ def write_sentences_and_reports_to_file(
     write_sentences(generated_sentences, reference_sentences, is_abnormal=False)
     write_sentences(generated_abnormal_sentences, reference_abnormal_sentences, is_abnormal=True)
 
-    # generated_reports and reference_reports are list of str
+    # generated_reports, reference_reports and reference_reports_mimic are list of str
     generated_reports = gen_and_ref_reports_to_save_to_file["generated_reports"]
     reference_reports = gen_and_ref_reports_to_save_to_file["reference_reports"]
+    reference_reports_mimic = gen_and_ref_reports_to_save_to_file["reference_reports_mimic"]
     removed_similar_generated_sentences = gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"]
-    write_reports(generated_reports, reference_reports, removed_similar_generated_sentences)
+    write_reports(generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences)
 
 
 def get_plot_title(region_set, region_indices, region_colors, class_detected_img) -> str:
@@ -407,6 +410,7 @@ def update_language_model_scores(
     reference_sentences_for_selected_regions,
     generated_reports,
     reference_reports,
+    reference_reports_mimic,
     selected_regions,
     region_is_abnormal,
 ):
@@ -459,15 +463,45 @@ def update_language_model_scores(
         return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
 
     def update_language_model_scores_report_level():
+        # reference reports composed of reference sentences from ChestImaGenome dataset
         for score in language_model_scores["report"].values():
             score.add_batch(
                 predictions=generated_reports, references=reference_reports
+            )
+
+        # reference reports mimic taken directly from MIMIC-CXR dataset
+        for score in language_model_scores["report_mimic"].values():
+            score.add_batch(
+                predictions=generated_reports, references=reference_reports_mimic
             )
 
     gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions = update_language_model_scores_sentence_level()
     update_language_model_scores_report_level()
 
     return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
+
+
+def get_reference_reports_mimic(study_ids) -> list[str]:
+    """
+    The folder "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports" (specified by path_to_val_mimic_reports_folder)
+    contains 200 mimic-cxr reports that correspond to the first 200 images in the validation set.
+
+    The number 200 was chosen because we generate 200 reports for the first 200 images in the validation set during each evaluation,
+    (200 = NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION * BATCH_SIZE = 100 * 2, see full_model/run_configurations.py)
+    since generating a report for every image in the validation set would take too long.
+
+    The original mimic-cxr reports were processed (see dataset/convert_mimic_cxr_report_to_single_string.py) from txt files that
+    contained multiple lines (containing irrelevant information) to txt files that only contain a single line (containing the information
+    from the findings and impression sections of the original report).
+    """
+    reference_reports_mimic = []
+    for study_id in study_ids:
+        study_txt_file_path = os.path.join(path_to_val_mimic_reports_folder, f"s{study_id}.txt")
+        with open(study_txt_file_path) as f:
+            report = f.readline()
+            reference_reports_mimic.append(report)
+
+    return reference_reports_mimic
 
 
 def get_generated_and_reference_reports(
@@ -629,13 +663,16 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
     language_model_scores = {}
 
-    # compute bleu scores for all, normal and abnormal reference sentences as well as full reports
-    for subset in ["all", "normal", "abnormal", "report"]:
+    # compute bleu scores for all, normal and abnormal reference sentences as well as
+    # full reports composed of the reference sentences given by ChestImaGenome (specified by the key "report") and
+    # full reports directly taken from MIMIC-CXR (specified by the key "report_mimic")
+    for subset in ["all", "normal", "abnormal", "report", "report_mimic"]:
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
 
     # compute meteor and rouge-L scores for complete reports
-    language_model_scores["report"]["meteor"] = evaluate.load("meteor")
-    language_model_scores["report"]["rouge"] = evaluate.load("rouge")
+    for report_type in ["report", "report_mimic"]:
+        language_model_scores[report_type]["meteor"] = evaluate.load("meteor")
+        language_model_scores[report_type]["rouge"] = evaluate.load("rouge")
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],
@@ -648,6 +685,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
         "generated_reports": [],
         "removed_similar_generated_sentences": [],
         "reference_reports": [],
+        "reference_reports_mimic": [],
     }
 
     # we also want to plot a couple of images
@@ -671,6 +709,10 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
             # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
             reference_sentences = batch["reference_sentences"]
+
+            # List[str] that holds the study ids for the images in the batch. These are used to retrieve the corresponding
+            # MIMIC-CXR reports from a separate folder
+            study_ids = batch["study_ids"]
 
             try:
                 with torch.autocast(device_type='cuda', dtype=torch.float16):
@@ -730,6 +772,8 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer
             )
 
+            reference_reports_mimic = get_reference_reports_mimic(study_ids)
+
             (
                 gen_sents_for_abnormal_selected_regions,
                 ref_sents_for_abnormal_selected_regions,
@@ -739,6 +783,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 reference_sentences_for_selected_regions,
                 generated_reports,
                 reference_reports,
+                reference_reports_mimic,
                 selected_regions,
                 region_is_abnormal,
             )
@@ -760,6 +805,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
                 gen_and_ref_reports_to_save_to_file["generated_reports"].extend(generated_reports)
                 gen_and_ref_reports_to_save_to_file["reference_reports"].extend(reference_reports)
+                gen_and_ref_reports_to_save_to_file["reference_reports_mimic"].extend(reference_reports_mimic)
                 gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"].extend(
                     removed_similar_generated_sentences
                 )

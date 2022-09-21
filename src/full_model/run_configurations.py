@@ -1,8 +1,35 @@
-# define configurations for training run
+"""
+Define configurations for training run.
+
+There are 3 different settings for the PRETRAIN_WITHOUT_LM_MODEL and PRETRAIN_LM_MODEL flags:
+
+(1) PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = False
+
+In this case, only the object detector and the 2 binary classifiers are trained in the full model,
+with the language model (as the last component) being fully excluded from the model architecture.
+This setting is for pre-training the 2 binary classifiers, since it's assumed that the object detector
+was already trained separately in object_detector/training_script_object_detector.py
+
+(2) PRETRAIN_WITHOUT_LM_MODEL = False and PRETRAIN_LM_MODEL = True
+
+In this case, all 4 components (object detector + 2 binary classifiers + language model) are included in the model architecture,
+but only the language model weights are updated. This setting is for pre-training the language model.
+
+(3) PRETRAIN_WITHOUT_LM_MODEL = False and PRETRAIN_LM_MODEL = False
+
+In this case, all 4 components are included in the model architecture, and all 4 are trained.
+This setting is for training the full model.
+
+--------
+Ideally, the 3 settings should be gone through in order, i.e. first pre-training the binary classifiers,
+then pre-training the language model, then training the full model.
+
+Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
+"""
 RUN = 25
 RUN_COMMENT = """Redo 24, but pre-train language model longer than 1 epoch"""
-PRETRAIN_WITHOUT_LM_MODEL = False  # train object detector + 2 binary classifiers
-PRETRAIN_LM_MODEL = True  # only train language model
+PRETRAIN_WITHOUT_LM_MODEL = False
+PRETRAIN_LM_MODEL = True
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.05

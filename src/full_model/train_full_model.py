@@ -163,15 +163,15 @@ def train_model(
             region_has_sentence = region_has_sentence.to(device, non_blocking=True)
             region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
 
-            if not PRETRAIN_WITHOUT_LM_MODEL:
+            if PRETRAIN_WITHOUT_LM_MODEL:
+                input_ids = None
+                attention_mask = None
+            else:
                 input_ids = batch["input_ids"]
                 attention_mask = batch["attention_mask"]
 
                 input_ids = input_ids.to(device, non_blocking=True)
                 attention_mask = attention_mask.to(device, non_blocking=True)
-            else:
-                input_ids = None
-                attention_mask = None
 
             try:
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
@@ -393,6 +393,7 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
     # tokenized datasets will consist of the columns
+    #   - study_id
     #   - mimic_image_file_path
     #   - bbox_coordinates (List[List[int]])
     #   - bbox_labels (List[int])
@@ -415,6 +416,7 @@ def get_tokenizer():
 
 def get_datasets(config_file_path):
     usecols = [
+        "study_id",
         "mimic_image_file_path",
         "bbox_coordinates",
         "bbox_labels",

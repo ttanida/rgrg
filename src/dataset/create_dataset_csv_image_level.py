@@ -71,18 +71,16 @@ def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     new_csv_file_path = os.path.join(path_to_full_dataset_image_level, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
+    header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
+
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
-
-        header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
 
         csv_writer.writerow(header)
         csv_writer.writerows(csv_rows)
 
     if dataset == "test":
-        # remove the ".csv"
-        new_csv_file_path = new_csv_file_path[:-4]
-        new_csv_file_path += "-2.csv"
+        new_csv_file_path = new_csv_file_path.replace(".csv", "-2.csv")
 
         with open(new_csv_file_path, "w") as fp:
             csv_writer = csv.writer(fp)
