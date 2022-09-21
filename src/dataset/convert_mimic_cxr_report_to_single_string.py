@@ -82,7 +82,7 @@ def get_report(remaining_lines):
     report = remove_notification_recommendation(report)
 
     # remove substrings
-    report = re.sub(SUBSTRING_TO_REMOVE_FROM_REPORT, '', report, flags=re.DOTALL)
+    report = re.sub(SUBSTRING_TO_REMOVE_FROM_REPORT, "", report, flags=re.DOTALL)
 
     # remove unnecessary whitespaces
     report = " ".join(report.split())

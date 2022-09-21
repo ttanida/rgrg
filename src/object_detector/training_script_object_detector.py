@@ -36,7 +36,7 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete-without-check-for-29-regions"
+path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 
 # define configurations for training run
 RUN = 10

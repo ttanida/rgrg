@@ -193,7 +193,7 @@ def convert_phrases_to_single_string(phrases: list[str], sentence_tokenizer) -> 
             return phrases
 
         phrases = remove_wet_read(phrases)
-        phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL)
+        phrases = re.sub(SUBSTRINGS_TO_REMOVE, "", phrases, flags=re.DOTALL)
 
         return phrases
 

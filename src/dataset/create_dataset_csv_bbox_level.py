@@ -1,4 +1,7 @@
 """
+NOTE: this dataset is not strictly necessary anymore, since language model is now pretrained as part of the full model,
+i.e. using the dataset created by create_dataset_csv_image_level.py
+
 Script for creating custom train, valid, test csv files.
 
 Each row in the csv files specifies information about a single bbox (i.e. single anatomical region) of a single image.
@@ -164,7 +167,7 @@ def convert_phrases_to_single_string(phrases: list[str], sentence_tokenizer) -> 
             return phrases
 
         phrases = remove_wet_read(phrases)
-        phrases = re.sub(SUBSTRINGS_TO_REMOVE, '', phrases, flags=re.DOTALL)
+        phrases = re.sub(SUBSTRINGS_TO_REMOVE, "", phrases, flags=re.DOTALL)
 
         return phrases
 
