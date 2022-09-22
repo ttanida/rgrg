@@ -54,6 +54,7 @@ class ReportGenerationModel(nn.Module):
         # class_detected is a boolean tensor of shape [batch_size x 29]. Its value is True for a class if the object detector detected the class/region in the image
 
         if self.training:
+            # if self.pretrain_lm_model = True, then don't update weights of object detector and binary classifiers, hence torch.no_grad()
             with torch.no_grad() if self.pretrain_lm_model else nullcontext():
                 obj_detector_loss_dict, top_region_features, class_detected = self.object_detector(images, image_targets)
 
