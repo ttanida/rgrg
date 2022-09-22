@@ -4,10 +4,12 @@ evaluate==0.1.2
 GPUtil==1.4.0
 imagesize==1.3.0
 matplotlib==3.5.2
+nltk==3.7
 numpy==1.22.3
 opencv_python==4.5.5.64
 pandas==1.4.2
 Pillow==9.2.0
+rouge-score==0.1.2
 scikit_learn==1.1.2
 setuptools==61.2.0
 spacy==3.4.1
