@@ -26,8 +26,8 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 26
-RUN_COMMENT = """Train full model on new dataset with 29 regions."""
+RUN = 27
+RUN_COMMENT = """Train full model on new dataset with 29 regions. Increase weight language model loss to 4. Decrease lr to 5e-5."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
@@ -37,7 +37,7 @@ BATCH_SIZE = 2
 EFFECTIVE_BATCH_SIZE = 64  # batch size after gradient accumulation
 NUM_WORKERS = 10
 EPOCHS = 20
-LR = 1e-4
+LR = 5e-5
 # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 # EVALUATE_EVERY_K_BATCHES should be divisible by ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
 EVALUATE_EVERY_K_BATCHES = 4800
@@ -55,4 +55,4 @@ BERTSCORE_SIMILARITY_THRESHOLD = 0.9  # threshold for discarding generated sente
 WEIGHT_OBJECT_DETECTOR_LOSS = 1
 WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS = 5
 WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS = 5
-WEIGHT_LANGUAGE_MODEL_LOSS = 2
+WEIGHT_LANGUAGE_MODEL_LOSS = 4
