@@ -37,7 +37,7 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.evaluate_language_model import evaluate_language_model
-from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL
+from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL, WEIGHT_OBJECT_DETECTOR_LOSS, WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS, WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS, WEIGHT_LANGUAGE_MODEL_LOSS
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -402,10 +402,10 @@ def get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch):
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
             # sum up the rest of the losses
-            total_loss = obj_detector_losses + classifier_loss_region_selection + classifier_loss_region_abnormal
+            total_loss = WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
 
             if not PRETRAIN_WITHOUT_LM_MODEL:
-                total_loss += language_model_loss
+                total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
 
             list_of_losses = [
                 total_loss,
