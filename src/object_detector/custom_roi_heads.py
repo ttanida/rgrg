@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Tuple
 
 import torch
+import torch.nn as nn
 from torch import Tensor
 import torch.nn.functional as F
 from torchvision.models.detection.roi_heads import RoIHeads, fastrcnn_loss
@@ -11,6 +12,7 @@ class CustomRoIHeads(RoIHeads):
     def __init__(
         self,
         return_feature_vectors,
+        feature_map_output_size,
         box_roi_pool,
         box_head,
         box_predictor,
@@ -53,6 +55,10 @@ class CustomRoIHeads(RoIHeads):
         )
         # return_feature_vectors == True if we train/evaluate the object detector as part of the full model
         self.return_feature_vectors = return_feature_vectors
+
+        # set kernel_size = feature_map_output_size, such that we average over the whole feature maps
+        self.avg_pool = nn.AvgPool2d(kernel_size=feature_map_output_size)
+        self.dim_reduction = nn.Linear(2048, 1024)
 
     def get_top_region_features_detections_class_detected(
         self,
@@ -243,15 +249,19 @@ class CustomRoIHeads(RoIHeads):
         # if we evaluate the object detector (in isolation or as part of the full model), we need the "detections"
         # if we do either of them, we always need "class_detected" (see doc_string of method for details)
         if self.return_feature_vectors or not self.training:
-            # box_features of shape [overall_num_proposals_for_all_images x (2048 * 8 * 8)]
-            box_features = box_roi_pool_feature_maps.flatten(start_dim=1)
+            # average over the spatial dimensions, i.e. transform roi pooling features maps from [num_proposals, 2048, 8, 8] to [num_proposals, 2048, 1, 1]
+            box_features = self.avg_pool(box_roi_pool_feature_maps)
+
+            # remove all dims of size 1
+            box_features = torch.squeeze(box_features)
 
             output = self.get_top_region_features_detections_class_detected(box_features, box_regression, class_logits, proposals, image_shapes)
 
             roi_heads_output["class_detected"] = output["class_detected"]
 
             if self.return_feature_vectors:
-                roi_heads_output["top_region_features"] = output["top_region_features"]
+                # transform top_region_features from [batch_size x 36 x 2048] to [batch_size x 36 x 1024]
+                roi_heads_output["top_region_features"] = self.dim_reduction(output["top_region_features"])
 
             if not self.training:
                 roi_heads_output["detections"] = output["detections"]

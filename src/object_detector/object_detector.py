@@ -78,8 +78,6 @@ class ObjectDetector(nn.Module):
         anchor_generator = AnchorGenerator(
             sizes=((20, 40, 60, 80, 100, 120, 140, 160, 180, 300),),
             aspect_ratios=((0.2, 0.25, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.3, 1.5, 2.1, 2.6, 3.0, 5.0, 8.0),),
-            # sizes=((32, 64, 128, 256, 512),),
-            # aspect_ratios=((0.5, 1.0, 2.0),),
         )
 
         rpn_head = RPNHead(self.backbone.out_channels, anchor_generator.num_anchors_per_location()[0])
@@ -103,9 +101,9 @@ class ObjectDetector(nn.Module):
     def _create_roi_heads(self):
         # define the roi pooling layer
         # if the backbone returns a Tensor, featmap_names is expected to be [0]
-        # (uniform) size of feature maps after roi pooling layer is defined in output_size
-        # TODO: try different roi pool output sizes
-        roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=["0"], output_size=8, sampling_ratio=2)
+        # (uniform) size of feature maps after roi pooling layer is defined in feature_map_output_size
+        feature_map_output_size = 8
+        roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=["0"], output_size=feature_map_output_size, sampling_ratio=2)
 
         resolution = roi_pooler.output_size[0]
         representation_size = 1024
@@ -116,6 +114,7 @@ class ObjectDetector(nn.Module):
         # use default values for RoI heads
         roi_heads = CustomRoIHeads(
             return_feature_vectors=self.return_feature_vectors,
+            feature_map_output_size=feature_map_output_size,
             box_roi_pool=roi_pooler,
             box_head=box_head,
             box_predictor=box_predictor,

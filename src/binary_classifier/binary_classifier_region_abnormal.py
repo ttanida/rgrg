@@ -16,9 +16,9 @@ class BinaryClassifierRegionAbnormal(nn.Module):
         super().__init__()
 
         self.classifier = nn.Sequential(
-            nn.Linear(in_features=(2048 * 8 * 8), out_features=1024),
+            nn.Linear(in_features=1024, out_features=512),
             nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=128),
+            nn.Linear(in_features=512, out_features=128),
             nn.ReLU(),
             nn.Linear(in_features=128, out_features=1)
         )
