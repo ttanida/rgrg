@@ -39,9 +39,9 @@ torch.cuda.manual_seed_all(seed_val)
 path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 
 # define configurations for training run
-RUN = 10
+RUN = 11
 # can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Redo run 9, but change backbone to ResNet-50 pretrained on ImageNet."""
+RUN_COMMENT = """Train object detector with avg_pooling and dim_reduction again."""
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
