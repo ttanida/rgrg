@@ -26,26 +26,26 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 28
-RUN_COMMENT = """Train full model on new dataset with 29 regions. Decrease weight language model loss to 1. Decrease lr to 5e-5."""
-PRETRAIN_WITHOUT_LM_MODEL = False
+RUN = 29
+RUN_COMMENT = """Pre-train full model minus language model."""
+PRETRAIN_WITHOUT_LM_MODEL = True
 PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
-BATCH_SIZE = 2
+BATCH_SIZE = 8
 EFFECTIVE_BATCH_SIZE = 64  # batch size after gradient accumulation
 NUM_WORKERS = 10
 EPOCHS = 20
-LR = 5e-5
+LR = 1e-4
 # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 # EVALUATE_EVERY_K_BATCHES should be divisible by ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
-EVALUATE_EVERY_K_BATCHES = 4800
+EVALUATE_EVERY_K_BATCHES = 2400
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 THRESHOLD_LR_SCHEDULER = 1e-3  # threshold for measuring the new optimum, to only focus on significant changes
 FACTOR_LR_SCHEDULER = 0.5
 COOLDOWN_LR_SCHEDULER = 5
-NUM_BEAMS = 7
+NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated reports with their gt reference reports to a txt file
@@ -55,4 +55,4 @@ BERTSCORE_SIMILARITY_THRESHOLD = 0.9  # threshold for discarding generated sente
 WEIGHT_OBJECT_DETECTOR_LOSS = 1
 WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS = 5
 WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS = 5
-WEIGHT_LANGUAGE_MODEL_LOSS = 1
+WEIGHT_LANGUAGE_MODEL_LOSS = 2

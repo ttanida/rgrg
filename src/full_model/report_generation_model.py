@@ -25,8 +25,8 @@ class ReportGenerationModel(nn.Module):
         self.pretrain_lm_model = pretrain_lm_model
 
         self.object_detector = ObjectDetector(return_feature_vectors=True)
-        # path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_10/weights/val_loss_13.482_epoch_5.pth"
-        # self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
+        path_to_best_object_detector_weights = "/u/home/tanida/runs/object_detector/run_11/weights/val_loss_13.482_epoch_5.pth"
+        self.object_detector.load_state_dict(torch.load(path_to_best_object_detector_weights))
 
         self.binary_classifier_region_selection = BinaryClassifierRegionSelection()
         self.binary_classifier_region_abnormal = BinaryClassifierRegionAbnormal()

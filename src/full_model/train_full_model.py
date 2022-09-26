@@ -562,13 +562,13 @@ def main():
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     # resume_training = False
-    checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_25/checkpoints/checkpoint_val_loss_7.525_overall_steps_140619.pt", map_location=device
-    )
+    # checkpoint = torch.load(
+    #     "/u/home/tanida/runs/full_model/run_25/checkpoints/checkpoint_val_loss_7.525_overall_steps_140619.pt", map_location=device
+    # )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL, pretrain_lm_model=PRETRAIN_LM_MODEL)
     model.to(device, non_blocking=True)
-    model.load_state_dict(checkpoint["model"])
+    # model.load_state_dict(checkpoint["model"])
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
@@ -589,7 +589,7 @@ def main():
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
-    del checkpoint
+    # del checkpoint
 
     log.info("Starting training!")
 
