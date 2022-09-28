@@ -4,7 +4,8 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-path_to_mimic_cxr_images = "/u/home/tanida/datasets/mimic-cxr-jpg/files"
+from src.path_datasets import path_mimic_cxr
+
 TOL = 1e-4
 COUNTER_PATIENCE = 50
 
@@ -73,7 +74,8 @@ def get_image_paths_mimic() -> list:
     Returns a list of all file paths to mimic-cxr images.
     """
     image_paths = []
-    for root, _, files in tqdm(os.walk(path_to_mimic_cxr_images)):
+    path_mimic_cxr_files = os.path.join(path_mimic_cxr, "files")
+    for root, _, files in tqdm(os.walk(path_mimic_cxr_files)):
         for file_name in files:
             image_path = os.path.join(root, file_name)
             if image_path.endswith(".jpg"):

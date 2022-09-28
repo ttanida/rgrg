@@ -51,6 +51,7 @@ from src.full_model.run_configurations import (
     WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS,
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
+from src.path_datasets import path_full_dataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -64,8 +65,6 @@ random.seed(seed_val)
 np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
-
-path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 
 
 def train_model(
@@ -435,7 +434,7 @@ def get_datasets(config_file_path):
         "bbox_is_abnormal": literal_eval,
     }
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_full_model, dataset) + ".csv" for dataset in ["train", "valid"]}
+    datasets_as_dfs = {dataset: os.path.join(path_full_dataset, dataset) + ".csv" for dataset in ["train", "valid"]}
 
     datasets_as_dfs = {
         dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()

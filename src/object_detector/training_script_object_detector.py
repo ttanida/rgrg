@@ -22,6 +22,7 @@ from tqdm import tqdm
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
 from src.object_detector.object_detector import ObjectDetector
+from src.path_datasets import path_full_dataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -35,8 +36,6 @@ random.seed(seed_val)
 np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
-
-path_dataset_object_detector = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 
 # define configurations for training run
 RUN = 11
@@ -529,7 +528,7 @@ def get_datasets_as_dfs(config_file_path):
     # the literal_eval func to convert them to python lists
     converters = {"bbox_coordinates": literal_eval, "bbox_labels": literal_eval}
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_object_detector, dataset) + ".csv" for dataset in ["train", "valid"]}
+    datasets_as_dfs = {dataset: os.path.join(path_full_dataset, dataset) + ".csv" for dataset in ["train", "valid"]}
     datasets_as_dfs = {dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()}
 
     total_num_samples_train = len(datasets_as_dfs["train"])

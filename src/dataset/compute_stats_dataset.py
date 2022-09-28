@@ -5,15 +5,16 @@ import os
 
 from tqdm import tqdm
 
-from constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
+from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
 
-path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
-path_to_txt_file_to_log_stats = "/u/home/tanida/datasets/dataset_stats.txt"
+from src.path_datasets import path_chest_imagenome
+
+txt_file_to_log_stats = "/u/home/tanida/datasets/dataset_stats.txt"
 
 
 def print_stats_counter_dicts(counter_dict):
     """Print the counts in descending order"""
-    with open(path_to_txt_file_to_log_stats, "a") as f:
+    with open(txt_file_to_log_stats, "a") as f:
         total_count = sum(value for value in counter_dict.values())
         for bbox_name, count in sorted(counter_dict.items(), key=lambda k_v: k_v[1], reverse=True):
             f.write(f"\n\t\t{bbox_name}: {count:,} ({(count/total_count) * 100:.2f}%)")
@@ -41,7 +42,7 @@ def log_stats_to_txt_file(dataset: str, stats: dict) -> None:
         bbox_with_phrases_counter_dict = stats["total_bbox_with_phrases_counter_dict"]
         outlier_bbox_counter_dict = stats["total_outlier_bbox_counter_dict"]
 
-    with open(path_to_txt_file_to_log_stats, "a") as f:
+    with open(txt_file_to_log_stats, "a") as f:
         f.write(f"\n\n{dataset}:")
         f.write(f"\n\t{num_images:,} images in total")
         f.write(f"\n\t{num_ignored_images} images were ignored (due to faulty x-rays etc.)")
@@ -179,7 +180,7 @@ def compute_stats_for_csv_file(dataset: str, path_csv_file: str, image_ids_to_av
                 continue
 
             chest_imagenome_scene_graph_file_path = (
-                os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
+                os.path.join(path_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
             )
 
             with open(chest_imagenome_scene_graph_file_path) as fp:
@@ -239,7 +240,7 @@ def compute_and_print_stats_for_csv_files(csv_files_dict, image_ids_to_avoid):
 
 
 def get_images_to_avoid():
-    path_to_images_to_avoid = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits", "images_to_avoid.csv")
+    path_to_images_to_avoid = os.path.join(path_chest_imagenome, "silver_dataset", "splits", "images_to_avoid.csv")
 
     image_ids_to_avoid = set()
 
@@ -257,7 +258,7 @@ def get_images_to_avoid():
 
 
 def get_train_val_test_csv_files():
-    path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
+    path_to_splits_folder = os.path.join(path_chest_imagenome, "silver_dataset", "splits")
     return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
 

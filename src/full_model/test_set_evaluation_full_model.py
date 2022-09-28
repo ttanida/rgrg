@@ -7,8 +7,10 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
 from datasets import Dataset
+import evaluate
 import numpy as np
 import pandas as pd
+import spacy
 import torch
 from torch.utils.data import DataLoader
 import torchmetrics
@@ -30,8 +32,7 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
     compute_final_language_model_scores,
 )
 from src.full_model.report_generation_model import ReportGenerationModel
-import evaluate
-import spacy
+from src.path_datasets import path_full_dataset
 
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
@@ -57,7 +58,6 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-path_dataset_full_model = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
 path_to_test_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports"
 
 
@@ -563,7 +563,7 @@ def get_dataset():
         "bbox_is_abnormal": literal_eval,
     }
 
-    datasets_as_dfs = {dataset: os.path.join(path_dataset_full_model, dataset) + ".csv" for dataset in ["test"]}
+    datasets_as_dfs = {dataset: os.path.join(path_full_dataset, dataset) + ".csv" for dataset in ["test"]}
 
     datasets_as_dfs = {
         dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters)

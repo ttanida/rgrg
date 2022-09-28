@@ -47,12 +47,10 @@ import spacy
 from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
+from src. path_datasets import path_chest_imagenome, path_mimic_cxr, path_full_dataset
 
-path_to_full_dataset_image_level = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
-path_to_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
-path_to_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr-jpg"
 # to log certain statistics during dataset creation
-path_to_log_file = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/dataset/log_file_dataset_creation.txt"
+txt_file_for_logging = "log_file_dataset_creation.txt"
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
@@ -68,7 +66,7 @@ def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     if dataset == "test":
         csv_rows, csv_rows_less_than_29_regions = csv_rows
 
-    new_csv_file_path = os.path.join(path_to_full_dataset_image_level, dataset)
+    new_csv_file_path = os.path.join(path_full_dataset, dataset)
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
     header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
@@ -329,13 +327,13 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             # i.e. f"files/p../p{subject_id}/s{study_id}/{image_id}.dcm"
             # since we have the MIMIC-CXR-JPG dataset, we need to replace .dcm by .jpg
             image_file_path = row[4].replace(".dcm", ".jpg")
-            mimic_image_file_path = os.path.join(path_to_mimic_cxr, image_file_path)
+            mimic_image_file_path = os.path.join(path_mimic_cxr, image_file_path)
 
             if not os.path.exists(mimic_image_file_path):
                 missing_images.append(mimic_image_file_path)
                 continue
 
-            chest_imagenome_scene_graph_file_path = os.path.join(path_to_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
+            chest_imagenome_scene_graph_file_path = os.path.join(path_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
             with open(chest_imagenome_scene_graph_file_path) as fp:
                 image_scene_graph = json.load(fp)
@@ -432,7 +430,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
                 else:
                     return csv_rows
 
-    with open(path_to_log_file, "a") as f:
+    with open(txt_file_for_logging, "a") as f:
         f.write(f"{dataset}:\n")
         f.write(f"\tnum_images_ignored_or_avoided: {num_images_ignored_or_avoided}\n")
         f.write(f"\tnum_missing_images: {len(missing_images)}\n")
@@ -461,18 +459,18 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
 
 
 def create_new_csv_files(csv_files_dict, image_ids_to_avoid):
-    if os.path.exists(path_to_full_dataset_image_level):
-        log.error(f"Full dataset folder already exists at {path_to_full_dataset_image_level}.")
+    if os.path.exists(path_full_dataset):
+        log.error(f"Full dataset folder already exists at {path_full_dataset}.")
         log.error("Delete dataset folder before running script to create new folder!")
         return None
 
-    os.mkdir(path_to_full_dataset_image_level)
+    os.mkdir(path_full_dataset)
     for dataset, path_csv_file in csv_files_dict.items():
         create_new_csv_file(dataset, path_csv_file, image_ids_to_avoid)
 
 
 def get_images_to_avoid():
-    path_to_images_to_avoid = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits", "images_to_avoid.csv")
+    path_to_images_to_avoid = os.path.join(path_chest_imagenome, "silver_dataset", "splits", "images_to_avoid.csv")
 
     image_ids_to_avoid = set()
 
@@ -491,7 +489,7 @@ def get_images_to_avoid():
 
 def get_train_val_test_csv_files():
     """Return a dict with datasets as keys and paths to the corresponding csv files in the chest-imagenome dataset as values"""
-    path_to_splits_folder = os.path.join(path_to_chest_imagenome, "silver_dataset", "splits")
+    path_to_splits_folder = os.path.join(path_chest_imagenome, "silver_dataset", "splits")
     return {dataset: os.path.join(path_to_splits_folder, dataset) + ".csv" for dataset in ["train", "valid", "test"]}
 
 
