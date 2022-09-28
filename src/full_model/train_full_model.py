@@ -325,7 +325,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         collate_fn=custom_collate_val,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=NUM_WORKERS,
+        num_workers=0,
         pin_memory=True,
     )
 
