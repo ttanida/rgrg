@@ -43,6 +43,7 @@ from src.full_model.run_configurations import (
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 path_to_val_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports"
+path_to_val_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports_findings_only"
 
 
 def compute_final_language_model_scores(language_model_scores):
@@ -472,7 +473,25 @@ def update_language_model_scores(
         # reference reports mimic taken directly from MIMIC-CXR dataset
         for score in language_model_scores["report_mimic"].values():
             score.add_batch(
-                predictions=generated_reports, references=reference_reports_mimic
+                predictions=generated_reports, references=reference_reports_mimic["report_mimic"]
+            )
+
+        # reference reports mimic taken directly from MIMIC-CXR dataset, but only the findings section
+        mimic_reports_findings_only = reference_reports_mimic["report_mimic_findings_only"]
+
+        generated_reports_findings_only = []
+        mimic_reports_findings_only_without_None = []
+
+        for gen_report, mimic_report_findings_only in zip(generated_reports, mimic_reports_findings_only):
+            if mimic_report_findings_only is None:
+                continue
+
+            generated_reports_findings_only.append(gen_report)
+            mimic_reports_findings_only_without_None.append(mimic_report_findings_only)
+
+        for score in language_model_scores["report_mimic_findings_only"].values():
+            score.add_batch(
+                predictions=generated_reports_findings_only, references=mimic_reports_findings_only_without_None
             )
 
     gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions = update_language_model_scores_sentence_level()
@@ -494,12 +513,24 @@ def get_reference_reports_mimic(study_ids) -> list[str]:
     contained multiple lines (containing irrelevant information) to txt files that only contain a single line (containing the information
     from the findings and impression sections of the original report).
     """
-    reference_reports_mimic = []
+    reference_reports_mimic = {
+        "report_mimic": [],
+        "report_mimic_findings_only": []
+    }
+
     for study_id in study_ids:
         study_txt_file_path = os.path.join(path_to_val_mimic_reports_folder, f"s{study_id}.txt")
         with open(study_txt_file_path) as f:
             report = f.readline()
-            reference_reports_mimic.append(report)
+            reference_reports_mimic["report_mimic"].append(report)
+
+        study_txt_file_path = os.path.join(path_to_val_mimic_reports_folder_findings_only, f"s{study_id}.txt")
+        if os.path.exists(study_txt_file_path):
+            with open(study_txt_file_path) as f:
+                report = f.readline()
+                reference_reports_mimic["report_mimic_findings_only"].append(report)
+        else:
+            reference_reports_mimic["report_mimic_findings_only"].append(None)
 
     return reference_reports_mimic
 
@@ -666,11 +697,11 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     # compute bleu scores for all, normal and abnormal reference sentences as well as
     # full reports composed of the reference sentences given by ChestImaGenome (specified by the key "report") and
     # full reports directly taken from MIMIC-CXR (specified by the key "report_mimic")
-    for subset in ["all", "normal", "abnormal", "report", "report_mimic"]:
+    for subset in ["all", "normal", "abnormal", "report", "report_mimic", "report_mimic_findings_only"]:
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
 
     # compute meteor and rouge-L scores for complete reports
-    for report_type in ["report", "report_mimic"]:
+    for report_type in ["report", "report_mimic", "report_mimic_findings_only"]:
         language_model_scores[report_type]["meteor"] = evaluate.load("meteor")
         language_model_scores[report_type]["rouge"] = evaluate.load("rouge")
 
