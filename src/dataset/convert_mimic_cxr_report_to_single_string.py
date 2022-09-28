@@ -19,7 +19,7 @@ def download_single_report(patient: str, study: str):
     webbrowser.open(link)
 
 
-def convert_mimic_cxr_report_to_single_str(study: str):
+def convert_mimic_cxr_report_to_single_str(study_txt_file: str):
     """
     Each study in the MIMIC-CXR dataset has an accompanying report in text file format, e.g. "s56522600.txt"
 
@@ -42,11 +42,11 @@ def convert_mimic_cxr_report_to_single_str(study: str):
         could be "Recommend obtaining PA and lateral chest radiograph.". These sections are removed.
 
     Args:
-        study (str): e.g. "s56522600.txt"
+        study_txt_file (str): e.g. "s56522600.txt"
     Returns:
         report (str): single str that contains information of the findings and impression sections
     """
-    path_to_report_txt_file = os.path.join(path_to_folder_with_mimic_cxr_reports, study)
+    path_to_report_txt_file = os.path.join(path_to_folder_with_mimic_cxr_reports, study_txt_file)
     with open(path_to_report_txt_file) as f:
         lines = f.readlines()
 
