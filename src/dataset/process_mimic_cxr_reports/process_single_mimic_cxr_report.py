@@ -35,6 +35,12 @@ def convert_mimic_cxr_report_to_single_string(study_txt_file):
         report (str or int): single str that contains information of the findings and impression sections,
         or -1 if neither were found.
     """
+    custom_section_names, custom_indices = sp.custom_mimic_cxr_rules()
+
+    study_stem = study_txt_file[:-4]
+    if study_stem in custom_section_names or study_stem in custom_indices:
+        return -1
+
     path_to_report_txt_file = os.path.join(path_to_folder_with_mimic_cxr_reports, study_txt_file)
     with open(path_to_report_txt_file) as f:
         text = "".join(f.readlines())
