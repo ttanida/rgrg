@@ -26,8 +26,8 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 35
-RUN_COMMENT = """Train full model with pre-trained weights from run 34 + language model from run_3. Pos_weights are increased to 7.6 and 3.6 as they were before."""
+RUN = 36
+RUN_COMMENT = """Train full model with pre-trained weights from run 34 + untrained language model. Pos_weights are increased to 7.6 and 3.6 as they were before."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512

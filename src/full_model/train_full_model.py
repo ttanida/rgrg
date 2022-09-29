@@ -564,12 +564,12 @@ def main():
     checkpoint = torch.load(
         "/u/home/tanida/runs/full_model/run_34/checkpoints/checkpoint_val_loss_62.389_overall_steps_120865.pt", map_location=device
     )
-    language_model_weights = torch.load("/u/home/tanida/runs/language_model/run_3/weights/val_loss_18.717_epoch_2.pth", map_location=device)
+    # language_model_weights = torch.load("/u/home/tanida/runs/language_model/run_3/weights/val_loss_18.717_epoch_2.pth", map_location=device)
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL, pretrain_lm_model=PRETRAIN_LM_MODEL)
     model.to(device, non_blocking=True)
     model.load_state_dict(checkpoint["model"])
-    model.language_model.load_state_dict(language_model_weights)
+    # model.language_model.load_state_dict(language_model_weights)
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
@@ -591,7 +591,7 @@ def main():
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
     del checkpoint
-    del language_model_weights
+    # del language_model_weights
 
     log.info("Starting training!")
 
