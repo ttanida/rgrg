@@ -18,7 +18,7 @@ class BinaryClassifierRegionSelection(nn.Module):
 
         # since we have around 2.2x more regions without sentences than regions with sentences (see dataset/dataset_stats.txt generated from compute_stats_dataset.py),
         # we set pos_weight=2.2 to put 2.2 more weight on the loss of regions with sentences
-        pos_weight = torch.tensor([3.6], device=device)
+        pos_weight = torch.tensor([2.2], device=device)
         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     def forward(
@@ -50,7 +50,7 @@ class BinaryClassifierRegionSelection(nn.Module):
             #
             # use a threshold of 0 in logit-space (i.e. 0.5 in probability-space)
             # if a logit > 0, then it means that class/region has boolean value True and a sentence should be generated for it
-            selected_regions = logits > 0
+            selected_regions = logits > -1
 
             # set to False all regions that were not detected by object detector
             # (since no detection -> no sentence generation possible)

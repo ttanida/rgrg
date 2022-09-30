@@ -324,7 +324,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         collate_fn=custom_collate_val,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=0,
+        num_workers=NUM_WORKERS,
         pin_memory=True,
     )
 
@@ -561,14 +561,14 @@ def main():
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     # resume_training = False
-    checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_34/checkpoints/checkpoint_val_loss_62.389_overall_steps_120865.pt", map_location=device
-    )
+    # checkpoint = torch.load(
+    #     "/u/home/tanida/runs/full_model/run_34/checkpoints/checkpoint_val_loss_62.389_overall_steps_120865.pt", map_location=device
+    # )
     # language_model_weights = torch.load("/u/home/tanida/runs/language_model/run_3/weights/val_loss_18.717_epoch_2.pth", map_location=device)
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL, pretrain_lm_model=PRETRAIN_LM_MODEL)
     model.to(device, non_blocking=True)
-    model.load_state_dict(checkpoint["model"])
+    # model.load_state_dict(checkpoint["model"])
     # model.language_model.load_state_dict(language_model_weights)
     model.train()
 
@@ -590,7 +590,7 @@ def main():
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
-    del checkpoint
+    # del checkpoint
     # del language_model_weights
 
     log.info("Starting training!")

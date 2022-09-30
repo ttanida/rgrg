@@ -25,7 +25,7 @@ class BinaryClassifierRegionAbnormal(nn.Module):
 
         # since we have around 6.0x more normal regions than abnormal regions (see dataset/dataset_stats.txt generated from compute_stats_dataset.py),
         # we set pos_weight=6.0 to put 6.0 more weight on the loss of abnormal regions
-        pos_weight = torch.tensor([7.6], device=device)
+        pos_weight = torch.tensor([6.0], device=device)
         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     def forward(
@@ -51,7 +51,7 @@ class BinaryClassifierRegionAbnormal(nn.Module):
 
             # use a threshold of 0 in logit-space (i.e. 0.5 in probability-space)
             # if a logit > 0, then it means that class/region has boolean value True and is considered abnormal
-            predicted_abnormal_regions = logits > 0
+            predicted_abnormal_regions = logits > -1
 
             # regions that were not detected will be filtered out later (via class_detected) when computing recall, precision etc.
             return loss, predicted_abnormal_regions
