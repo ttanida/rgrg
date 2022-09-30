@@ -67,7 +67,7 @@ def write_all_scores_to_file(
     region_abnormal_scores,
     language_model_scores,
 ):
-    def write_obj_detector_scores(obj_detector_scores, txt_file_name):
+    def write_obj_detector_scores():
         with open(txt_file_name, "a") as f:
             f.write(
                 f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}\n"
@@ -86,18 +86,18 @@ def write_all_scores_to_file(
             with open(txt_file_name, "a") as f:
                 f.write(f"iou_{region_}: {avg_iou_region}\n")
 
-    def write_region_selection_scores(region_selection_scores, txt_file_name):
+    def write_region_selection_scores():
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
                 with open(txt_file_name, "a") as f:
                     f.write(f"region_select_{subset}_{metric}: {score}\n")
 
-    def write_region_abnormal_scores(region_abnormal_scores, txt_file_name):
+    def write_region_abnormal_scores():
         for metric, score in region_abnormal_scores.items():
             with open(txt_file_name, "a") as f:
                 f.write(f"region_abnormal_{metric}: {score}\n")
 
-    def write_language_model_scores(language_model_scores, txt_file_name):
+    def write_language_model_scores():
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
                 with open(txt_file_name, "a") as f:
@@ -108,10 +108,10 @@ def write_all_scores_to_file(
         f"final_scores_bertscore_{BERTSCORE_SIMILARITY_THRESHOLD}.txt",
     )
 
-    write_obj_detector_scores(obj_detector_scores, txt_file_name)
-    write_region_selection_scores(region_selection_scores, txt_file_name)
-    write_region_abnormal_scores(region_abnormal_scores, txt_file_name)
-    write_language_model_scores(language_model_scores, txt_file_name)
+    write_obj_detector_scores()
+    write_region_selection_scores()
+    write_region_abnormal_scores()
+    write_language_model_scores()
 
 
 def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, gen_and_ref_reports_to_save_to_file):

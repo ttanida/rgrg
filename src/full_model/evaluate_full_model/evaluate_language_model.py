@@ -579,6 +579,12 @@ def get_generated_and_reference_reports(
         # similar_generated_sents_to_be_removed maps from one sentence to a list of similar sentences that are to be removed
         similar_generated_sents_to_be_removed = defaultdict(list)
 
+        # TODO:
+        # the nested for loops below check each generated sentence with every other generated sentence
+        # this is not particularly efficient, since e.g. generated sentences for the region "right lung" most likely
+        # will never be similar to generated sentences for the region "abdomen"
+        # thus, one could speed up these checks by only checking anatomical regions that are similar to each other
+
         for i in range(len(gen_sents_single_image)):
             gen_sent_1 = gen_sents_single_image[i]
 

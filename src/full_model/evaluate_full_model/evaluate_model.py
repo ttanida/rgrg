@@ -54,7 +54,7 @@ def write_all_losses_and_scores_to_tensorboard(
     current_lr,
     bool_evaluate_language_model
 ):
-    def write_losses(writer, overall_steps_taken, train_losses_dict, val_losses_dict):
+    def write_losses():
         for loss_type in train_losses_dict:
             writer.add_scalars(
                 "_loss",
@@ -62,7 +62,7 @@ def write_all_losses_and_scores_to_tensorboard(
                 overall_steps_taken,
             )
 
-    def write_obj_detector_scores(writer, overall_steps_taken, obj_detector_scores):
+    def write_obj_detector_scores():
         writer.add_scalar(
             "avg_num_detected_regions_per_image",
             obj_detector_scores["avg_num_detected_regions_per_image"],
@@ -80,28 +80,28 @@ def write_all_losses_and_scores_to_tensorboard(
         for region_, avg_iou_region in zip(anatomical_regions, avg_iou_per_region):
             writer.add_scalar(f"iou_{region_}", avg_iou_region, overall_steps_taken)
 
-    def write_region_selection_scores(writer, overall_steps_taken, region_selection_scores):
+    def write_region_selection_scores():
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
                 writer.add_scalar(f"region_select_{subset}_{metric}", score, overall_steps_taken)
 
-    def write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores):
+    def write_region_abnormal_scores():
         for metric, score in region_abnormal_scores.items():
             writer.add_scalar(f"region_abnormal_{metric}", score, overall_steps_taken)
 
-    def write_language_model_scores(writer, overall_steps_taken, language_model_scores):
+    def write_language_model_scores():
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
                 writer.add_scalar(f"language_model_{subset}_{metric}", score, overall_steps_taken)
 
-    write_losses(writer, overall_steps_taken, train_losses_dict, val_losses_dict)
-    write_obj_detector_scores(writer, overall_steps_taken, obj_detector_scores)
-    write_region_selection_scores(writer, overall_steps_taken, region_selection_scores)
-    write_region_abnormal_scores(writer, overall_steps_taken, region_abnormal_scores)
+    write_losses()
+    write_obj_detector_scores()
+    write_region_selection_scores()
+    write_region_abnormal_scores()
 
     # TODO: delete 2nd condition (since it's only there to save time)
     if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 25000 and bool_evaluate_language_model:
-        write_language_model_scores(writer, overall_steps_taken, language_model_scores)
+        write_language_model_scores()
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
 
