@@ -2,3 +2,4 @@
 /src.egg-info
 __pycache__/
 .idea/
+src/CheXbert/src/models/chexbert.pth
