@@ -142,5 +142,4 @@ if __name__ == '__main__':
     checkpoint_path = args.checkpoint
 
     y_pred = label(checkpoint_path, csv_path)
-    print(y_pred)
-    # save_preds(y_pred, csv_path, out_path)
+    save_preds(y_pred, csv_path, out_path)

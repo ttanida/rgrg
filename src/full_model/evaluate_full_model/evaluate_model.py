@@ -287,7 +287,12 @@ def get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch):
         region_selection_scores[subset] = {
             # specifying average=None computes the metric for each class (i.e. negative and positive) separately
             # we then report the score of the positive class by indexing [1] once we've computed the final scores
-            # this is equivalent to using average="binary" in sklearn.metric
+            # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
+            #
+            # note: using average="micro" is not correct, since it considers the negative and positive classes
+            # to be separate classes (even in the binary case). If e.g. pred = True and ground-truth = False,
+            # then it will be considered a FP for the positive class, but also a FN for the negative class,
+            # which does not make any sense for the binary case and leads to incorrect scores
             "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
             "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
             "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
@@ -306,7 +311,7 @@ def get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch):
     region_abnormal_scores = {
         # specifying average=None computes the metric for each class (i.e. negative and positive) separately
         # we then report the score of the positive class by indexing [1] once we've computed the final scores
-        # this is equivalent to using average="binary" in sklearn.metric
+        # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
         "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
         "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
         "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),

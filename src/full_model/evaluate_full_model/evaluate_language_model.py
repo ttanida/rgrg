@@ -18,8 +18,10 @@ It also calls subfunctions which:
     as well as the generated sentences (if they exist) and reference sentences for every region
 """
 from collections import defaultdict
+import csv
 import io
 import os
+import tempfile
 
 import evaluate
 import matplotlib.pyplot as plt
@@ -27,10 +29,11 @@ import numpy as np
 from PIL import Image
 import spacy
 import torch
-# import torchmetrics
+import torchmetrics
 from tqdm import tqdm
 
-# from src.CheXbert.src.label import label
+from src.CheXbert.src.constants import CONDITIONS
+from src.CheXbert.src.label import label
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.run_configurations import (
     BATCH_SIZE,
@@ -42,7 +45,7 @@ from src.full_model.run_configurations import (
     NUM_IMAGES_TO_PLOT,
     BERTSCORE_SIMILARITY_THRESHOLD,
 )
-# from src.path_datasets_and_weights import path_chexbert_weights
+from src.path_datasets_and_weights import path_chexbert_weights
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 path_to_val_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports"
@@ -466,6 +469,87 @@ def update_language_model_scores(
 
         return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
 
+    def update_clinical_efficacy_scores(ce_dict: dict[str, torchmetrics.Metric], gen_reports: list[str], ref_reports: list[str]):
+        """
+        To get the CE scores, we first need the labels extracted by CheXbert
+
+        The function label from module CheXbert/src/label.py that extracts these labels requires 2 input arguments:
+            1. checkpoint_path (str): path to the saved (bert) model weights
+            2. csv_path (str): path to the csv file with the reports. The csv file has to have 1 column titled "Report Impression"
+            under which the reports can be found
+
+        We use a temporary directory to create the csv files for the generated and reference reports.
+
+        The function label returns preds_gen_reports and preds_ref_reports respectively, which are List[List[int]],
+        with the outer list always having len=14 (for 14 conditions, specified in CheXbert/src/constants.py),
+        and the inner list of len=num_reports.
+
+        E.g. the 1st inner list could be [2, 1, 0, 3], which means the 1st report has label 2 for the 1st condition (which is 'Enlarged Cardiomediastinum'),
+        the 2nd report has label 1 for the 1st condition, the 3rd report has label 0 for the 1st condition, the 4th and final report label 3 for the 1st condition.
+
+        There are 4 possible labels:
+            0: blank/NaN (i.e. no prediction could be made about a condition, because it was no mentioned in a report)
+            1: positive (condition was mentioned as present in a report)
+            2: negative (condition was mentioned as not present in a report)
+            3: uncertain (condition was mentioned as possibly present in a report)
+
+        Following the implementation of the paper "Improving Factual Completeness and Consistency of Image-to-text Radiology Report Generation"
+        by Miura et. al., we merge negative and blank/NaN into one whole negative class, and positive and uncertain into one whole positive class.
+        For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py,
+        where label 3 is converted to label 1, and label 2 is converted to label 0.
+        """
+        def convert_labels(preds_reports: list[list[int]]):
+            """
+            See doc string of update_clinical_efficacy_scores function for more details.
+            Converts label 2 -> label 0 and label 3 -> label 1.
+            """
+            def convert_label(label: int):
+                if label == 2:
+                    return 0
+                elif label == 3:
+                    return 1
+                else:
+                    return label
+
+            preds_reports = [[convert_label(label) for label in condition_list] for condition_list in preds_reports]
+
+            return preds_reports
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_gen_reports_file_path = os.path.join(temp_dir, "gen_reports.csv")
+            csv_ref_reports_file_path = os.path.join(temp_dir, "ref_reports.csv")
+
+            header = ["Report Impression"]
+
+            with open(csv_gen_reports_file_path, "w") as fp:
+                csv_writer = csv.writer(fp)
+                csv_writer.writerow(header)
+                csv_writer.writerows([[gen_report] for gen_report in gen_reports])
+
+            with open(csv_ref_reports_file_path, "w") as fp:
+                csv_writer = csv.writer(fp)
+                csv_writer.writerow(header)
+                csv_writer.writerows([[ref_report] for ref_report in ref_reports])
+
+            # preds_*_reports are List[List[int]] with the labels extracted by CheXbert (see doc string for details)
+            preds_gen_reports = label(path_chexbert_weights, csv_gen_reports_file_path)
+            preds_ref_reports = label(path_chexbert_weights, csv_ref_reports_file_path)
+
+        preds_gen_reports = convert_labels(preds_gen_reports)
+        preds_ref_reports = convert_labels(preds_ref_reports)
+
+        # following Miura, we evaluate on 5 conditions
+        five_conditions_to_evaluate = {"Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"}
+
+        # iterate over the 14 conditions
+        for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports, preds_ref_reports, CONDITIONS):
+            if condition not in five_conditions_to_evaluate:
+                continue
+
+            # iterate over precision, recall, f1 scores
+            for score in ce_dict.values():
+                score(torch.tensor(preds_gen_reports_condition), torch.tensor(preds_ref_reports_condition))
+
     def update_language_model_scores_report_level():
         # reference reports composed of reference sentences from ChestImaGenome dataset
         for metric, score in language_model_scores["report"].items():
@@ -475,6 +559,8 @@ def update_language_model_scores(
                 predictions=generated_reports, references=reference_reports
             )
 
+        update_clinical_efficacy_scores(language_model_scores["report"]["CE"], generated_reports, reference_reports)
+
         # reference reports mimic taken directly from MIMIC-CXR dataset
         for metric, score in language_model_scores["report_mimic"].items():
             if metric == "CE":
@@ -482,6 +568,8 @@ def update_language_model_scores(
             score.add_batch(
                 predictions=generated_reports, references=reference_reports_mimic["report_mimic"]
             )
+
+        update_clinical_efficacy_scores(language_model_scores["report_mimic"]["CE"], generated_reports, reference_reports)
 
         # reference reports mimic taken directly from MIMIC-CXR dataset, but only the findings section
         mimic_reports_findings_only = reference_reports_mimic["report_mimic_findings_only"]
@@ -502,6 +590,8 @@ def update_language_model_scores(
             score.add_batch(
                 predictions=generated_reports_findings_only, references=mimic_reports_findings_only_without_None
             )
+
+        update_clinical_efficacy_scores(language_model_scores["report_mimic_findings_only"]["CE"], generated_reports, reference_reports)
 
     gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions = update_language_model_scores_sentence_level()
     update_language_model_scores_report_level()
@@ -719,11 +809,19 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     for report_type in ["report", "report_mimic", "report_mimic_findings_only"]:
         language_model_scores[report_type]["meteor"] = evaluate.load("meteor")
         language_model_scores[report_type]["rouge"] = evaluate.load("rouge")
-        # language_model_scores[report_type]["CE"] = {
-        #     "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
-        #     "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
-        #     "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
-        # }
+        language_model_scores[report_type]["CE"] = {
+            # specifying average=None computes the metric for each class (i.e. negative and positive) separately
+            # we then report the score of the positive class by indexing [1] once we've computed the final scores
+            # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
+            #
+            # note: using average="micro" is not correct, since it considers the negative and positive classes
+            # to be separate classes (even in the binary case). If e.g. pred = True and ground-truth = False,
+            # then it will be considered a FP for the positive class, but also a FN for the negative class,
+            # which does not make any sense for the binary case and leads to incorrect scores
+            "precision": torchmetrics.Precision(num_classes=2, average=None),
+            "recall": torchmetrics.Recall(num_classes=2, average=None),
+            "f1": torchmetrics.F1Score(num_classes=2, average=None),
+        }
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],
