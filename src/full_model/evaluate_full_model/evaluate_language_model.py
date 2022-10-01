@@ -509,7 +509,7 @@ def update_language_model_scores(
     return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
 
 
-def get_reference_reports_mimic(study_ids) -> dict[str[list]]:
+def get_reference_reports_mimic(study_ids) -> dict[str, list]:
     """
     The folder "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports" (specified by path_to_val_mimic_reports_folder)
     contains 200 mimic-cxr reports that correspond to the first 200 images in the validation set.
