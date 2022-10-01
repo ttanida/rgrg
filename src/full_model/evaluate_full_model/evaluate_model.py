@@ -92,7 +92,11 @@ def write_all_losses_and_scores_to_tensorboard(
     def write_language_model_scores():
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
-                writer.add_scalar(f"language_model_{subset}_{metric}", score, overall_steps_taken)
+                if metric == "CE":
+                    for metric_CE, score_CE in language_model_scores[subset][metric].items():
+                        writer.add_scalar(f"language_model_{subset}_{metric}_{metric_CE}", score_CE, overall_steps_taken)
+                else:
+                    writer.add_scalar(f"language_model_{subset}_{metric}", score, overall_steps_taken)
 
     write_losses()
     write_obj_detector_scores()

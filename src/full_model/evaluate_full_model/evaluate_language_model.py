@@ -68,6 +68,11 @@ def compute_final_language_model_scores(language_model_scores):
                 # index 1 ^= mid (average)
                 # index 2 ^= f-score
                 temp["rouge"] = float(result[1][2])
+            elif metric == "CE":
+                # in the case of CE, score is another dict with keys "precision", "recall", "f1", "acc"
+                temp["CE"] = {}
+                for metric_CE, score_CE in score.items():
+                    temp["CE"][metric_CE] = score_CE.compute()[1].item()  # only report results for the positive class (hence [1])
 
         language_model_scores[subset] = temp
 
@@ -546,7 +551,7 @@ def update_language_model_scores(
             if condition not in five_conditions_to_evaluate:
                 continue
 
-            # iterate over precision, recall, f1 scores
+            # update precision, recall, f1 and accuracy scores
             for score in ce_dict.values():
                 score(torch.tensor(preds_gen_reports_condition), torch.tensor(preds_ref_reports_condition))
 
@@ -569,7 +574,7 @@ def update_language_model_scores(
                 predictions=generated_reports, references=reference_reports_mimic["report_mimic"]
             )
 
-        update_clinical_efficacy_scores(language_model_scores["report_mimic"]["CE"], generated_reports, reference_reports)
+        update_clinical_efficacy_scores(language_model_scores["report_mimic"]["CE"], generated_reports, reference_reports_mimic["report_mimic"])
 
         # reference reports mimic taken directly from MIMIC-CXR dataset, but only the findings section
         mimic_reports_findings_only = reference_reports_mimic["report_mimic_findings_only"]
@@ -591,7 +596,7 @@ def update_language_model_scores(
                 predictions=generated_reports_findings_only, references=mimic_reports_findings_only_without_None
             )
 
-        update_clinical_efficacy_scores(language_model_scores["report_mimic_findings_only"]["CE"], generated_reports, reference_reports)
+        update_clinical_efficacy_scores(language_model_scores["report_mimic_findings_only"]["CE"], generated_reports_findings_only, mimic_reports_findings_only_without_None)
 
     gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions = update_language_model_scores_sentence_level()
     update_language_model_scores_report_level()
@@ -806,10 +811,10 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
 
     # compute meteor, rouge-L and clinical efficacy (CE) scores for complete reports
-    for report_type in ["report", "report_mimic", "report_mimic_findings_only"]:
-        language_model_scores[report_type]["meteor"] = evaluate.load("meteor")
-        language_model_scores[report_type]["rouge"] = evaluate.load("rouge")
-        language_model_scores[report_type]["CE"] = {
+    for subset in ["report", "report_mimic", "report_mimic_findings_only"]:
+        language_model_scores[subset]["meteor"] = evaluate.load("meteor")
+        language_model_scores[subset]["rouge"] = evaluate.load("rouge")
+        language_model_scores[subset]["CE"] = {
             # specifying average=None computes the metric for each class (i.e. negative and positive) separately
             # we then report the score of the positive class by indexing [1] once we've computed the final scores
             # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
@@ -821,6 +826,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             "precision": torchmetrics.Precision(num_classes=2, average=None),
             "recall": torchmetrics.Recall(num_classes=2, average=None),
             "f1": torchmetrics.F1Score(num_classes=2, average=None),
+            "acc": torchmetrics.Accuracy(num_classes=2, average=None)
         }
 
     gen_and_ref_sentences_to_save_to_file = {
