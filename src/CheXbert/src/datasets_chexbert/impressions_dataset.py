@@ -1,8 +1,7 @@
 import torch
 import pandas as pd
-import numpy as np
-from bert_tokenizer import load_list
-from torch.utils.data import Dataset, DataLoader
+from src.CheXbert.src.bert_tokenizer import load_list
+from torch.utils.data import Dataset
 
 class ImpressionsDataset(Dataset):
         """The dataset to contain report impressions and their labels."""

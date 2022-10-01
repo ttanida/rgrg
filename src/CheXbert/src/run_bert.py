@@ -4,11 +4,10 @@ import time
 import torch
 import torch.nn as nn
 import numpy as np
-import pandas as pd
-import utils
-from models.bert_labeler import bert_labeler
-from datasets_chexbert.impressions_dataset import ImpressionsDataset
-from constants import *
+from src.CheXbert.src import utils
+from src.CheXbert.src.models.bert_labeler import bert_labeler
+from src.CheXbert.src.datasets_chexbert.impressions_dataset import ImpressionsDataset
+from src.CheXbert.src.constants import *
 
 def collate_fn_labels(sample_list):
      """Custom collate function to pad reports in each batch to the max len

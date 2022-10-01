@@ -4,13 +4,11 @@ import torch
 import torch.nn as nn
 import pandas as pd
 import numpy as np
-import utils
-from models.bert_labeler import bert_labeler
-from bert_tokenizer import tokenize
-from transformers import BertTokenizer
+from src.CheXbert.src import utils
+from src.CheXbert.src.models.bert_labeler import bert_labeler
 from collections import OrderedDict
-from datasets_chexbert.unlabeled_dataset import UnlabeledDataset
-from constants import *
+from src.CheXbert.src.datasets_chexbert.unlabeled_dataset import UnlabeledDataset
+from src.CheXbert.src.constants import *
 from tqdm import tqdm
 
 def collate_fn_no_labels(sample_list):

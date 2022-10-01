@@ -1,9 +1,7 @@
 import torch
-import pandas as pd
-import numpy as np
 from transformers import BertTokenizer
-import bert_tokenizer
-from torch.utils.data import Dataset, DataLoader
+from src.CheXbert.src import bert_tokenizer
+from torch.utils.data import Dataset
 
 class UnlabeledDataset(Dataset):
         """The dataset to contain report impressions without any labels."""

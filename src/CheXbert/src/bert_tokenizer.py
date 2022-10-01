@@ -1,5 +1,5 @@
 import pandas as pd
-from transformers import BertTokenizer, AutoTokenizer
+from transformers import BertTokenizer
 import json
 from tqdm import tqdm
 import argparse

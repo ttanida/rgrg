@@ -26,8 +26,8 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 38
-RUN_COMMENT = """Train full model with pre-trained weights from run 37 and untrained language model weights. Pos_weights are 6.0 and 2.2, logit threshold -1."""
+RUN = 39
+RUN_COMMENT = """Test if CheXbert works."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
