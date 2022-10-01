@@ -93,7 +93,7 @@ def write_sentences_and_reports_to_file(
                 # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
                 f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
-    def write_reports(generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences):
+    def write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences):
         txt_file_name = os.path.join(
             generated_sentences_and_reports_folder_path,
             "generated_reports",
@@ -101,12 +101,13 @@ def write_sentences_and_reports_to_file(
         )
 
         with open(txt_file_name, "w") as f:
-            for gen_report, ref_report, ref_report_mimic, removed_similar_gen_sents in zip(
-                generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences
+            for gen_report, ref_report, ref_report_mimic, ref_report_mimic_findings_only, removed_similar_gen_sents in zip(
+                generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences
             ):
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
                 f.write(f"Ref report mimic: {ref_report_mimic}\n\n")
+                f.write(f"Ref report mimic findings only: {ref_report_mimic_findings_only}\n\n")
                 f.write("Generated sentences that were removed:\n")
                 for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
                     f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
@@ -129,8 +130,9 @@ def write_sentences_and_reports_to_file(
     generated_reports = gen_and_ref_reports_to_save_to_file["generated_reports"]
     reference_reports = gen_and_ref_reports_to_save_to_file["reference_reports"]
     reference_reports_mimic = gen_and_ref_reports_to_save_to_file["reference_reports_mimic"]
+    reference_reports_mimic_findings_only = gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"]
     removed_similar_generated_sentences = gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"]
-    write_reports(generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences)
+    write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences)
 
 
 def get_plot_title(region_set, region_indices, region_colors, class_detected_img) -> str:
@@ -841,6 +843,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
         "removed_similar_generated_sentences": [],
         "reference_reports": [],
         "reference_reports_mimic": [],
+        "reference_reports_mimic_findings_only": []
     }
 
     # we also want to plot a couple of images
@@ -960,7 +963,8 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
                 gen_and_ref_reports_to_save_to_file["generated_reports"].extend(generated_reports)
                 gen_and_ref_reports_to_save_to_file["reference_reports"].extend(reference_reports)
-                gen_and_ref_reports_to_save_to_file["reference_reports_mimic"].extend(reference_reports_mimic)
+                gen_and_ref_reports_to_save_to_file["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
+                gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"].extend(reference_reports_mimic["report_mimic_findings_only"])
                 gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"].extend(
                     removed_similar_generated_sentences
                 )

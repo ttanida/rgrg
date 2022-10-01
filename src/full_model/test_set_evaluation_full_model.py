@@ -59,6 +59,7 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 path_to_test_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports"
+path_to_test_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports_findings_only"
 
 
 def write_all_scores_to_file(
@@ -101,7 +102,11 @@ def write_all_scores_to_file(
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
                 with open(txt_file_name, "a") as f:
-                    f.write(f"language_model_{subset}_{metric}: {score}\n")
+                    if metric == "CE":
+                        for metric_CE, score_CE in language_model_scores[subset][metric].items():
+                            f.write(f"language_model_{subset}_{metric}_{metric_CE}: {score_CE}\n")
+                    else:
+                        f.write(f"language_model_{subset}_{metric}: {score}\n")
 
     txt_file_name = os.path.join(
         "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
@@ -128,7 +133,7 @@ def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, g
                 f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
     def write_reports(
-        generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences
+        generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences
     ):
         txt_file_name = os.path.join(
             "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
@@ -136,12 +141,13 @@ def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, g
         )
 
         with open(txt_file_name, "w") as f:
-            for gen_report, ref_report, ref_report_mimic, removed_similar_gen_sents in zip(
-                generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences
+            for gen_report, ref_report, ref_report_mimic, ref_report_mimic_findings_only, removed_similar_gen_sents in zip(
+                generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences
             ):
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
                 f.write(f"Ref report mimic: {ref_report_mimic}\n\n")
+                f.write(f"Ref report mimic findings only: {ref_report_mimic_findings_only}\n\n")
                 f.write("Generated sentences that were removed:\n")
                 for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
                     f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
@@ -164,11 +170,12 @@ def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, g
     generated_reports = gen_and_ref_reports_to_save_to_file["generated_reports"]
     reference_reports = gen_and_ref_reports_to_save_to_file["reference_reports"]
     reference_reports_mimic = gen_and_ref_reports_to_save_to_file["reference_reports_mimic"]
+    reference_reports_mimic_findings_only = gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"]
     removed_similar_generated_sentences = gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"]
-    write_reports(generated_reports, reference_reports, reference_reports_mimic, removed_similar_generated_sentences)
+    write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences)
 
 
-def get_reference_reports_mimic(study_ids) -> list[str]:
+def get_reference_reports_mimic(study_ids) -> dict[str, list]:
     """
     The folder "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports" (specified by path_to_test_mimic_reports_folder)
     contains 2000 mimic-cxr reports that correspond to the first 2000 images in the test set.
@@ -181,12 +188,24 @@ def get_reference_reports_mimic(study_ids) -> list[str]:
     contained multiple lines (containing irrelevant information) to txt files that only contain a single line (containing the information
     from the findings and impression sections of the original report).
     """
-    reference_reports_mimic = []
+    reference_reports_mimic = {
+        "report_mimic": [],
+        "report_mimic_findings_only": []
+    }
+
     for study_id in study_ids:
         study_txt_file_path = os.path.join(path_to_test_mimic_reports_folder, f"s{study_id}.txt")
         with open(study_txt_file_path) as f:
             report = f.readline()
-            reference_reports_mimic.append(report)
+            reference_reports_mimic["report_mimic"].append(report)
+
+        study_txt_file_path = os.path.join(path_to_test_mimic_reports_folder_findings_only, f"s{study_id}.txt")
+        if os.path.exists(study_txt_file_path):
+            with open(study_txt_file_path) as f:
+                report = f.readline()
+                reference_reports_mimic["report_mimic_findings_only"].append(report)
+        else:
+            reference_reports_mimic["report_mimic_findings_only"].append(None)
 
     return reference_reports_mimic
 
@@ -195,13 +214,27 @@ def evaluate_language_model(model, test_loader, tokenizer):
     language_model_scores = {}
 
     # compute bleu scores for all, normal and abnormal reference sentences as well as full reports
-    for subset in ["all", "normal", "abnormal", "report", "report_mimic"]:
+    for subset in ["all", "normal", "abnormal", "report", "report_mimic", "report_mimic_findings_only"]:
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
 
-    # compute meteor and rouge-L scores for complete reports
-    for report_type in ["report", "report_mimic"]:
-        language_model_scores[report_type]["meteor"] = evaluate.load("meteor")
-        language_model_scores[report_type]["rouge"] = evaluate.load("rouge")
+    # compute meteor, rouge-L and clinical efficacy (CE) scores for complete reports
+    for subset in ["report", "report_mimic", "report_mimic_findings_only"]:
+        language_model_scores[subset]["meteor"] = evaluate.load("meteor")
+        language_model_scores[subset]["rouge"] = evaluate.load("rouge")
+        language_model_scores[subset]["CE"] = {
+            # specifying average=None computes the metric for each class (i.e. negative and positive) separately
+            # we then report the score of the positive class by indexing [1] once we've computed the final scores
+            # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
+            #
+            # note: using average="micro" is not correct, since it considers the negative and positive classes
+            # to be separate classes (even in the binary case). If e.g. pred = True and ground-truth = False,
+            # then it will be considered a FP for the positive class, but also a FN for the negative class,
+            # which does not make any sense for the binary case and leads to incorrect scores
+            "precision": torchmetrics.Precision(num_classes=2, average=None),
+            "recall": torchmetrics.Recall(num_classes=2, average=None),
+            "f1": torchmetrics.F1Score(num_classes=2, average=None),
+            "acc": torchmetrics.Accuracy(num_classes=2, average=None)
+        }
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],
@@ -215,6 +248,7 @@ def evaluate_language_model(model, test_loader, tokenizer):
         "removed_similar_generated_sentences": [],
         "reference_reports": [],
         "reference_reports_mimic": [],
+        "reference_reports_mimic_findings_only": []
     }
 
     # to recover from out of memory error if a batch has a sequence that is too long
@@ -324,7 +358,8 @@ def evaluate_language_model(model, test_loader, tokenizer):
             if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
                 gen_and_ref_reports_to_save_to_file["generated_reports"].extend(generated_reports)
                 gen_and_ref_reports_to_save_to_file["reference_reports"].extend(reference_reports)
-                gen_and_ref_reports_to_save_to_file["reference_reports_mimic"].extend(reference_reports_mimic)
+                gen_and_ref_reports_to_save_to_file["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
+                gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"].extend(reference_reports_mimic["report_mimic_findings_only"])
                 gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"].extend(
                     removed_similar_generated_sentences
                 )
@@ -600,7 +635,7 @@ def main():
     test_loader = get_data_loader(tokenizer, test_dataset_complete)
 
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_20/checkpoints/checkpoint_val_loss_7.273_epoch_2.pt",
+        "/u/home/tanida/runs/full_model/run_36/checkpoints/checkpoint_val_loss_23.564_overall_steps_116847.pt",
         map_location=torch.device("cpu"),
     )
 
