@@ -62,9 +62,9 @@ def label(checkpoint_path, csv_path):
     
     model = bert_labeler()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if torch.cuda.device_count() > 0: #works even if only 1 GPU available
+    if torch.cuda.device_count() > 0: # works even if only 1 GPU available
         print("Using", torch.cuda.device_count(), "GPUs!")
-        model = nn.DataParallel(model) #to utilize multiple GPU's
+        model = nn.DataParallel(model) # to utilize multiple GPU's
         model = model.to(device)
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['model_state_dict'], strict=False)
@@ -142,4 +142,5 @@ if __name__ == '__main__':
     checkpoint_path = args.checkpoint
 
     y_pred = label(checkpoint_path, csv_path)
-    save_preds(y_pred, csv_path, out_path)
+    print(y_pred)
+    # save_preds(y_pred, csv_path, out_path)

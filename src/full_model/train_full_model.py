@@ -51,7 +51,7 @@ from src.full_model.run_configurations import (
     WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS,
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
-from src.path_datasets import path_full_dataset
+from src.path_datasets_and_weights import path_full_dataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

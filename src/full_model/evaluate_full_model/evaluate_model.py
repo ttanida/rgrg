@@ -285,6 +285,9 @@ def get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch):
     region_selection_scores = {}
     for subset in ["all", "normal", "abnormal"]:
         region_selection_scores[subset] = {
+            # specifying average=None computes the metric for each class (i.e. negative and positive) separately
+            # we then report the score of the positive class by indexing [1] once we've computed the final scores
+            # this is equivalent to using average="binary" in sklearn.metric
             "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
             "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
             "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
@@ -301,6 +304,9 @@ def get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch):
       FN: region is abnormal (gt), but is predicted as normal by classifier (pred)
     """
     region_abnormal_scores = {
+        # specifying average=None computes the metric for each class (i.e. negative and positive) separately
+        # we then report the score of the positive class by indexing [1] once we've computed the final scores
+        # this is equivalent to using average="binary" in sklearn.metric
         "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
         "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
         "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),

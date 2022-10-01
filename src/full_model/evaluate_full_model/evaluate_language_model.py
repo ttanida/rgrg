@@ -27,8 +27,10 @@ import numpy as np
 from PIL import Image
 import spacy
 import torch
+# import torchmetrics
 from tqdm import tqdm
 
+# from src.CheXbert.src.label import label
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.run_configurations import (
     BATCH_SIZE,
@@ -40,6 +42,7 @@ from src.full_model.run_configurations import (
     NUM_IMAGES_TO_PLOT,
     BERTSCORE_SIMILARITY_THRESHOLD,
 )
+# from src.path_datasets_and_weights import path_chexbert_weights
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 path_to_val_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports"
@@ -465,13 +468,17 @@ def update_language_model_scores(
 
     def update_language_model_scores_report_level():
         # reference reports composed of reference sentences from ChestImaGenome dataset
-        for score in language_model_scores["report"].values():
+        for metric, score in language_model_scores["report"].items():
+            if metric == "CE":
+                continue
             score.add_batch(
                 predictions=generated_reports, references=reference_reports
             )
 
         # reference reports mimic taken directly from MIMIC-CXR dataset
-        for score in language_model_scores["report_mimic"].values():
+        for metric, score in language_model_scores["report_mimic"].items():
+            if metric == "CE":
+                continue
             score.add_batch(
                 predictions=generated_reports, references=reference_reports_mimic["report_mimic"]
             )
@@ -489,7 +496,9 @@ def update_language_model_scores(
             generated_reports_findings_only.append(gen_report)
             mimic_reports_findings_only_without_None.append(mimic_report_findings_only)
 
-        for score in language_model_scores["report_mimic_findings_only"].values():
+        for metric, score in language_model_scores["report_mimic_findings_only"].items():
+            if metric == "CE":
+                continue
             score.add_batch(
                 predictions=generated_reports_findings_only, references=mimic_reports_findings_only_without_None
             )
@@ -500,7 +509,7 @@ def update_language_model_scores(
     return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
 
 
-def get_reference_reports_mimic(study_ids) -> list[str]:
+def get_reference_reports_mimic(study_ids) -> dict[str[list]]:
     """
     The folder "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports" (specified by path_to_val_mimic_reports_folder)
     contains 200 mimic-cxr reports that correspond to the first 200 images in the validation set.
@@ -706,10 +715,15 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     for subset in ["all", "normal", "abnormal", "report", "report_mimic", "report_mimic_findings_only"]:
         language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
 
-    # compute meteor and rouge-L scores for complete reports
+    # compute meteor, rouge-L and clinical efficacy (CE) scores for complete reports
     for report_type in ["report", "report_mimic", "report_mimic_findings_only"]:
         language_model_scores[report_type]["meteor"] = evaluate.load("meteor")
         language_model_scores[report_type]["rouge"] = evaluate.load("rouge")
+        # language_model_scores[report_type]["CE"] = {
+        #     "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
+        #     "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
+        #     "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
+        # }
 
     gen_and_ref_sentences_to_save_to_file = {
         "generated_sentences": [],

@@ -32,7 +32,7 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
     compute_final_language_model_scores,
 )
 from src.full_model.report_generation_model import ReportGenerationModel
-from src.path_datasets import path_full_dataset
+from src.path_datasets_and_weights import path_full_dataset
 
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512

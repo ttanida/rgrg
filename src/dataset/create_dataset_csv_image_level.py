@@ -47,7 +47,7 @@ import spacy
 from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
-from src. path_datasets import path_chest_imagenome, path_mimic_cxr, path_full_dataset
+from src.path_datasets_and_weights import path_chest_imagenome, path_mimic_cxr, path_full_dataset
 
 # to log certain statistics during dataset creation
 txt_file_for_logging = "log_file_dataset_creation.txt"
