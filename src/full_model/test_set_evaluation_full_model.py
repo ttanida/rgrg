@@ -7,7 +7,6 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
 from datasets import Dataset
-import evaluate
 import numpy as np
 import pandas as pd
 import spacy
@@ -27,14 +26,13 @@ from src.full_model.evaluate_full_model.evaluate_model import (
 )
 from src.full_model.evaluate_full_model.evaluate_language_model import (
     get_ref_sentences_for_selected_regions,
+    get_sents_for_normal_abnormal_selected_regions,
     get_generated_and_reference_reports,
-    update_language_model_scores,
-    compute_final_language_model_scores,
+    compute_language_model_scores
 )
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.path_datasets_and_weights import path_full_dataset
 
-PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
 NUM_WORKERS = 10
@@ -44,6 +42,7 @@ BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 500
+NUM_IMAGES_TO_USE_IN_TEST_SET = 5000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -98,13 +97,59 @@ def write_all_scores_to_file(
             with open(txt_file_name, "a") as f:
                 f.write(f"region_abnormal_{metric}: {score}\n")
 
+    def write_clinical_efficacy_scores(subset, ce_score_dict):
+        """
+        ce_score_dict is of the structure:
+
+        {
+            precision: ...,
+            recall: ...,
+            f1: ...,
+            acc: ...,
+            condition_1 : {
+                precision: ...,
+                recall: ...,
+                f1: ...,
+                acc: ...,
+            },
+            condition_2 : {
+                precision: ...,
+                recall: ...,
+                f1: ...,
+                acc: ...,
+            },
+            ...,
+            condition_5 : {
+                precision: ...,
+                recall: ...,
+                f1: ...,
+                acc: ...,
+            }
+        }
+
+        where the "..." after the 4 metrics are the corresponding scores,
+        and condition_* are from the 5 conditions we evaluate on (i.e. "Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion")
+        """
+        metrics = {"precision", "recall", "f1", "acc"}
+
+        for k, v in ce_score_dict.items():
+            if k in metrics:
+                with open(txt_file_name, "a") as f:
+                    f.write(f"language_model_{subset}_CE_{k}: {v}\n")
+            else:
+                # k is a condition
+                condition_name = "_".join(k.lower().split())
+                for metric, score in ce_score_dict[k].items():
+                    with open(txt_file_name, "a") as f:
+                        f.write(f"language_model_{subset}_CE_{condition_name}_{metric}: {score}\n")
+
     def write_language_model_scores():
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
                 with open(txt_file_name, "a") as f:
                     if metric == "CE":
-                        for metric_CE, score_CE in language_model_scores[subset][metric].items():
-                            f.write(f"language_model_{subset}_{metric}_{metric_CE}: {score_CE}\n")
+                        ce_score_dict = language_model_scores[subset]["CE"]
+                        write_clinical_efficacy_scores(subset, ce_score_dict)
                     else:
                         f.write(f"language_model_{subset}_{metric}: {score}\n")
 
@@ -119,12 +164,10 @@ def write_all_scores_to_file(
     write_language_model_scores()
 
 
-def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, gen_and_ref_reports_to_save_to_file):
-    def write_sentences(generated_sentences, reference_sentences, is_abnormal):
-        txt_file_name = f"generated{'' if not is_abnormal else '_abnormal'}_sentences.txt"
-        txt_file_name = os.path.join(
-            "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", txt_file_name
-        )
+def write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_reports):
+    def write_sentences(generated_sentences, generated_sentences_abnormal_regions, reference_sentences, reference_sentences_abnormal_regions):
+        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "generated_sentences.txt")
+        txt_file_name_abnormal = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "generated_abnormal_sentences.txt")
 
         with open(txt_file_name, "w") as f:
             for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
@@ -132,13 +175,13 @@ def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, g
                 # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
                 f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
-    def write_reports(
-        generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences
-    ):
-        txt_file_name = os.path.join(
-            "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
-            "generated_reports.txt",
-        )
+        with open(txt_file_name_abnormal, "w") as f:
+            for gen_sent, ref_sent in zip(generated_sentences_abnormal_regions, reference_sentences_abnormal_regions):
+                f.write(f"Generated sentence: {gen_sent}\n")
+                f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
+
+    def write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences):
+        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "generated_reports.txt")
 
         with open(txt_file_name, "w") as f:
             for gen_report, ref_report, ref_report_mimic, ref_report_mimic_findings_only, removed_similar_gen_sents in zip(
@@ -147,7 +190,7 @@ def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, g
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
                 f.write(f"Ref report mimic: {ref_report_mimic}\n\n")
-                f.write(f"Ref report mimic findings only: {ref_report_mimic_findings_only}\n\n")
+                f.write(f"Ref report mimic findings only: {ref_report_mimic_findings_only if ref_report_mimic_findings_only is not None else '[EMPTY]'}\n\n")
                 f.write("Generated sentences that were removed:\n")
                 for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
                     f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
@@ -155,23 +198,21 @@ def write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, g
                 f.write("=" * 30)
                 f.write("\n\n")
 
-    # generated_sentences is a list of str
-    generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
-    generated_abnormal_sentences = gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"]
+    # all below are list of str
+    generated_sentences = gen_and_ref_sentences["generated_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    reference_sentences = gen_and_ref_sentences["reference_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
 
-    # reference_sentences is a list of str
-    reference_sentences = gen_and_ref_sentences_to_save_to_file["reference_sentences"]
-    reference_abnormal_sentences = gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"]
+    write_sentences(generated_sentences, generated_sentences_abnormal_regions, reference_sentences, reference_sentences_abnormal_regions)
 
-    write_sentences(generated_sentences, reference_sentences, is_abnormal=False)
-    write_sentences(generated_abnormal_sentences, reference_abnormal_sentences, is_abnormal=True)
+    # all below are list of str except removed_similar_generated_sentences which is a list of dict
+    generated_reports = gen_and_ref_reports["generated_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    reference_reports = gen_and_ref_reports["reference_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    reference_reports_mimic = gen_and_ref_reports["reference_reports_mimic"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    reference_reports_mimic_findings_only = gen_and_ref_reports["reference_reports_mimic_findings_only"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    removed_similar_generated_sentences = gen_and_ref_reports["removed_similar_generated_sentences"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
 
-    # generated_reports, reference_reports and reference_reports_mimic are list of str
-    generated_reports = gen_and_ref_reports_to_save_to_file["generated_reports"]
-    reference_reports = gen_and_ref_reports_to_save_to_file["reference_reports"]
-    reference_reports_mimic = gen_and_ref_reports_to_save_to_file["reference_reports_mimic"]
-    reference_reports_mimic_findings_only = gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"]
-    removed_similar_generated_sentences = gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"]
     write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences)
 
 
@@ -211,39 +252,16 @@ def get_reference_reports_mimic(study_ids) -> dict[str, list]:
 
 
 def evaluate_language_model(model, test_loader, tokenizer):
-    language_model_scores = {}
-
-    # compute bleu scores for all, normal and abnormal reference sentences as well as full reports
-    for subset in ["all", "normal", "abnormal", "report", "report_mimic", "report_mimic_findings_only"]:
-        language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
-
-    # compute meteor, rouge-L and clinical efficacy (CE) scores for complete reports
-    for subset in ["report", "report_mimic", "report_mimic_findings_only"]:
-        language_model_scores[subset]["meteor"] = evaluate.load("meteor")
-        language_model_scores[subset]["rouge"] = evaluate.load("rouge")
-        language_model_scores[subset]["CE"] = {
-            # specifying average=None computes the metric for each class (i.e. negative and positive) separately
-            # we then report the score of the positive class by indexing [1] once we've computed the final scores
-            # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
-            #
-            # note: using average="micro" is not correct, since it considers the negative and positive classes
-            # to be separate classes (even in the binary case). If e.g. pred = True and ground-truth = False,
-            # then it will be considered a FP for the positive class, but also a FN for the negative class,
-            # which does not make any sense for the binary case and leads to incorrect scores
-            "precision": torchmetrics.Precision(num_classes=2, average=None),
-            "recall": torchmetrics.Recall(num_classes=2, average=None),
-            "f1": torchmetrics.F1Score(num_classes=2, average=None),
-            "acc": torchmetrics.Accuracy(num_classes=2, average=None)
-        }
-
-    gen_and_ref_sentences_to_save_to_file = {
+    gen_and_ref_sentences = {
         "generated_sentences": [],
+        "generated_sentences_normal_selected_regions": [],
+        "generated_sentences_abnormal_selected_regions": [],
         "reference_sentences": [],
-        "generated_abnormal_sentences": [],
-        "reference_abnormal_sentences": [],
+        "reference_sentences_normal_selected_regions": [],
+        "reference_sentences_abnormal_selected_regions": [],
     }
 
-    gen_and_ref_reports_to_save_to_file = {
+    gen_and_ref_reports = {
         "generated_reports": [],
         "removed_similar_generated_sentences": [],
         "reference_reports": [],
@@ -251,16 +269,12 @@ def evaluate_language_model(model, test_loader, tokenizer):
         "reference_reports_mimic_findings_only": []
     }
 
-    # to recover from out of memory error if a batch has a sequence that is too long
-    oom = False
-
     # used in function get_generated_and_reference_reports
     sentence_tokenizer = spacy.load("en_core_web_trf")
 
     with torch.no_grad():
-        for num_batch, batch in tqdm(
-            enumerate(test_loader), total=NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION
-        ):
+        for num_batch, batch in tqdm(enumerate(test_loader), total=NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION):
+            # since generating sentences takes some time, we limit the number of batches used to compute bleu/rouge-l/meteor
             if num_batch >= NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION:
                 break
 
@@ -274,36 +288,16 @@ def evaluate_language_model(model, test_loader, tokenizer):
             # MIMIC-CXR reports from a separate folder
             study_ids = batch["study_ids"]
 
-            try:
-                with torch.autocast(device_type="cuda", dtype=torch.float16):
-                    output = model.generate(
-                        images.to(device, non_blocking=True),
-                        max_length=MAX_NUM_TOKENS_GENERATE,
-                        num_beams=NUM_BEAMS,
-                        early_stopping=True,
-                    )
-            except RuntimeError as e:  # out of memory error
-                if "out of memory" in str(e):
-                    oom = True
-                    print(f"OOM at batch number {num_batch}.\n")
-                    print(f"Error message: {str(e)}\n\n")
-                else:
-                    raise e
+            with torch.autocast(device_type='cuda', dtype=torch.float16):
+                output = model.generate(
+                    images.to(device, non_blocking=True),
+                    max_length=MAX_NUM_TOKENS_GENERATE,
+                    num_beams=NUM_BEAMS,
+                    early_stopping=True,
+                )
 
-            if oom:
-                # free up memory
-                torch.cuda.empty_cache()
-                oom = False
-                continue
-
-            # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
-            if output == -1:
-                print(f"Empty region features before language model at batch number {num_batch}.\n\n")
-
-                continue
-            else:
-                beam_search_output, selected_regions, _, _ = output
-                selected_regions = selected_regions.detach().cpu().numpy()
+            beam_search_output, selected_regions, detections, class_detected = output
+            selected_regions = selected_regions.detach().cpu().numpy()
 
             # generated_sentences_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
             generated_sentences_for_selected_regions = tokenizer.batch_decode(
@@ -318,6 +312,13 @@ def evaluate_language_model(model, test_loader, tokenizer):
             )
 
             (
+                gen_sents_for_normal_selected_regions,
+                gen_sents_for_abnormal_selected_regions,
+                ref_sents_for_normal_selected_regions,
+                ref_sents_for_abnormal_selected_regions,
+            ) = get_sents_for_normal_abnormal_selected_regions(region_is_abnormal, selected_regions, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions)
+
+            (
                 generated_reports,
                 reference_reports,
                 removed_similar_generated_sentences,
@@ -327,46 +328,21 @@ def evaluate_language_model(model, test_loader, tokenizer):
 
             reference_reports_mimic = get_reference_reports_mimic(study_ids)
 
-            (
-                gen_sents_for_abnormal_selected_regions,
-                ref_sents_for_abnormal_selected_regions,
-            ) = update_language_model_scores(
-                language_model_scores,
-                generated_sentences_for_selected_regions,
-                reference_sentences_for_selected_regions,
-                generated_reports,
-                reference_reports,
-                reference_reports_mimic,
-                selected_regions,
-                region_is_abnormal,
-            )
+            gen_and_ref_sentences["generated_sentences"].extend(generated_sentences_for_selected_regions)
+            gen_and_ref_sentences["generated_sentences_normal_selected_regions"].extend(gen_sents_for_normal_selected_regions)
+            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(gen_sents_for_abnormal_selected_regions)
+            gen_and_ref_sentences["reference_sentences"].extend(reference_sentences_for_selected_regions)
+            gen_and_ref_sentences["reference_sentences_normal_selected_regions"].extend(ref_sents_for_normal_selected_regions)
+            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
+            gen_and_ref_reports["generated_reports"].extend(generated_reports)
+            gen_and_ref_reports["reference_reports"].extend(reference_reports)
+            gen_and_ref_reports["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
+            gen_and_ref_reports["reference_reports_mimic_findings_only"].extend(reference_reports_mimic["report_mimic_findings_only"])
+            gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
 
-            if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
-                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(
-                    generated_sentences_for_selected_regions
-                )
-                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(
-                    reference_sentences_for_selected_regions
-                )
-                gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"].extend(
-                    gen_sents_for_abnormal_selected_regions
-                )
-                gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"].extend(
-                    ref_sents_for_abnormal_selected_regions
-                )
+    write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_reports)
 
-            if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
-                gen_and_ref_reports_to_save_to_file["generated_reports"].extend(generated_reports)
-                gen_and_ref_reports_to_save_to_file["reference_reports"].extend(reference_reports)
-                gen_and_ref_reports_to_save_to_file["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
-                gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"].extend(reference_reports_mimic["report_mimic_findings_only"])
-                gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"].extend(
-                    removed_similar_generated_sentences
-                )
-
-    write_sentences_and_reports_to_file(gen_and_ref_sentences_to_save_to_file, gen_and_ref_reports_to_save_to_file)
-
-    compute_final_language_model_scores(language_model_scores)
+    language_model_scores = compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports)
 
     return language_model_scores
 
@@ -509,7 +485,7 @@ def evaluate_model(model, test_loader, tokenizer):
 
 def get_data_loader(tokenizer, test_dataset_complete):
     custom_collate_test = CustomCollator(
-        tokenizer=tokenizer, is_val=True, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL
+        tokenizer=tokenizer, is_val=True, pretrain_without_lm_model=False
     )
 
     test_loader = DataLoader(
@@ -517,7 +493,7 @@ def get_data_loader(tokenizer, test_dataset_complete):
         collate_fn=custom_collate_test,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=NUM_WORKERS,
+        num_workers=0,
         pin_memory=True,
     )
     return test_loader
@@ -614,6 +590,8 @@ def get_dataset():
             lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases]
         )
 
+    datasets_as_dfs["test"] = datasets_as_dfs["test"][:NUM_IMAGES_TO_USE_IN_TEST_SET]
+
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
 
     return raw_test_dataset
@@ -635,11 +613,11 @@ def main():
     test_loader = get_data_loader(tokenizer, test_dataset_complete)
 
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_36/checkpoints/checkpoint_val_loss_23.564_overall_steps_116847.pt",
+        "/u/home/tanida/runs/full_model/run_38/checkpoints/checkpoint_val_loss_20.973_overall_steps_136051.pt",
         map_location=torch.device("cpu"),
     )
 
-    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
+    model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
     model.to(device, non_blocking=True)
     model.eval()

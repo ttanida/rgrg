@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 from transformers import BertTokenizer
 import json
@@ -5,28 +7,34 @@ from tqdm import tqdm
 import argparse
 
 def get_impressions_from_csv(path):	
-        df = pd.read_csv(path)
-        imp = df['Report Impression']
-        imp = imp.str.strip()
-        imp = imp.replace('\n',' ', regex=True)
-        imp = imp.replace('\s+', ' ', regex=True)
-        imp = imp.str.strip()
-        return imp
+    df = pd.read_csv(path)
+    imp = df['Report Impression']
+    imp = imp.str.strip()
+    imp = imp.replace('\n',' ', regex=True)
+    imp = imp.replace('\s+', ' ', regex=True)
+    imp = imp.str.strip()
+    return imp
 
 def tokenize(impressions, tokenizer):
-        new_impressions = []
-        print("\nTokenizing report impressions. All reports are cut off at 512 tokens.")
-        for i in tqdm(range(impressions.shape[0])):
-                tokenized_imp = tokenizer.tokenize(impressions.iloc[i])
-                if tokenized_imp: #not an empty report
-                        res = tokenizer.encode_plus(tokenized_imp)['input_ids']
-                        if len(res) > 512: #length exceeds maximum size
-                                #print("report length bigger than 512")
-                                res = res[:511] + [tokenizer.sep_token_id]
-                        new_impressions.append(res)
-                else: #an empty report
-                        new_impressions.append([tokenizer.cls_token_id, tokenizer.sep_token_id]) 
-        return new_impressions
+    new_impressions = []
+    print("\nTokenizing report impressions. All reports are cut off at 512 tokens.")
+    for i in tqdm(range(impressions.shape[0])):
+        try:
+            tokenized_imp = tokenizer.tokenize(impressions.iloc[i])
+        except Exception:
+            txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "final_scores_bertscore_0.9.txt")
+            with open(txt_file_name, "a") as f:
+                f.write(f"Failed tokenization for {impressions.iloc[i]} at index {i}") 
+            tokenized_imp = None
+        if tokenized_imp:  # not an empty report
+            res = tokenizer.encode_plus(tokenized_imp)['input_ids']
+            if len(res) > 512:  # length exceeds maximum size
+                # print("report length bigger than 512")
+                res = res[:511] + [tokenizer.sep_token_id]
+            new_impressions.append(res)
+        else:  # an empty report
+            new_impressions.append([tokenizer.cls_token_id, tokenizer.sep_token_id])
+    return new_impressions
 
 def load_list(path):
         with open(path, 'r') as filehandle:
