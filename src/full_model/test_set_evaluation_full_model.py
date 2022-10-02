@@ -616,6 +616,8 @@ def main():
         "/u/home/tanida/runs/full_model/run_38/checkpoints/checkpoint_val_loss_20.973_overall_steps_136051.pt",
         map_location=torch.device("cpu"),
     )
+    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
