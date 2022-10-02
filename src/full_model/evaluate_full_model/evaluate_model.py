@@ -64,7 +64,7 @@ def write_all_losses_and_scores_to_tensorboard(
 
     def write_obj_detector_scores():
         writer.add_scalar(
-            "avg_num_detected_regions_per_image",
+            "object_detector/avg_num_detected_regions_per_image",
             obj_detector_scores["avg_num_detected_regions_per_image"],
             overall_steps_taken,
         )
@@ -75,28 +75,72 @@ def write_all_losses_and_scores_to_tensorboard(
         avg_iou_per_region = obj_detector_scores["avg_iou_per_region"]
 
         for region_, avg_detections_region in zip(anatomical_regions, avg_detections_per_region):
-            writer.add_scalar(f"num_detected_{region_}", avg_detections_region, overall_steps_taken)
+            writer.add_scalar(f"object_detector/num_detected/{region_}", avg_detections_region, overall_steps_taken)
 
         for region_, avg_iou_region in zip(anatomical_regions, avg_iou_per_region):
-            writer.add_scalar(f"iou_{region_}", avg_iou_region, overall_steps_taken)
+            writer.add_scalar(f"object_detector/iou/{region_}", avg_iou_region, overall_steps_taken)
 
     def write_region_selection_scores():
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
-                writer.add_scalar(f"region_select_{subset}_{metric}", score, overall_steps_taken)
+                writer.add_scalar(f"region_select/{subset}/{metric}", score, overall_steps_taken)
 
     def write_region_abnormal_scores():
         for metric, score in region_abnormal_scores.items():
-            writer.add_scalar(f"region_abnormal_{metric}", score, overall_steps_taken)
+            writer.add_scalar(f"region_abnormal/{metric}", score, overall_steps_taken)
+
+    def write_clinical_efficacy_scores(subset, ce_score_dict):
+        """
+        ce_score_dict is of the structure:
+
+        {
+            precision: ...,
+            recall: ...,
+            f1: ...,
+            acc: ...,
+            condition_1 : {
+                precision: ...,
+                recall: ...,
+                f1: ...,
+                acc: ...,
+            },
+            condition_2 : {
+                precision: ...,
+                recall: ...,
+                f1: ...,
+                acc: ...,
+            },
+            ...,
+            condition_5 : {
+                precision: ...,
+                recall: ...,
+                f1: ...,
+                acc: ...,
+            }
+        }
+
+        where the "..." after the 4 metrics are the corresponding scores,
+        and condition_* are from the 5 conditions we evaluate on (i.e. "Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion")
+        """
+        metrics = {"precision", "recall", "f1", "acc"}
+
+        for k, v in ce_score_dict.items():
+            if k in metrics:
+                writer.add_scalar(f"language_model/{subset}/CE/{k}", v, overall_steps_taken)
+            else:
+                # k is a condition
+                condition_name = "_".join(k.lower().split())
+                for metric, score in ce_score_dict[k].items():
+                    writer.add_scalar(f"language_model/{subset}/CE/{condition_name}/{metric}", score, overall_steps_taken)
 
     def write_language_model_scores():
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
                 if metric == "CE":
-                    for metric_CE, score_CE in language_model_scores[subset][metric].items():
-                        writer.add_scalar(f"language_model_{subset}_{metric}_{metric_CE}", score_CE, overall_steps_taken)
+                    ce_score_dict = language_model_scores[subset]["CE"]
+                    write_clinical_efficacy_scores(subset, ce_score_dict)
                 else:
-                    writer.add_scalar(f"language_model_{subset}_{metric}", score, overall_steps_taken)
+                    writer.add_scalar(f"language_model/{subset}/{metric}", score, overall_steps_taken)
 
     write_losses()
     write_obj_detector_scores()

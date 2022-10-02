@@ -26,7 +26,7 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 39
+RUN = 42
 RUN_COMMENT = """Test if CheXbert works."""
 PRETRAIN_WITHOUT_LM_MODEL = False
 PRETRAIN_LM_MODEL = False

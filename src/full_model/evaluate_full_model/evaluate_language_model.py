@@ -28,8 +28,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import spacy
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
-import torchmetrics
 from tqdm import tqdm
 
 from src.CheXbert.src.constants import CONDITIONS
@@ -52,45 +52,218 @@ path_to_val_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/va
 path_to_val_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports_findings_only"
 
 
-def compute_final_language_model_scores(language_model_scores):
-    for subset in language_model_scores:
-        temp = {}
-        for metric, score in language_model_scores[subset].items():
-            if metric.startswith("bleu"):
+def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
+    def compute_sentence_level_scores():
+        def compute_sent_level_scores_for_subset(subset, gen_sents, ref_sents):
+            for metric, score in language_model_scores[subset].items():
                 bleu_score_type = int(metric[-1])
-                result = score.compute(max_order=bleu_score_type)
-                temp[f"{metric}"] = result["bleu"]
-            elif metric == "meteor":
-                result = score.compute()
-                temp["meteor"] = result["meteor"]
-            elif metric == "rouge":
-                result = score.compute(rouge_types=["rougeL"], use_aggregator=True)["rougeL"]
-                # index 1 ^= mid (average)
-                # index 2 ^= f-score
-                temp["rouge"] = float(result[1][2])
-            elif metric == "CE":
-                # in the case of CE, score is another dict with keys "precision", "recall", "f1", "acc"
-                temp["CE"] = {}
-                for metric_CE, score_CE in score.items():
-                    temp["CE"][metric_CE] = score_CE.compute()[1].item()  # only report results for the positive class (hence [1])
+                bleu_result = score.compute(predictions=gen_sents, references=ref_sents, max_order=bleu_score_type)["bleu"]
+                language_model_scores[subset][metric] = bleu_result
 
-        language_model_scores[subset] = temp
+        generated_sents = gen_and_ref_sentences["generated_sentences"]
+        generated_sents_normal = gen_and_ref_sentences["generated_sentences_normal_selected_regions"]
+        generated_sents_abnormal = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"]
+
+        reference_sents = gen_and_ref_sentences["reference_sentences"]
+        reference_sents_normal = gen_and_ref_sentences["reference_sentences_normal_selected_regions"]
+        reference_sents_abnormal = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"]
+
+        compute_sent_level_scores_for_subset("all", generated_sents, reference_sents)
+        compute_sent_level_scores_for_subset("normal", generated_sents_normal, reference_sents_normal)
+        compute_sent_level_scores_for_subset("abnormal", generated_sents_abnormal, reference_sents_abnormal)
+
+    def compute_report_level_scores():
+        def compute_clinical_efficacy_scores(subset: str, gen_reports: list[str], ref_reports: list[str]):
+            """
+            To get the CE scores, we first need the labels extracted by CheXbert
+
+            The function label from module CheXbert/src/label.py that extracts these labels requires 2 input arguments:
+                1. checkpoint_path (str): path to the saved (bert) model weights
+                2. csv_path (str): path to the csv file with the reports. The csv file has to have 1 column titled "Report Impression"
+                under which the reports can be found
+
+            We use a temporary directory to create the csv files for the generated and reference reports.
+
+            The function label returns preds_gen_reports and preds_ref_reports respectively, which are List[List[int]],
+            with the outer list always having len=14 (for 14 conditions, specified in CheXbert/src/constants.py),
+            and the inner list of len=num_reports.
+
+            E.g. the 1st inner list could be [2, 1, 0, 3], which means the 1st report has label 2 for the 1st condition (which is 'Enlarged Cardiomediastinum'),
+            the 2nd report has label 1 for the 1st condition, the 3rd report has label 0 for the 1st condition, the 4th and final report label 3 for the 1st condition.
+
+            There are 4 possible labels:
+                0: blank/NaN (i.e. no prediction could be made about a condition, because it was no mentioned in a report)
+                1: positive (condition was mentioned as present in a report)
+                2: negative (condition was mentioned as not present in a report)
+                3: uncertain (condition was mentioned as possibly present in a report)
+
+            Following the implementation of the paper "Improving Factual Completeness and Consistency of Image-to-text Radiology Report Generation"
+            by Miura et. al., we merge negative and blank/NaN into one whole negative class, and positive and uncertain into one whole positive class.
+            For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py,
+            where label 3 is converted to label 1, and label 2 is converted to label 0.
+            """
+            def convert_labels(preds_reports: list[list[int]]):
+                """
+                See doc string of update_clinical_efficacy_scores function for more details.
+                Converts label 2 -> label 0 and label 3 -> label 1.
+                """
+                def convert_label(label: int):
+                    if label == 2:
+                        return 0
+                    elif label == 3:
+                        return 1
+                    else:
+                        return label
+
+                preds_reports = [[convert_label(label) for label in condition_list] for condition_list in preds_reports]
+
+                return preds_reports
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                csv_gen_reports_file_path = os.path.join(temp_dir, "gen_reports.csv")
+                csv_ref_reports_file_path = os.path.join(temp_dir, "ref_reports.csv")
+
+                header = ["Report Impression"]
+
+                with open(csv_gen_reports_file_path, "w") as fp:
+                    csv_writer = csv.writer(fp)
+                    csv_writer.writerow(header)
+                    csv_writer.writerows([[gen_report] for gen_report in gen_reports])
+
+                with open(csv_ref_reports_file_path, "w") as fp:
+                    csv_writer = csv.writer(fp)
+                    csv_writer.writerow(header)
+                    csv_writer.writerows([[ref_report] for ref_report in ref_reports])
+
+                # preds_*_reports are List[List[int]] with the labels extracted by CheXbert (see doc string for details)
+                preds_gen_reports = label(path_chexbert_weights, csv_gen_reports_file_path)
+                preds_ref_reports = label(path_chexbert_weights, csv_ref_reports_file_path)
+
+            preds_gen_reports = convert_labels(preds_gen_reports)
+            preds_ref_reports = convert_labels(preds_ref_reports)
+
+            total_preds_gen_reports_5_conditions = []
+            total_preds_ref_reports_5_conditions = []
+
+            # iterate over the 14 conditions
+            for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports, preds_ref_reports, CONDITIONS):
+                if condition in five_conditions_to_evaluate:
+                    total_preds_gen_reports_5_conditions.extend(preds_gen_reports_condition)
+                    total_preds_ref_reports_5_conditions.extend(preds_ref_reports_condition)
+
+                    precision, recall, f1, _ = precision_recall_fscore_support(preds_ref_reports_condition, preds_gen_reports_condition, average="binary")
+                    acc = accuracy_score(preds_ref_reports_condition, preds_gen_reports_condition)
+
+                    language_model_scores[subset]["CE"][condition]["precision"] = precision
+                    language_model_scores[subset]["CE"][condition]["recall"] = recall
+                    language_model_scores[subset]["CE"][condition]["f1"] = f1
+                    language_model_scores[subset]["CE"][condition]["acc"] = acc
+
+            precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions, average="binary")
+            acc = accuracy_score(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions)
+
+            language_model_scores[subset]["CE"]["precision"] = precision
+            language_model_scores[subset]["CE"]["recall"] = recall
+            language_model_scores[subset]["CE"]["f1"] = f1
+            language_model_scores[subset]["CE"]["acc"] = acc
+
+        def compute_report_level_scores_for_subset(subset, gen_reports, ref_reports):
+            for metric, score in language_model_scores[subset].items():
+                if metric.startswith("bleu"):
+                    bleu_score_type = int(metric[-1])
+                    bleu_result = score.compute(predictions=gen_reports, references=ref_reports, max_order=bleu_score_type)["bleu"]
+                    language_model_scores[subset][metric] = float(bleu_result)
+                elif metric == "meteor":
+                    meteor_result = score.compute(predictions=gen_reports, references=ref_reports)["meteor"]
+                    language_model_scores[subset][metric] = float(meteor_result)
+                elif metric == "rouge":
+                    rouge_result = score.compute(predictions=gen_reports, references=ref_reports)["rougeL"]
+                    language_model_scores[subset][metric] = float(rouge_result)
+                elif metric == "CE":
+                    compute_clinical_efficacy_scores(subset, gen_reports, ref_reports)
+
+        def filter_out_none_values_in_ref_reports_mimic_findings_only(generated_reports, reference_reports_mimic_findings_only):
+            generated_reports_findings_only = []
+            reference_reports_mimic_findings_only_without_none = []
+
+            for gen_report, ref_report_mimic_findings_only in zip(generated_reports, reference_reports_mimic_findings_only):
+                if ref_report_mimic_findings_only is None:
+                    continue
+
+                generated_reports_findings_only.append(gen_report)
+                reference_reports_mimic_findings_only_without_none.append(ref_report_mimic_findings_only)
+
+            return generated_reports_findings_only, reference_reports_mimic_findings_only_without_none
+
+        generated_reports = gen_and_ref_reports["generated_reports"]
+        reference_reports = gen_and_ref_reports["reference_reports"]
+        reference_reports_mimic = gen_and_ref_reports["reference_reports_mimic"]
+        reference_reports_mimic_findings_only = gen_and_ref_reports["reference_reports_mimic_findings_only"]
+
+        generated_reports_findings_only, reference_reports_mimic_findings_only_without_none = filter_out_none_values_in_ref_reports_mimic_findings_only(
+            generated_reports,
+            reference_reports_mimic_findings_only
+        )
+
+        compute_report_level_scores_for_subset("report", generated_reports, reference_reports)
+        compute_report_level_scores_for_subset("report_mimic", generated_reports, reference_reports_mimic)
+        compute_report_level_scores_for_subset("report_mimic_findings_only", generated_reports_findings_only, reference_reports_mimic_findings_only_without_none)
+
+    language_model_scores = {}
+
+    # compute bleu scores for all, normal and abnormal reference sentences as well as
+    # full reports composed of the reference sentences given by ChestImaGenome (specified by the key "report") and
+    # full reports directly taken from MIMIC-CXR (specified by the key "report_mimic")
+    for subset in ["all", "normal", "abnormal", "report", "report_mimic", "report_mimic_findings_only"]:
+        language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+
+    # for the CE scores, we follow Miura (https://arxiv.org/pdf/2010.10042.pdf) in only evaluating them on 5 conditions
+    five_conditions_to_evaluate = {"Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"}
+
+    # compute meteor, rouge-L and clinical efficacy (CE) scores for complete reports
+    for subset in ["report", "report_mimic", "report_mimic_findings_only"]:
+        language_model_scores[subset]["meteor"] = evaluate.load("meteor")
+        language_model_scores[subset]["rouge"] = evaluate.load("rouge")
+        language_model_scores[subset]["CE"] = {
+            # will be calculate with sklearn precision_recall_fscore_support and accuracy_score
+            "precision": None,
+            "recall": None,
+            "f1": None,
+            "acc": None
+        }
+        for condition in five_conditions_to_evaluate:
+            language_model_scores[subset]["CE"][condition] = {
+                "precision": None,
+                "recall": None,
+                "f1": None,
+                "acc": None
+            }
+
+    compute_sentence_level_scores()
+    compute_report_level_scores()
+
+    return language_model_scores
 
 
 def write_sentences_and_reports_to_file(
-    gen_and_ref_sentences_to_save_to_file,
-    gen_and_ref_reports_to_save_to_file,
+    gen_and_ref_sentences,
+    gen_and_ref_reports,
     generated_sentences_and_reports_folder_path,
     overall_steps_taken,
 ):
-    def write_sentences(generated_sentences, reference_sentences, is_abnormal):
-        txt_file_name = f"generated{'' if not is_abnormal else '_abnormal'}_sentences_step_{overall_steps_taken}"
-        txt_file_name = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", txt_file_name)
+    def write_sentences(generated_sentences, generated_sentences_abnormal_regions, reference_sentences, reference_sentences_abnormal_regions):
+        txt_file_name = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", f"generated_sentences_step_{overall_steps_taken}")
+        txt_file_name_abnormal = os.path.join(generated_sentences_and_reports_folder_path, "generated_sentences", f"generated_abnormal_sentences_step_{overall_steps_taken}")
 
         with open(txt_file_name, "w") as f:
             for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
                 f.write(f"Generated sentence: {gen_sent}\n")
                 # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
+                f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
+
+        with open(txt_file_name_abnormal, "w") as f:
+            for gen_sent, ref_sent in zip(generated_sentences_abnormal_regions, reference_sentences_abnormal_regions):
+                f.write(f"Generated sentence: {gen_sent}\n")
                 f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
     def write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences):
@@ -107,7 +280,7 @@ def write_sentences_and_reports_to_file(
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
                 f.write(f"Ref report mimic: {ref_report_mimic}\n\n")
-                f.write(f"Ref report mimic findings only: {ref_report_mimic_findings_only}\n\n")
+                f.write(f"Ref report mimic findings only: {ref_report_mimic_findings_only if ref_report_mimic_findings_only is not None else '[EMPTY]'}\n\n")
                 f.write("Generated sentences that were removed:\n")
                 for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
                     f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
@@ -115,23 +288,21 @@ def write_sentences_and_reports_to_file(
                 f.write("=" * 30)
                 f.write("\n\n")
 
-    # generated_sentences is a list of str
-    generated_sentences = gen_and_ref_sentences_to_save_to_file["generated_sentences"]
-    generated_abnormal_sentences = gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"]
+    # all below are list of str
+    generated_sentences = gen_and_ref_sentences["generated_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    reference_sentences = gen_and_ref_sentences["reference_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
 
-    # reference_sentences is a list of str
-    reference_sentences = gen_and_ref_sentences_to_save_to_file["reference_sentences"]
-    reference_abnormal_sentences = gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"]
+    write_sentences(generated_sentences, generated_sentences_abnormal_regions, reference_sentences, reference_sentences_abnormal_regions)
 
-    write_sentences(generated_sentences, reference_sentences, is_abnormal=False)
-    write_sentences(generated_abnormal_sentences, reference_abnormal_sentences, is_abnormal=True)
+    # all below are list of str except removed_similar_generated_sentences which is a list of dict
+    generated_reports = gen_and_ref_reports["generated_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    reference_reports = gen_and_ref_reports["reference_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    reference_reports_mimic = gen_and_ref_reports["reference_reports_mimic"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    reference_reports_mimic_findings_only = gen_and_ref_reports["reference_reports_mimic_findings_only"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    removed_similar_generated_sentences = gen_and_ref_reports["removed_similar_generated_sentences"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
 
-    # generated_reports, reference_reports and reference_reports_mimic are list of str
-    generated_reports = gen_and_ref_reports_to_save_to_file["generated_reports"]
-    reference_reports = gen_and_ref_reports_to_save_to_file["reference_reports"]
-    reference_reports_mimic = gen_and_ref_reports_to_save_to_file["reference_reports_mimic"]
-    reference_reports_mimic_findings_only = gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"]
-    removed_similar_generated_sentences = gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"]
     write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences)
 
 
@@ -418,194 +589,6 @@ def plot_detections_and_sentences_to_tensorboard(
             plt.close(fig)
 
 
-def update_language_model_scores(
-    language_model_scores,
-    generated_sentences_for_selected_regions,
-    reference_sentences_for_selected_regions,
-    generated_reports,
-    reference_reports,
-    reference_reports_mimic,
-    selected_regions,
-    region_is_abnormal,
-):
-    def get_sents_for_normal_abnormal_selected_regions():
-        selected_region_is_abnormal = region_is_abnormal[selected_regions]
-        # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
-
-        gen_sents_for_selected_regions = np.asarray(generated_sentences_for_selected_regions)
-        ref_sents_for_selected_regions = np.asarray(reference_sentences_for_selected_regions)
-
-        gen_sents_for_normal_selected_regions = gen_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
-        gen_sents_for_abnormal_selected_regions = gen_sents_for_selected_regions[selected_region_is_abnormal].tolist()
-
-        ref_sents_for_normal_selected_regions = ref_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
-        ref_sents_for_abnormal_selected_regions = ref_sents_for_selected_regions[selected_region_is_abnormal].tolist()
-
-        return (
-            gen_sents_for_normal_selected_regions,
-            gen_sents_for_abnormal_selected_regions,
-            ref_sents_for_normal_selected_regions,
-            ref_sents_for_abnormal_selected_regions,
-        )
-
-    def update_language_model_scores_sentence_level():
-        for score in language_model_scores["all"].values():
-            score.add_batch(
-                predictions=generated_sentences_for_selected_regions, references=reference_sentences_for_selected_regions
-            )
-
-        # for computing the scores for the normal and abnormal reference sentences, we have to filter the generated and reference sentences accordingly
-        (
-            gen_sents_for_normal_selected_regions,
-            gen_sents_for_abnormal_selected_regions,
-            ref_sents_for_normal_selected_regions,
-            ref_sents_for_abnormal_selected_regions,
-        ) = get_sents_for_normal_abnormal_selected_regions()
-
-        if len(ref_sents_for_normal_selected_regions) != 0:
-            for score in language_model_scores["normal"].values():
-                score.add_batch(
-                    predictions=gen_sents_for_normal_selected_regions, references=ref_sents_for_normal_selected_regions
-                )
-
-        if len(ref_sents_for_abnormal_selected_regions) != 0:
-            for score in language_model_scores["abnormal"].values():
-                score.add_batch(
-                    predictions=gen_sents_for_abnormal_selected_regions, references=ref_sents_for_abnormal_selected_regions
-                )
-
-        return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
-
-    def update_clinical_efficacy_scores(ce_dict: dict[str, torchmetrics.Metric], gen_reports: list[str], ref_reports: list[str]):
-        """
-        To get the CE scores, we first need the labels extracted by CheXbert
-
-        The function label from module CheXbert/src/label.py that extracts these labels requires 2 input arguments:
-            1. checkpoint_path (str): path to the saved (bert) model weights
-            2. csv_path (str): path to the csv file with the reports. The csv file has to have 1 column titled "Report Impression"
-            under which the reports can be found
-
-        We use a temporary directory to create the csv files for the generated and reference reports.
-
-        The function label returns preds_gen_reports and preds_ref_reports respectively, which are List[List[int]],
-        with the outer list always having len=14 (for 14 conditions, specified in CheXbert/src/constants.py),
-        and the inner list of len=num_reports.
-
-        E.g. the 1st inner list could be [2, 1, 0, 3], which means the 1st report has label 2 for the 1st condition (which is 'Enlarged Cardiomediastinum'),
-        the 2nd report has label 1 for the 1st condition, the 3rd report has label 0 for the 1st condition, the 4th and final report label 3 for the 1st condition.
-
-        There are 4 possible labels:
-            0: blank/NaN (i.e. no prediction could be made about a condition, because it was no mentioned in a report)
-            1: positive (condition was mentioned as present in a report)
-            2: negative (condition was mentioned as not present in a report)
-            3: uncertain (condition was mentioned as possibly present in a report)
-
-        Following the implementation of the paper "Improving Factual Completeness and Consistency of Image-to-text Radiology Report Generation"
-        by Miura et. al., we merge negative and blank/NaN into one whole negative class, and positive and uncertain into one whole positive class.
-        For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py,
-        where label 3 is converted to label 1, and label 2 is converted to label 0.
-        """
-        def convert_labels(preds_reports: list[list[int]]):
-            """
-            See doc string of update_clinical_efficacy_scores function for more details.
-            Converts label 2 -> label 0 and label 3 -> label 1.
-            """
-            def convert_label(label: int):
-                if label == 2:
-                    return 0
-                elif label == 3:
-                    return 1
-                else:
-                    return label
-
-            preds_reports = [[convert_label(label) for label in condition_list] for condition_list in preds_reports]
-
-            return preds_reports
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            csv_gen_reports_file_path = os.path.join(temp_dir, "gen_reports.csv")
-            csv_ref_reports_file_path = os.path.join(temp_dir, "ref_reports.csv")
-
-            header = ["Report Impression"]
-
-            with open(csv_gen_reports_file_path, "w") as fp:
-                csv_writer = csv.writer(fp)
-                csv_writer.writerow(header)
-                csv_writer.writerows([[gen_report] for gen_report in gen_reports])
-
-            with open(csv_ref_reports_file_path, "w") as fp:
-                csv_writer = csv.writer(fp)
-                csv_writer.writerow(header)
-                csv_writer.writerows([[ref_report] for ref_report in ref_reports])
-
-            # preds_*_reports are List[List[int]] with the labels extracted by CheXbert (see doc string for details)
-            preds_gen_reports = label(path_chexbert_weights, csv_gen_reports_file_path)
-            preds_ref_reports = label(path_chexbert_weights, csv_ref_reports_file_path)
-
-        preds_gen_reports = convert_labels(preds_gen_reports)
-        preds_ref_reports = convert_labels(preds_ref_reports)
-
-        # following Miura, we evaluate on 5 conditions
-        five_conditions_to_evaluate = {"Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"}
-
-        # iterate over the 14 conditions
-        for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports, preds_ref_reports, CONDITIONS):
-            if condition not in five_conditions_to_evaluate:
-                continue
-
-            # update precision, recall, f1 and accuracy scores
-            for score in ce_dict.values():
-                score(torch.tensor(preds_gen_reports_condition), torch.tensor(preds_ref_reports_condition))
-
-    def update_language_model_scores_report_level():
-        # reference reports composed of reference sentences from ChestImaGenome dataset
-        for metric, score in language_model_scores["report"].items():
-            if metric == "CE":
-                continue
-            score.add_batch(
-                predictions=generated_reports, references=reference_reports
-            )
-
-        update_clinical_efficacy_scores(language_model_scores["report"]["CE"], generated_reports, reference_reports)
-
-        # reference reports mimic taken directly from MIMIC-CXR dataset
-        for metric, score in language_model_scores["report_mimic"].items():
-            if metric == "CE":
-                continue
-            score.add_batch(
-                predictions=generated_reports, references=reference_reports_mimic["report_mimic"]
-            )
-
-        update_clinical_efficacy_scores(language_model_scores["report_mimic"]["CE"], generated_reports, reference_reports_mimic["report_mimic"])
-
-        # reference reports mimic taken directly from MIMIC-CXR dataset, but only the findings section
-        mimic_reports_findings_only = reference_reports_mimic["report_mimic_findings_only"]
-
-        generated_reports_findings_only = []
-        mimic_reports_findings_only_without_None = []
-
-        for gen_report, mimic_report_findings_only in zip(generated_reports, mimic_reports_findings_only):
-            if mimic_report_findings_only is None:
-                continue
-
-            generated_reports_findings_only.append(gen_report)
-            mimic_reports_findings_only_without_None.append(mimic_report_findings_only)
-
-        for metric, score in language_model_scores["report_mimic_findings_only"].items():
-            if metric == "CE":
-                continue
-            score.add_batch(
-                predictions=generated_reports_findings_only, references=mimic_reports_findings_only_without_None
-            )
-
-        update_clinical_efficacy_scores(language_model_scores["report_mimic_findings_only"]["CE"], generated_reports_findings_only, mimic_reports_findings_only_without_None)
-
-    gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions = update_language_model_scores_sentence_level()
-    update_language_model_scores_report_level()
-
-    return gen_sents_for_abnormal_selected_regions, ref_sents_for_abnormal_selected_regions
-
-
 def get_reference_reports_mimic(study_ids) -> dict[str, list]:
     """
     The folder "/u/home/tanida/datasets/mimic-cxr-reports/val_200_reports" (specified by path_to_val_mimic_reports_folder)
@@ -799,46 +782,42 @@ def get_ref_sentences_for_selected_regions(reference_sentences, selected_regions
     return ref_sentences_for_selected_regions.tolist()
 
 
+def get_sents_for_normal_abnormal_selected_regions(region_is_abnormal, selected_regions, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions):
+    selected_region_is_abnormal = region_is_abnormal[selected_regions]
+    # selected_region_is_abnormal is a bool array of shape [num_regions_selected_in_batch] that specifies if a selected region is abnormal (True) or normal (False)
+
+    gen_sents_for_selected_regions = np.asarray(generated_sentences_for_selected_regions)
+    ref_sents_for_selected_regions = np.asarray(reference_sentences_for_selected_regions)
+
+    gen_sents_for_normal_selected_regions = gen_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
+    gen_sents_for_abnormal_selected_regions = gen_sents_for_selected_regions[selected_region_is_abnormal].tolist()
+
+    ref_sents_for_normal_selected_regions = ref_sents_for_selected_regions[~selected_region_is_abnormal].tolist()
+    ref_sents_for_abnormal_selected_regions = ref_sents_for_selected_regions[selected_region_is_abnormal].tolist()
+
+    return (
+        gen_sents_for_normal_selected_regions,
+        gen_sents_for_abnormal_selected_regions,
+        ref_sents_for_normal_selected_regions,
+        ref_sents_for_abnormal_selected_regions,
+    )
+
+
 def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path):
     epoch = run_params["epoch"]
     overall_steps_taken = run_params["overall_steps_taken"]
     log_file = run_params["log_file"]
 
-    language_model_scores = {}
-
-    # compute bleu scores for all, normal and abnormal reference sentences as well as
-    # full reports composed of the reference sentences given by ChestImaGenome (specified by the key "report") and
-    # full reports directly taken from MIMIC-CXR (specified by the key "report_mimic")
-    for subset in ["all", "normal", "abnormal", "report", "report_mimic", "report_mimic_findings_only"]:
-        language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
-
-    # compute meteor, rouge-L and clinical efficacy (CE) scores for complete reports
-    for subset in ["report", "report_mimic", "report_mimic_findings_only"]:
-        language_model_scores[subset]["meteor"] = evaluate.load("meteor")
-        language_model_scores[subset]["rouge"] = evaluate.load("rouge")
-        language_model_scores[subset]["CE"] = {
-            # specifying average=None computes the metric for each class (i.e. negative and positive) separately
-            # we then report the score of the positive class by indexing [1] once we've computed the final scores
-            # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
-            #
-            # note: using average="micro" is not correct, since it considers the negative and positive classes
-            # to be separate classes (even in the binary case). If e.g. pred = True and ground-truth = False,
-            # then it will be considered a FP for the positive class, but also a FN for the negative class,
-            # which does not make any sense for the binary case and leads to incorrect scores
-            "precision": torchmetrics.Precision(num_classes=2, average=None),
-            "recall": torchmetrics.Recall(num_classes=2, average=None),
-            "f1": torchmetrics.F1Score(num_classes=2, average=None),
-            "acc": torchmetrics.Accuracy(num_classes=2, average=None)
-        }
-
-    gen_and_ref_sentences_to_save_to_file = {
+    gen_and_ref_sentences = {
         "generated_sentences": [],
+        "generated_sentences_normal_selected_regions": [],
+        "generated_sentences_abnormal_selected_regions": [],
         "reference_sentences": [],
-        "generated_abnormal_sentences": [],
-        "reference_abnormal_sentences": [],
+        "reference_sentences_normal_selected_regions": [],
+        "reference_sentences_abnormal_selected_regions": [],
     }
 
-    gen_and_ref_reports_to_save_to_file = {
+    gen_and_ref_reports = {
         "generated_reports": [],
         "removed_similar_generated_sentences": [],
         "reference_reports": [],
@@ -923,6 +902,13 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             )
 
             (
+                gen_sents_for_normal_selected_regions,
+                gen_sents_for_abnormal_selected_regions,
+                ref_sents_for_normal_selected_regions,
+                ref_sents_for_abnormal_selected_regions,
+            ) = get_sents_for_normal_abnormal_selected_regions(region_is_abnormal, selected_regions, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions)
+
+            (
                 generated_reports,
                 reference_reports,
                 removed_similar_generated_sentences,
@@ -932,42 +918,17 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
             reference_reports_mimic = get_reference_reports_mimic(study_ids)
 
-            (
-                gen_sents_for_abnormal_selected_regions,
-                ref_sents_for_abnormal_selected_regions,
-            ) = update_language_model_scores(
-                language_model_scores,
-                generated_sentences_for_selected_regions,
-                reference_sentences_for_selected_regions,
-                generated_reports,
-                reference_reports,
-                reference_reports_mimic,
-                selected_regions,
-                region_is_abnormal,
-            )
-
-            if num_batch < NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE:
-                gen_and_ref_sentences_to_save_to_file["generated_sentences"].extend(
-                    generated_sentences_for_selected_regions
-                )
-                gen_and_ref_sentences_to_save_to_file["reference_sentences"].extend(
-                    reference_sentences_for_selected_regions
-                )
-                gen_and_ref_sentences_to_save_to_file["generated_abnormal_sentences"].extend(
-                    gen_sents_for_abnormal_selected_regions
-                )
-                gen_and_ref_sentences_to_save_to_file["reference_abnormal_sentences"].extend(
-                    ref_sents_for_abnormal_selected_regions
-                )
-
-            if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
-                gen_and_ref_reports_to_save_to_file["generated_reports"].extend(generated_reports)
-                gen_and_ref_reports_to_save_to_file["reference_reports"].extend(reference_reports)
-                gen_and_ref_reports_to_save_to_file["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
-                gen_and_ref_reports_to_save_to_file["reference_reports_mimic_findings_only"].extend(reference_reports_mimic["report_mimic_findings_only"])
-                gen_and_ref_reports_to_save_to_file["removed_similar_generated_sentences"].extend(
-                    removed_similar_generated_sentences
-                )
+            gen_and_ref_sentences["generated_sentences"].extend(generated_sentences_for_selected_regions)
+            gen_and_ref_sentences["generated_sentences_normal_selected_regions"].extend(gen_sents_for_normal_selected_regions)
+            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(gen_sents_for_abnormal_selected_regions)
+            gen_and_ref_sentences["reference_sentences"].extend(reference_sentences_for_selected_regions)
+            gen_and_ref_sentences["reference_sentences_normal_selected_regions"].extend(ref_sents_for_normal_selected_regions)
+            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
+            gen_and_ref_reports["generated_reports"].extend(generated_reports)
+            gen_and_ref_reports["reference_reports"].extend(reference_reports)
+            gen_and_ref_reports["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
+            gen_and_ref_reports["reference_reports_mimic_findings_only"].extend(reference_reports_mimic["report_mimic_findings_only"])
+            gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
 
             if num_batch < num_batches_to_process_for_image_plotting:
                 plot_detections_and_sentences_to_tensorboard(
@@ -984,12 +945,12 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 )
 
     write_sentences_and_reports_to_file(
-        gen_and_ref_sentences_to_save_to_file,
-        gen_and_ref_reports_to_save_to_file,
+        gen_and_ref_sentences,
+        gen_and_ref_reports,
         generated_sentences_and_reports_folder_path,
         overall_steps_taken,
     )
 
-    compute_final_language_model_scores(language_model_scores)
+    language_model_scores = compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports)
 
     return language_model_scores
