@@ -38,7 +38,7 @@ BATCH_SIZE = 4
 NUM_WORKERS = 10
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-BERTSCORE_SIMILARITY_THRESHOLD = 0.85
+BERTSCORE_SIMILARITY_THRESHOLD = 0.8
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 500
@@ -59,6 +59,11 @@ torch.cuda.manual_seed_all(seed_val)
 
 path_to_test_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports"
 path_to_test_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports_findings_only"
+
+txt_file_name = os.path.join(
+    "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
+    f"final_scores_bertscore_{BERTSCORE_SIMILARITY_THRESHOLD}.txt",
+)
 
 
 def write_all_scores_to_file(
@@ -151,11 +156,6 @@ def write_all_scores_to_file(
                         write_clinical_efficacy_scores(subset, ce_score_dict)
                     else:
                         f.write(f"language_model_{subset}_{metric}: {score}\n")
-
-    txt_file_name = os.path.join(
-        "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
-        f"final_scores_bertscore_{BERTSCORE_SIMILARITY_THRESHOLD}.txt",
-    )
 
     write_obj_detector_scores()
     write_region_selection_scores()
@@ -340,6 +340,10 @@ def evaluate_language_model(model, test_loader, tokenizer):
             gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
 
     write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_reports)
+
+    with open(txt_file_name, "a") as f:
+        f.write(f"Num generated reports: {len(gen_and_ref_reports['generated_reports'])}\n")
+        f.write(f"Num reference reports findings only: {len([report for report in gen_and_ref_reports['report_mimic_findings_only'] if report is not None])}\n")
 
     language_model_scores = compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports)
 
