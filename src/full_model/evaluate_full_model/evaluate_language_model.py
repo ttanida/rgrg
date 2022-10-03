@@ -99,7 +99,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 
             Following the implementation of the paper "Improving Factual Completeness and Consistency of Image-to-text Radiology Report Generation"
             by Miura et. al., we merge negative and blank/NaN into one whole negative class, and positive and uncertain into one whole positive class.
-            For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py,
+            For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py#L141,
             where label 3 is converted to label 1, and label 2 is converted to label 0.
             """
             def convert_labels(preds_reports: list[list[int]]):

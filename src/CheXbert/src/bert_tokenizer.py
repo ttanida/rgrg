@@ -22,7 +22,7 @@ def tokenize(impressions, tokenizer):
         try:
             tokenized_imp = tokenizer.tokenize(impressions.iloc[i])
         except Exception:
-            txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "final_scores_bertscore_0.9.txt")
+            txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "failed_tokenizations.txt")
             with open(txt_file_name, "a") as f:
                 f.write(f"Failed tokenization for {impressions.iloc[i]} at index {i}\n")
             tokenized_imp = None

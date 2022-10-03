@@ -38,7 +38,7 @@ BATCH_SIZE = 4
 NUM_WORKERS = 10
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-BERTSCORE_SIMILARITY_THRESHOLD = 0.9
+BERTSCORE_SIMILARITY_THRESHOLD = 0.85
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 500
@@ -616,8 +616,8 @@ def main():
         "/u/home/tanida/runs/full_model/run_38/checkpoints/checkpoint_val_loss_20.973_overall_steps_136051.pt",
         map_location=torch.device("cpu"),
     )
-    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
