@@ -26,8 +26,8 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 42
-RUN_COMMENT = """Test if CheXbert works."""
+RUN = 43
+RUN_COMMENT = """Redo run 36, save weights at thresholds"""
 PRETRAIN_WITHOUT_LM_MODEL = False
 PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512

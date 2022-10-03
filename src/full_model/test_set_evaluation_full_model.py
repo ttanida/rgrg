@@ -61,7 +61,7 @@ path_to_test_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/t
 path_to_test_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports_findings_only"
 
 txt_file_name = os.path.join(
-    "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model",
+    "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/",
     f"final_scores_bertscore_{BERTSCORE_SIMILARITY_THRESHOLD}.txt",
 )
 
