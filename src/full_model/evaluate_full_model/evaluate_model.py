@@ -69,6 +69,8 @@ def write_all_losses_and_scores_to_tensorboard(
             overall_steps_taken,
         )
 
+        writer.add_scalar("object_detector/iou/avg_iou", obj_detector_scores["avg_iou"], overall_steps_taken)
+
         # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
         anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
         avg_detections_per_region = obj_detector_scores["avg_detections_per_region"]
@@ -498,6 +500,7 @@ def get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch):
     # compute object detector scores
     sum_intersection = obj_detector_scores["sum_intersection_area_per_region"]
     sum_union = obj_detector_scores["sum_union_area_per_region"]
+    obj_detector_scores["avg_iou"] = (torch.sum(sum_intersection) / torch.sum(sum_union)).item()
     obj_detector_scores["avg_iou_per_region"] = (sum_intersection / sum_union).tolist()
 
     sum_region_detected = obj_detector_scores["sum_region_detected"]

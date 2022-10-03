@@ -69,9 +69,8 @@ def write_all_scores_to_file(
 ):
     def write_obj_detector_scores():
         with open(txt_file_name, "a") as f:
-            f.write(
-                f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}\n"
-            )
+            f.write(f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}\n")
+            f.write(f"avg_iou: {obj_detector_scores['avg_iou']}\n")
 
         # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
         anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
@@ -333,7 +332,7 @@ def evaluate_language_model(model, test_loader, tokenizer):
             gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(gen_sents_for_abnormal_selected_regions)
             gen_and_ref_sentences["reference_sentences"].extend(reference_sentences_for_selected_regions)
             gen_and_ref_sentences["reference_sentences_normal_selected_regions"].extend(ref_sents_for_normal_selected_regions)
-            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
+            gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
             gen_and_ref_reports["generated_reports"].extend(generated_reports)
             gen_and_ref_reports["reference_reports"].extend(reference_reports)
             gen_and_ref_reports["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
@@ -448,6 +447,7 @@ def get_metric_scores(model, test_loader):
     # compute object detector scores
     sum_intersection = obj_detector_scores["sum_intersection_area_per_region"]
     sum_union = obj_detector_scores["sum_union_area_per_region"]
+    obj_detector_scores["avg_iou"] = (torch.sum(sum_intersection) / torch.sum(sum_union)).item()
     obj_detector_scores["avg_iou_per_region"] = (sum_intersection / sum_union).tolist()
 
     sum_region_detected = obj_detector_scores["sum_region_detected"]

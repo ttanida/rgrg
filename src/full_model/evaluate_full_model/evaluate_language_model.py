@@ -66,7 +66,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 
         reference_sents = gen_and_ref_sentences["reference_sentences"]
         reference_sents_normal = gen_and_ref_sentences["reference_sentences_normal_selected_regions"]
-        reference_sents_abnormal = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"]
+        reference_sents_abnormal = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"]
 
         compute_sent_level_scores_for_subset("all", generated_sents, reference_sents)
         compute_sent_level_scores_for_subset("normal", generated_sents_normal, reference_sents_normal)
@@ -923,7 +923,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(gen_sents_for_abnormal_selected_regions)
             gen_and_ref_sentences["reference_sentences"].extend(reference_sentences_for_selected_regions)
             gen_and_ref_sentences["reference_sentences_normal_selected_regions"].extend(ref_sents_for_normal_selected_regions)
-            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
+            gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
             gen_and_ref_reports["generated_reports"].extend(generated_reports)
             gen_and_ref_reports["reference_reports"].extend(reference_reports)
             gen_and_ref_reports["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
