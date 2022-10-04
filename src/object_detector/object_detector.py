@@ -200,8 +200,8 @@ class ObjectDetector(nn.Module):
             (2) If object detector is trained/evaluated as part of the full model, then self.return_feature_vectors should be True and it returns
                 (I) in train mode:
                     - losses
-                    - top_region_features (FloatTensor(batch_size, 29, (2048 * 8 * 8))):
-                        - the features (i.e. flattened feature maps) with the highest scores for each region and for each image in the batch
+                    - top_region_features (FloatTensor(batch_size, 29, 1024)):
+                        - the region visual features with the highest scores for each region and for each image in the batch
                         - these are needed to train the binary classifiers and language model
                     - class_detected (BoolTensor(batch_size, 29)):
                         - boolean is True if a region/class had the highest score (i.e. was top-1) for at least 1 RoI box

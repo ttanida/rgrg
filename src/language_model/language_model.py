@@ -258,7 +258,7 @@ class LanguageModel(nn.Module):
     def forward(self,
                 input_ids: torch.LongTensor,  # shape [batch_size x seq_len]
                 attention_mask: torch.FloatTensor,  # shape [batch_size x seq_len]
-                image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim] (with image_hidden_dim = 2048 * 8 * 8)
+                image_hidden_states: torch.FloatTensor,  # shape [batch_size x image_hidden_dim] (with image_hidden_dim = 1024)
                 return_loss: bool = False,
                 past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
                 position_ids: Optional[torch.LongTensor] = None,

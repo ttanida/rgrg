@@ -30,7 +30,7 @@ class BinaryClassifierRegionAbnormal(nn.Module):
 
     def forward(
         self,
-        top_region_features,  # tensor of shape [batch_size x 29 x (2048 * 8 * 8)]
+        top_region_features,  # tensor of shape [batch_size x 29 x 1024]
         class_detected,  # boolean tensor of shape [batch_size x 29], indicates if the object detector has detected the region/class or not
         region_is_abnormal  # ground truth boolean tensor of shape [batch_size x 29], indicates if a region is abnormal (True) or not (False)
     ):
