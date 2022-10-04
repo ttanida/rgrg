@@ -625,7 +625,7 @@ def get_reference_reports_mimic(study_ids) -> dict[str, list]:
 
 
 def get_generated_and_reference_reports(
-    generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer
+    generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer, bertscore_threshold
 ):
     """
     Args:
@@ -689,7 +689,7 @@ def get_generated_and_reference_reports(
                     lang="en", predictions=[gen_sent_1], references=[gen_sent_2], model_type="distilbert-base-uncased"
                 )
 
-                if bert_score_result["f1"][0] > BERTSCORE_SIMILARITY_THRESHOLD:
+                if bert_score_result["f1"][0] > bertscore_threshold:
                     # remove the generated similar sentence that is shorter
                     if len(gen_sent_1) > len(gen_sent_2):
                         similar_generated_sents_to_be_removed[gen_sent_1].append(gen_sent_2)
@@ -913,7 +913,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 reference_reports,
                 removed_similar_generated_sentences,
             ) = get_generated_and_reference_reports(
-                generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer
+                generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer, BERTSCORE_SIMILARITY_THRESHOLD
             )
 
             reference_reports_mimic = get_reference_reports_mimic(study_ids)

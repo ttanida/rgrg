@@ -33,12 +33,14 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.path_datasets_and_weights import path_full_dataset
 
+RUN = 38
+CHECKPOINT = "checkpoint_val_loss_20.973_overall_steps_136051"
+BERTSCORE_SIMILARITY_THRESHOLD = 0.85
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
 NUM_WORKERS = 10
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-BERTSCORE_SIMILARITY_THRESHOLD = 0.8
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 30
 NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 500
@@ -60,10 +62,7 @@ torch.cuda.manual_seed_all(seed_val)
 path_to_test_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports"
 path_to_test_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports_findings_only"
 
-txt_file_name = os.path.join(
-    "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/",
-    f"final_scores_bertscore_{BERTSCORE_SIMILARITY_THRESHOLD}.txt",
-)
+final_scores_txt_file = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "final_scores.txt")
 
 
 def write_all_scores_to_file(
@@ -73,7 +72,7 @@ def write_all_scores_to_file(
     language_model_scores,
 ):
     def write_obj_detector_scores():
-        with open(txt_file_name, "a") as f:
+        with open(final_scores_txt_file, "a") as f:
             f.write(f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}\n")
             f.write(f"avg_iou: {obj_detector_scores['avg_iou']}\n")
 
@@ -83,22 +82,22 @@ def write_all_scores_to_file(
         avg_iou_per_region = obj_detector_scores["avg_iou_per_region"]
 
         for region_, avg_detections_region in zip(anatomical_regions, avg_detections_per_region):
-            with open(txt_file_name, "a") as f:
+            with open(final_scores_txt_file, "a") as f:
                 f.write(f"num_detected_{region_}: {avg_detections_region}\n")
 
         for region_, avg_iou_region in zip(anatomical_regions, avg_iou_per_region):
-            with open(txt_file_name, "a") as f:
+            with open(final_scores_txt_file, "a") as f:
                 f.write(f"iou_{region_}: {avg_iou_region}\n")
 
     def write_region_selection_scores():
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
-                with open(txt_file_name, "a") as f:
+                with open(final_scores_txt_file, "a") as f:
                     f.write(f"region_select_{subset}_{metric}: {score}\n")
 
     def write_region_abnormal_scores():
         for metric, score in region_abnormal_scores.items():
-            with open(txt_file_name, "a") as f:
+            with open(final_scores_txt_file, "a") as f:
                 f.write(f"region_abnormal_{metric}: {score}\n")
 
     def write_clinical_efficacy_scores(subset, ce_score_dict):
@@ -138,24 +137,29 @@ def write_all_scores_to_file(
 
         for k, v in ce_score_dict.items():
             if k in metrics:
-                with open(txt_file_name, "a") as f:
+                with open(final_scores_txt_file, "a") as f:
                     f.write(f"language_model_{subset}_CE_{k}: {v}\n")
             else:
                 # k is a condition
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
-                    with open(txt_file_name, "a") as f:
+                    with open(final_scores_txt_file, "a") as f:
                         f.write(f"language_model_{subset}_CE_{condition_name}_{metric}: {score}\n")
 
     def write_language_model_scores():
         for subset in language_model_scores:
             for metric, score in language_model_scores[subset].items():
-                with open(txt_file_name, "a") as f:
+                with open(final_scores_txt_file, "a") as f:
                     if metric == "CE":
                         ce_score_dict = language_model_scores[subset]["CE"]
                         write_clinical_efficacy_scores(subset, ce_score_dict)
                     else:
                         f.write(f"language_model_{subset}_{metric}: {score}\n")
+
+    with open(final_scores_txt_file, "a") as f:
+        f.write(f"Run: {RUN}\n")
+        f.write(f"Checkpoint: {CHECKPOINT}\n")
+        f.write(f"BertScore: {BERTSCORE_SIMILARITY_THRESHOLD}\n")
 
     write_obj_detector_scores()
     write_region_selection_scores()
@@ -295,7 +299,7 @@ def evaluate_language_model(model, test_loader, tokenizer):
                     early_stopping=True,
                 )
 
-            beam_search_output, selected_regions, detections, class_detected = output
+            beam_search_output, selected_regions, _, _ = output
             selected_regions = selected_regions.detach().cpu().numpy()
 
             # generated_sentences_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
@@ -322,7 +326,7 @@ def evaluate_language_model(model, test_loader, tokenizer):
                 reference_reports,
                 removed_similar_generated_sentences,
             ) = get_generated_and_reference_reports(
-                generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer
+                generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer, BERTSCORE_SIMILARITY_THRESHOLD
             )
 
             reference_reports_mimic = get_reference_reports_mimic(study_ids)
@@ -341,7 +345,7 @@ def evaluate_language_model(model, test_loader, tokenizer):
 
     write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_reports)
 
-    with open(txt_file_name, "a") as f:
+    with open(final_scores_txt_file, "a") as f:
         f.write(f"Num generated reports: {len(gen_and_ref_reports['generated_reports'])}\n")
         f.write(f"Num reference reports findings only: {len([report for report in gen_and_ref_reports['report_mimic_findings_only'] if report is not None])}\n")
 
@@ -617,11 +621,11 @@ def main():
     test_loader = get_data_loader(tokenizer, test_dataset_complete)
 
     checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_38/checkpoints/checkpoint_val_loss_20.973_overall_steps_136051.pt",
+        f"/u/home/tanida/runs/full_model/{RUN}/checkpoints/{CHECKPOINT}.pt",
         map_location=torch.device("cpu"),
     )
-    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
