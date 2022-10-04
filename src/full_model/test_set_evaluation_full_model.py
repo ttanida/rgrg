@@ -621,7 +621,7 @@ def main():
     test_loader = get_data_loader(tokenizer, test_dataset_complete)
 
     checkpoint = torch.load(
-        f"/u/home/tanida/runs/full_model/{RUN}/checkpoints/{CHECKPOINT}.pt",
+        f"/u/home/tanida/runs/full_model/run_{RUN}/checkpoints/{CHECKPOINT}.pt",
         map_location=torch.device("cpu"),
     )
     checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")

@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 
@@ -68,3 +69,19 @@ def convert_mimic_cxr_report_to_single_string(study_txt_file):
     report = remove_duplicate_sentences(report)
 
     return report
+
+
+def main(args):
+    num_val_reports = args.num_val_reports
+    print(f"Num: {num_val_reports}")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_val_reports", type=int, default=200, help="Number of MIMIC-CXR reports to download for the validation set.")
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    main(args)
