@@ -41,6 +41,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 
 import imagesize
 import spacy
@@ -48,6 +49,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
+from src.CheXbert.src.label import label
 from src.CheXbert.src.models.bert_labeler import bert_labeler
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
 import src.dataset.section_parser as sp
@@ -62,6 +64,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
+# can be useful to create small sample datasets (e.g. of len 50) for testing things
 # if constant is None, then all possible rows are created
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
@@ -76,6 +79,8 @@ def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     new_csv_file_path += ".csv" if not NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES else f"-{NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES}.csv"
 
     header = ["subject_id", "study_id", "image_id", "mimic_image_file_path", "bbox_coordinates", "bbox_labels", "bbox_phrases", "bbox_phrase_exists", "bbox_is_abnormal"]
+    if dataset in ["valid", "test"]:
+        header.extend(["reference_report", "preds_chexbert_ref_report"])
 
     with open(new_csv_file_path, "w") as fp:
         csv_writer = csv.writer(fp)
@@ -258,23 +263,17 @@ def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[tup
     return attributes_dict
 
 
-def get_chexbert_predictions(chexbert: nn.Module, report: str):
+def get_chexbert_predictions(chexbert: nn.Module, reference_report: str):
     """
-    To get the CE scores, we first need the labels extracted by CheXbert
+    The function label from module CheXbert/src/label.py that extracts these labels/predictions requires 2 input arguments:
+        1. model (nn.Module): instantiated CheXbert model
+        2. csv_path (str): path to a csv file with the report. The csv file has to have 1 column titled "Report Impression"
+        under which the report can be found
 
-    The function label from module CheXbert/src/label.py that extracts these labels requires 2 input arguments:
-        1. checkpoint_path (str): path to the saved (bert) model weights
-        2. csv_path (str): path to the csv file with the reports. The csv file has to have 1 column titled "Report Impression"
-        under which the reports can be found
+    We use a temporary directory to create the csv file.
 
-    We use a temporary directory to create the csv files for the generated and reference reports.
-
-    The function label returns preds_gen_reports and preds_ref_reports respectively, which are List[List[int]],
-    with the outer list always having len=14 (for 14 conditions, specified in CheXbert/src/constants.py),
-    and the inner list of len=num_reports.
-
-    E.g. the 1st inner list could be [2, 1, 0, 3], which means the 1st report has label 2 for the 1st condition (which is 'Enlarged Cardiomediastinum'),
-    the 2nd report has label 1 for the 1st condition, the 3rd report has label 0 for the 1st condition, the 4th and final report label 3 for the 1st condition.
+    The function label returns a List[List[int]], where the outer list has len 14 (for 14 conditions, see src/CheXbert/src/constants.py),
+    and the inner list has len 1 (for 1 report), e.g. [[0], [1], [0], [3], [0], [2], [1], [0], [0], [1], [0], [0], [1], [0]],
 
     There are 4 possible labels:
         0: blank/NaN (i.e. no prediction could be made about a condition, because it was no mentioned in a report)
@@ -287,6 +286,37 @@ def get_chexbert_predictions(chexbert: nn.Module, report: str):
     For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py#L141,
     where label 3 is converted to label 1, and label 2 is converted to label 0.
     """
+    def convert_labels(preds: list[list[int]]):
+        """
+        See doc string of get_chexbert_predictions for more details.
+        Converts label 2 -> label 0 and label 3 -> label 1.
+        """
+        def convert_label(label: int):
+            if label == 2:
+                return 0
+            elif label == 3:
+                return 1
+            else:
+                return label
+
+        preds = [[convert_label(label) for label in condition_list] for condition_list in preds]
+
+        return preds
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        csv_report_path = os.path.join(temp_dir, "report.csv")
+
+        header = ["Report Impression"]
+
+        with open(csv_report_path, "w") as fp:
+            csv_writer = csv.writer(fp)
+            csv_writer.writerow(header)
+            csv_writer.writerow([reference_report])
+
+        preds = label(chexbert, csv_report_path)
+
+    preds = convert_labels(preds)
+    return preds
 
 
 def get_reference_report(subject_id, study_id):
@@ -359,15 +389,21 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
 
     Returns:
         csv_rows (list[list]): inner list contains information about a single image:
-            - subject_id
-            - study_id
-            - image_id
-            - file path to image in mimic-cxr-jpg dataset on workstation
-            - bbox_coordinates is a list of lists, where each inner list contains 4 bbox coordinates
-            - bbox_labels is a list with class labels for each ground-truth box
-            - bbox_phrases is a list with phrases for each bbox
-            - bbox_phrase_exist_vars is a list that specifies if a phrase is non-empty (True) or empty (False) for a given bbox
-            - bbox_is_abnormal_vars is a list that specifies if a region depicted in a bbox is abnormal (True) or normal (False)
+            - subject_id (str)
+            - study_id (str)
+            - image_id (str)
+            - mimic_image_file_path (str): file path to image in mimic-cxr-jpg dataset
+            - bbox_coordinates (list[list[int]]), where outer list usually has len 29 and inner list contains 4 bbox coordinates
+            - bbox_labels (list[int]): list with class labels for each ground-truth box
+            - bbox_phrases (list[str]): list with phrases for each bbox (note: phrases can be empty, i.e. "")
+            - bbox_phrase_exist_vars (list[bool]): list that specifies if a phrase is non-empty (True) or empty (False) for a given bbox
+            - bbox_is_abnormal_vars (list[bool]): list that specifies if a region depicted in a bbox is abnormal (True) or normal (False)
+
+        valid.csv, test.csv and test-2.csv have these 2 additional fields:
+
+            - reference_report (str): the findings section of the report extracted via https://github.com/MIT-LCP/mimic-cxr/tree/master/txt
+            - preds_chexbert_ref_report (list[list[int]]): of the form e.g. [[0], [0], [0], [0], [0], [0], [1], [0], [0], [1], [0], [0], [1], [0]],
+            i.e. a nested list of len 14 for 14 conditions (specified in src/CheXbert/src/constants.py), where 1 means condition is present in the given image
     """
     csv_rows = []
     num_rows_created = 0
@@ -427,25 +463,17 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
 
             # for the validation and test sets, we only want to include images that have corresponding reference reports with "findings" sections
             if dataset in ["valid", "test"]:
-                report = get_reference_report(subject_id, study_id)
+                reference_report = get_reference_report(subject_id, study_id)
 
                 # skip images that don't have a reference report with "findings" section
-                if report == -1:
+                if reference_report == -1:
                     continue
 
-                # pred_chexbert is List[List[int]], where the outer list has len 14 (for 14 conditions, see src/CheXbert/src/constants.py),
+                # preds_chexbert_ref_report is List[List[int]], where the outer list has len 14 (for 14 conditions, see src/CheXbert/src/constants.py),
                 # and the inner list has len 1 (for 1 report)
-                # e.g. pred_chexbert = [[0], [0], [0], [0], [0], [0], [1], [0], [0], [1], [0], [0], [1], [0]],
+                # e.g. preds_chexbert_ref_report = [[0], [0], [0], [0], [0], [0], [1], [0], [0], [1], [0], [0], [1], [0]],
                 # where 0 is negative and 1 is positive for each condition
-                pred_chexbert = get_chexbert_predictions(chexbert, report)
-
-
-
-
-
-
-
-
+                preds_chexbert_ref_report = get_chexbert_predictions(chexbert, reference_report)
 
             chest_imagenome_scene_graph_file_path = os.path.join(path_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 
@@ -461,14 +489,15 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             # 2. is_abnormal, a boolean that is True if the region inside the bbox is considered abnormal, else False for normal
             anatomical_region_attributes = get_attributes_dict(image_scene_graph, sentence_tokenizer)
 
-            width, height = imagesize.get(mimic_image_file_path)
-
+            # new_image_row will store all information about 1 image as a row in the csv file
             new_image_row = [subject_id, study_id, image_id, mimic_image_file_path]
             bbox_coordinates = []
             bbox_labels = []
             bbox_phrases = []
             bbox_phrase_exist_vars = []
             bbox_is_abnormal_vars = []
+
+            width, height = imagesize.get(mimic_image_file_path)
 
             # counter to see if given image contains bbox coordinates for all 29 regions
             # if image does not bbox coordinates for 29 regions, it's still added to the train and test dataset,
@@ -524,9 +553,12 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
 
             new_image_row.extend([bbox_coordinates, bbox_labels, bbox_phrases, bbox_phrase_exist_vars, bbox_is_abnormal_vars])
 
+            if dataset in ["valid", "test"]:
+                new_image_row.extend([reference_report, preds_chexbert_ref_report])
+
             # for train set, add all images (even those that don't have bbox information for all 29 regions)
             # for val set, only add images that have bbox information for all 29 regions
-            # for test set, distinguish between test set 1 that contains of test set images that have bbox information for all 29 regions
+            # for test set, distinguish between test set 1 that contains test set images that have bbox information for all 29 regions
             # (around 95% of all test set images)
             if dataset == "train" or (dataset in ["valid", "test"] and num_regions == 29):
                 csv_rows.append(new_image_row)
