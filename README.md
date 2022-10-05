@@ -9,5 +9,5 @@ Setup:
 to install src as a standalone package
 
 
-- To download report txt files from mimic-cxr:
-"wget -r -N -c -np -A txt --user your_user_name --ask-password https://physionet.org/files/mimic-cxr/2.0.0/"
+- Download und unzip file mimic-cxr-reports.zip in https://physionet.org/content/mimic-cxr/2.0.0/
+to get all reports as txt files.

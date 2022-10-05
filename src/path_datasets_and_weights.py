@@ -2,9 +2,8 @@
 Chest ImaGenome dataset path should have a (sub-)directory called "silver_dataset" in its directory.
 MIMIC-CXR and MIMIC-CXR-JPG dataset paths should both have a (sub-)directory called "files" in their directories.
 
-Note that we only need the report txt files from MIMIC-CXR, which can be downloaded via the command:
-"wget -r -N -c -np -A txt --user your_user_name --ask-password https://physionet.org/files/mimic-cxr/2.0.0/",
-which specifies that only txt files are to be downloaded.
+Note that we only need the report txt files from MIMIC-CXR, which are in the file mimic-cxr-report.zip at
+https://physionet.org/content/mimic-cxr/2.0.0/.
 
 path_full_dataset specifies the path where the folder will be created (by module src/dataset/create_dataset.py) that will hold the
 train, valid, test and test-2 csv files, which will be used for training, evaluation and testing. See doc string of create_dataset.py for more information.

@@ -357,7 +357,7 @@ def get_reference_report(subject_id: str, study_id: str, missing_reports: list[s
     path_to_report = os.path.join(path_mimic_cxr, "files", f"p{subject_id[:3]}", f"p{subject_id}", f"s{study_id}.txt")
 
     if not os.path.exists(path_to_report):
-        shortened_path_to_report = os.path.join(f"p{subject_id[:3]}", f"p{subject_id}", f"s{study_id}.txt")
+        shortened_path_to_report = os.path.join(f"p{subject_id[:2]}", f"p{subject_id}", f"s{study_id}.txt")
         missing_reports.append(shortened_path_to_report)
         return -1
 
@@ -473,7 +473,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
                 continue
 
             # image_file_path is of the form "files/p10/p10000980/s50985099/6ad03ed1-97ee17ee-9cf8b320-f7011003-cd93b42d.dcm"
-            # i.e. f"files/p../p{subject_id}/s{study_id}/{image_id}.dcm"
+            # i.e. f"files/p{subject_id[:2]}/p{subject_id}/s{study_id}/{image_id}.dcm"
             # since we have the MIMIC-CXR-JPG dataset, we need to replace .dcm by .jpg
             image_file_path = row[4].replace(".dcm", ".jpg")
             mimic_image_file_path = os.path.join(path_mimic_cxr_jpg, image_file_path)
