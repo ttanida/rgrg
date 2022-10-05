@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-from src.path_datasets_and_weights import path_mimic_cxr
+from src.path_datasets_and_weights import path_mimic_cxr_jpg
 
 TOL = 1e-4
 COUNTER_PATIENCE = 50
@@ -74,7 +74,7 @@ def get_image_paths_mimic() -> list:
     Returns a list of all file paths to mimic-cxr images.
     """
     image_paths = []
-    path_mimic_cxr_files = os.path.join(path_mimic_cxr, "files")
+    path_mimic_cxr_files = os.path.join(path_mimic_cxr_jpg, "files")
     for root, _, files in tqdm(os.walk(path_mimic_cxr_files)):
         for file_name in files:
             image_path = os.path.join(root, file_name)

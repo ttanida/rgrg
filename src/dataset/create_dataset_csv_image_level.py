@@ -47,7 +47,7 @@ import spacy
 from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
-from src.path_datasets_and_weights import path_chest_imagenome, path_mimic_cxr, path_full_dataset
+from src.path_datasets_and_weights import path_chest_imagenome, path_mimic_cxr_jpg, path_full_dataset
 
 # to log certain statistics during dataset creation
 txt_file_for_logging = "log_file_dataset_creation.txt"
@@ -327,7 +327,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             # i.e. f"files/p../p{subject_id}/s{study_id}/{image_id}.dcm"
             # since we have the MIMIC-CXR-JPG dataset, we need to replace .dcm by .jpg
             image_file_path = row[4].replace(".dcm", ".jpg")
-            mimic_image_file_path = os.path.join(path_mimic_cxr, image_file_path)
+            mimic_image_file_path = os.path.join(path_mimic_cxr_jpg, image_file_path)
 
             if not os.path.exists(mimic_image_file_path):
                 missing_images.append(mimic_image_file_path)

@@ -169,8 +169,8 @@ def write_all_scores_to_file(
 
 def write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_reports):
     def write_sentences(generated_sentences, generated_sentences_abnormal_regions, reference_sentences, reference_sentences_abnormal_regions):
-        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "generated_sentences.txt")
-        txt_file_name_abnormal = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "generated_abnormal_sentences.txt")
+        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "generated_sentences.txt")
+        txt_file_name_abnormal = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "generated_abnormal_sentences.txt")
 
         with open(txt_file_name, "w") as f:
             for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
@@ -184,7 +184,7 @@ def write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_repor
                 f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
 
     def write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences):
-        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model", "generated_reports.txt")
+        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "generated_reports.txt")
 
         with open(txt_file_name, "w") as f:
             for gen_report, ref_report, ref_report_mimic, ref_report_mimic_findings_only, removed_similar_gen_sents in zip(
@@ -347,7 +347,7 @@ def evaluate_language_model(model, test_loader, tokenizer):
 
     with open(final_scores_txt_file, "a") as f:
         f.write(f"Num generated reports: {len(gen_and_ref_reports['generated_reports'])}\n")
-        f.write(f"Num reference reports findings only: {len([report for report in gen_and_ref_reports['report_mimic_findings_only'] if report is not None])}\n")
+        f.write(f"Num reference reports findings only: {len([report for report in gen_and_ref_reports['reference_reports_mimic_findings_only'] if report is not None])}\n")
 
     language_model_scores = compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports)
 
