@@ -1,11 +1,11 @@
 import os
 import re
 
-import section_parser as sp
+import src.dataset.section_parser as sp
 
 path_to_folder_with_mimic_cxr_reports = "path/to/folder"
 
-SUBSTRING_TO_REMOVE_FROM_REPORT = "FINDINGS:|IMPRESSION:|1. |2. |3. |4. |5. |6. |7. |8. |9."
+SUBSTRING_TO_REMOVE_FROM_REPORT = "1. |2. |3. |4. |5. |6. |7. |8. |9."
 
 
 def remove_duplicate_sentences(report):
@@ -71,7 +71,43 @@ def convert_mimic_cxr_report_to_single_string(study_txt_file):
 
 
 def main():
-    pass
+    def convert_labels(preds_reports: list[list[int]]):
+        """
+        See doc string of update_clinical_efficacy_scores function for more details.
+        Converts label 2 -> label 0 and label 3 -> label 1.
+        """
+        def convert_label(label: int):
+            if label == 2:
+                return 0
+            elif label == 3:
+                return 1
+            else:
+                return label
+
+        preds_reports = [[convert_label(label) for label in condition_list] for condition_list in preds_reports]
+
+        return preds_reports
+    import csv
+    import tempfile
+
+    from src.CheXbert.src.label import label
+    from src.path_datasets_and_weights import path_chexbert_weights
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        csv_report_path = os.path.join(temp_dir, "report.csv")
+
+        header = ["Report Impression"]
+
+        with open(csv_report_path, "w") as fp:
+            csv_writer = csv.writer(fp)
+            csv_writer.writerow(header)
+            csv_writer.writerows([[gen_report] for gen_report in ["Severe pneumonia left lung, and a smaller region of pneumonia, right lower lobe, worsened on ___, subsequently stable. Small left pleural effusion is presumed. Heart size normal. Left jugular line ends in the low SVC. No pneumothorax."]])
+
+        preds = label(path_chexbert_weights, csv_report_path)
+
+    print(preds)
+    preds_new = convert_labels(preds)
+    print(preds_new)
 
 
 if __name__ == "__main__":

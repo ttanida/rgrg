@@ -44,10 +44,16 @@ import re
 
 import imagesize
 import spacy
+import torch
+import torch.nn as nn
 from tqdm import tqdm
 
+from src.CheXbert.src.models.bert_labeler import bert_labeler
 from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE, SUBSTRINGS_TO_REMOVE
-from src.path_datasets_and_weights import path_chest_imagenome, path_mimic_cxr_jpg, path_full_dataset
+import src.dataset.section_parser as sp
+from src.path_datasets_and_weights import path_chest_imagenome, path_mimic_cxr, path_mimic_cxr_jpg, path_full_dataset, path_chexbert_weights
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # to log certain statistics during dataset creation
 txt_file_for_logging = "log_file_dataset_creation.txt"
@@ -252,6 +258,88 @@ def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[tup
     return attributes_dict
 
 
+def get_chexbert_predictions(chexbert: nn.Module, report: str):
+    """
+    To get the CE scores, we first need the labels extracted by CheXbert
+
+    The function label from module CheXbert/src/label.py that extracts these labels requires 2 input arguments:
+        1. checkpoint_path (str): path to the saved (bert) model weights
+        2. csv_path (str): path to the csv file with the reports. The csv file has to have 1 column titled "Report Impression"
+        under which the reports can be found
+
+    We use a temporary directory to create the csv files for the generated and reference reports.
+
+    The function label returns preds_gen_reports and preds_ref_reports respectively, which are List[List[int]],
+    with the outer list always having len=14 (for 14 conditions, specified in CheXbert/src/constants.py),
+    and the inner list of len=num_reports.
+
+    E.g. the 1st inner list could be [2, 1, 0, 3], which means the 1st report has label 2 for the 1st condition (which is 'Enlarged Cardiomediastinum'),
+    the 2nd report has label 1 for the 1st condition, the 3rd report has label 0 for the 1st condition, the 4th and final report label 3 for the 1st condition.
+
+    There are 4 possible labels:
+        0: blank/NaN (i.e. no prediction could be made about a condition, because it was no mentioned in a report)
+        1: positive (condition was mentioned as present in a report)
+        2: negative (condition was mentioned as not present in a report)
+        3: uncertain (condition was mentioned as possibly present in a report)
+
+    Following the implementation of the paper "Improving Factual Completeness and Consistency of Image-to-text Radiology Report Generation"
+    by Miura et. al., we merge negative and blank/NaN into one whole negative class, and positive and uncertain into one whole positive class.
+    For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py#L141,
+    where label 3 is converted to label 1, and label 2 is converted to label 0.
+    """
+
+
+def get_reference_report(subject_id, study_id):
+    def process_report(report: str):
+        SUBSTRING_TO_REMOVE_FROM_REPORT = "1. |2. |3. |4. |5. |6. |7. |8. |9."
+
+        # remove substrings
+        report = re.sub(SUBSTRING_TO_REMOVE_FROM_REPORT, "", report, flags=re.DOTALL)
+
+        # remove unnecessary whitespaces
+        report = " ".join(report.split())
+
+        if report[-1] != ".":
+            report + "."
+
+        return report
+
+    # custom_section_names and custom_indices specify reports that don't have "findings" sections
+    custom_section_names, custom_indices = sp.custom_mimic_cxr_rules()
+
+    if f"s{study_id}" in custom_section_names or f"s{study_id}" in custom_indices:
+        return -1  # skip all reports without "findings" sections
+
+    path_to_report = os.path.join(path_mimic_cxr, "files", f"p{subject_id[:3]}", f"p{subject_id}", f"s{study_id}.txt")
+
+    with open(path_to_report) as f:
+        report = "".join(f.readlines())
+
+    # split report into sections
+    # section_names is a list that specifies the found sections, e.g. ["indication", "comparison", "findings", "impression"]
+    # sections is a list of same length that contains the corresponding text from the sections specified in section_names
+    sections, section_names, _ = sp.section_text(report)
+
+    if "findings" in section_names:
+        findings_index = section_names.index("findings")
+        report = sections[findings_index]
+    else:
+        return -1  # skip all reports without "findings" sections
+
+    report = process_report(report)
+
+
+def get_chexbert():
+    model = bert_labeler()
+    model = nn.DataParallel(model)  # needed since weights were saved with nn.DataParallel
+    checkpoint = torch.load(path_chexbert_weights, map_location=torch.device("cpu"))
+    model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+    model = model.to(device)
+    model.eval()
+
+    return model
+
+
 def get_total_num_rows(path_csv_file: str) -> int:
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
@@ -303,6 +391,10 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
     num_images_without_29_regions = 0
     missing_images = []
 
+    # for the validation and test sets, we need the chexbert model to get the disease labels from the reference reports
+    if dataset in ["valid", "test"]:
+        chexbert = get_chexbert()
+
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
 
@@ -332,6 +424,28 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             if not os.path.exists(mimic_image_file_path):
                 missing_images.append(mimic_image_file_path)
                 continue
+
+            # for the validation and test sets, we only want to include images that have corresponding reference reports with "findings" sections
+            if dataset in ["valid", "test"]:
+                report = get_reference_report(subject_id, study_id)
+
+                # skip images that don't have a reference report with "findings" section
+                if report == -1:
+                    continue
+
+                # pred_chexbert is List[List[int]], where the outer list has len 14 (for 14 conditions, see src/CheXbert/src/constants.py),
+                # and the inner list has len 1 (for 1 report)
+                # e.g. pred_chexbert = [[0], [0], [0], [0], [0], [0], [1], [0], [0], [1], [0], [0], [1], [0]],
+                # where 0 is negative and 1 is positive for each condition
+                pred_chexbert = get_chexbert_predictions(chexbert, report)
+
+
+
+
+
+
+
+
 
             chest_imagenome_scene_graph_file_path = os.path.join(path_chest_imagenome, "silver_dataset", "scene_graph", image_id) + "_SceneGraph.json"
 

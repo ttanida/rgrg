@@ -49,32 +49,17 @@ def load_unlabeled_data(csv_path, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS
                                          num_workers=num_workers, collate_fn=collate_fn)
     return loader
     
-def label(checkpoint_path, csv_path):
+def label(model, csv_path):
     """Labels a dataset of reports
-    @param checkpoint_path (string): location of saved model checkpoint 
+    @param model (nn.Module): instantiated CheXbert model
     @param csv_path (string): location of csv with reports
 
     @returns y_pred (List[List[int]]): Labels for each of the 14 conditions, per report  
     """
     ld = load_unlabeled_data(csv_path)
-    
-    model = bert_labeler()
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if torch.cuda.device_count() > 0: # works even if only 1 GPU available
-        print("Using", torch.cuda.device_count(), "GPUs!")
-        model = nn.DataParallel(model) # to utilize multiple GPU's
-        model = model.to(device)
-        checkpoint = torch.load(checkpoint_path)
-        model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-    else:
-        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-        new_state_dict = OrderedDict()
-        for k, v in checkpoint['model_state_dict'].items():
-            name = k[7:] # remove `module.`
-            new_state_dict[name] = v
-        model.load_state_dict(new_state_dict, strict=False)
-        
-    was_training = model.training
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     model.eval()
     y_pred = [[] for _ in range(len(CONDITIONS))]
 
@@ -82,23 +67,19 @@ def label(checkpoint_path, csv_path):
     print("The batch size is %d" % BATCH_SIZE)
     with torch.no_grad():
         for i, data in enumerate(tqdm(ld)):
-            batch = data['imp'] #(batch_size, max_len)
+            batch = data['imp']  # (batch_size, max_len)
             batch = batch.to(device)
             src_len = data['len']
-            batch_size = batch.shape[0]
             attn_mask = utils.generate_attention_masks(batch, src_len, device)
 
             out = model(batch, attn_mask)
 
             for j in range(len(out)):
-                curr_y_pred = out[j].argmax(dim=1) #shape is (batch_size)
+                curr_y_pred = out[j].argmax(dim=1)  # shape is (batch_size)
                 y_pred[j].append(curr_y_pred)
 
         for j in range(len(y_pred)):
             y_pred[j] = torch.cat(y_pred[j], dim=0)
-             
-    if was_training:
-        model.train()
 
     y_pred = [t.tolist() for t in y_pred]
     return y_pred
