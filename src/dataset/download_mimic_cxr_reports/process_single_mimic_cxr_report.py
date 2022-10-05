@@ -1,4 +1,3 @@
-import argparse
 import os
 import re
 
@@ -33,7 +32,7 @@ def convert_mimic_cxr_report_to_single_string(study_txt_file):
     Args:
         study_txt_file (str): e.g. "s56522600.txt"
     Returns:
-        report (str or int): single str that contains information of the findings and impression sections,
+        report (str or int): single str that contains information of the findings section,
         or -1 if neither were found.
     """
     custom_section_names, custom_indices = sp.custom_mimic_cxr_rules()
@@ -71,17 +70,9 @@ def convert_mimic_cxr_report_to_single_string(study_txt_file):
     return report
 
 
-def main(args):
-    num_val_reports = args.num_val_reports
-    print(f"Num: {num_val_reports}")
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--num_val_reports", type=int, default=200, help="Number of MIMIC-CXR reports to download for the validation set.")
-    return parser.parse_args()
+def main():
+    pass
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    main(args)
+    main()

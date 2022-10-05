@@ -1,4 +1,9 @@
-"""Copied directly from https://github.com/MIT-LCP/mimic-cxr/blob/master/txt/section_parser.py"""
+"""
+Copied directly from https://github.com/MIT-LCP/mimic-cxr/blob/master/txt/section_parser.py
+
+The section_text is used to extract the findings section of the MIMIC-CXR reports,
+which serve as the reference reports during evaluation.
+"""
 import re
 
 

@@ -1,5 +1,5 @@
 """
-Script creates train.csv, valid.csv and test.csv for the full model.
+Script creates train.csv, valid.csv, test.csv and test-2.csv for the full model.
 
 Each row in the csv files specifies information about a single image.
 
@@ -29,7 +29,7 @@ This is done because:
     then the code has to accomodate them, making vectorization more difficult.
 
 For the test set, we split it into 1 test set that only contains images with bbox_coordinates, bbox_labels for all 29 regions (which are around 95% of all test set images),
-and 1 test set that contains the remaining images that do not have bbox_coordinates, bbox_labels for all 29 regions (the remaining 5% of test set images).
+and 1 test set (called test-2.csv) that contains the remaining images that do not have bbox_coordinates, bbox_labels for all 29 regions (the remaining 5% of test set images).
 
 This is done such that we can apply vectorized, efficient code to evaluate the 1st test set (which contains 95% of all test set images),
 and more inefficient code to evaluate the 2nd test set (which only contains 5% of test set iamges).
