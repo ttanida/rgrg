@@ -69,6 +69,20 @@ log = logging.getLogger(__name__)
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
 
+def write_stats_to_log_file(dataset, num_images_ignored_or_avoided, missing_images, missing_reports, num_faulty_bboxes, num_images_without_29_regions):
+    with open(txt_file_for_logging, "a") as f:
+        f.write(f"{dataset}:\n")
+        f.write(f"\tnum_images_ignored_or_avoided: {num_images_ignored_or_avoided}\n")
+        f.write(f"\tnum_missing_images: {len(missing_images)}\n")
+        for missing_img in missing_images:
+            f.write(f"\t\tmissing_img: {missing_img}\n")
+        f.write(f"\tnum_missing_reports: {len(missing_reports)}\n")
+        for missing_rep in missing_reports:
+            f.write(f"\t\tmissing_rep: {missing_rep}\n")
+        f.write(f"\tnum_faulty_bboxes: {num_faulty_bboxes}\n")
+        f.write(f"\tnum_images_without_29_regions: {num_images_without_29_regions}\n\n")
+
+
 def write_rows_in_new_csv_file(dataset: str, csv_rows: list[list]) -> None:
     log.info(f"Writing rows into new {dataset}.csv file...")
 
@@ -319,7 +333,7 @@ def get_chexbert_predictions(chexbert: nn.Module, reference_report: str):
     return preds
 
 
-def get_reference_report(subject_id, study_id):
+def get_reference_report(subject_id: str, study_id: str, missing_reports: list[str]):
     def process_report(report: str):
         SUBSTRING_TO_REMOVE_FROM_REPORT = "1. |2. |3. |4. |5. |6. |7. |8. |9."
 
@@ -341,6 +355,11 @@ def get_reference_report(subject_id, study_id):
         return -1  # skip all reports without "findings" sections
 
     path_to_report = os.path.join(path_mimic_cxr, "files", f"p{subject_id[:3]}", f"p{subject_id}", f"s{study_id}.txt")
+
+    if not os.path.exists(path_to_report):
+        shortened_path_to_report = os.path.join(f"p{subject_id[:3]}", f"p{subject_id}", f"s{study_id}.txt")
+        missing_reports.append(shortened_path_to_report)
+        return -1
 
     with open(path_to_report) as f:
         report = "".join(f.readlines())
@@ -426,6 +445,8 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
     num_faulty_bboxes = 0
     num_images_without_29_regions = 0
     missing_images = []
+    if dataset in ["valid", "test"]:
+        missing_reports = []
 
     # for the validation and test sets, we need the chexbert model to get the disease labels from the reference reports
     if dataset in ["valid", "test"]:
@@ -463,7 +484,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
 
             # for the validation and test sets, we only want to include images that have corresponding reference reports with "findings" sections
             if dataset in ["valid", "test"]:
-                reference_report = get_reference_report(subject_id, study_id)
+                reference_report = get_reference_report(subject_id, study_id, missing_reports)
 
                 # skip images that don't have a reference report with "findings" section
                 if reference_report == -1:
@@ -576,14 +597,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
                 else:
                     return csv_rows
 
-    with open(txt_file_for_logging, "a") as f:
-        f.write(f"{dataset}:\n")
-        f.write(f"\tnum_images_ignored_or_avoided: {num_images_ignored_or_avoided}\n")
-        f.write(f"\tnum_missing_images: {len(missing_images)}\n")
-        for missing_img in missing_images:
-            f.write(f"\t\tmissing_img: {missing_img}\n")
-        f.write(f"\tnum_faulty_bboxes: {num_faulty_bboxes}\n")
-        f.write(f"\tnum_images_without_29_regions: {num_images_without_29_regions}\n\n")
+    write_stats_to_log_file(dataset, num_images_ignored_or_avoided, missing_images, missing_reports, num_faulty_bboxes, num_images_without_29_regions)
 
     if dataset == "test":
         return csv_rows, csv_rows_less_than_29_regions

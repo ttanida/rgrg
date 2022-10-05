@@ -6,8 +6,8 @@ Note that we only need the report txt files from MIMIC-CXR, which can be downloa
 "wget -r -N -c -np -A txt --user your_user_name --ask-password https://physionet.org/files/mimic-cxr/2.0.0/",
 which specifies that only txt files are to be downloaded.
 
-path_full_dataset specifies the path where the folder will be created that will hold the train, valid, test and test-2 csv files,
-which will be used for training, evaluation and testing. See doc string of module src/dataset/create_dataset.py for more information.
+path_full_dataset specifies the path where the folder will be created (by module src/dataset/create_dataset.py) that will hold the
+train, valid, test and test-2 csv files, which will be used for training, evaluation and testing. See doc string of create_dataset.py for more information.
 
 path_chexbert_weights specifies the path to the weights of the CheXbert label extractor needed to compute the clinical efficacy metric scores.
 The weights can be downloaded here: https://github.com/stanfordmlgroup/CheXbert#checkpoint-download
