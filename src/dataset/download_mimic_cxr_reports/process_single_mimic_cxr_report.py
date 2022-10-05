@@ -97,11 +97,12 @@ def main():
         csv_report_path = os.path.join(temp_dir, "report.csv")
 
         header = ["Report Impression"]
+        report = "Severe pneumonia left lung, and a smaller region of pneumonia, right lower lobe, worsened on ___, subsequently stable. Small left pleural effusion is presumed. Heart size normal. Left jugular line ends in the low SVC. No pneumothorax."
 
         with open(csv_report_path, "w") as fp:
             csv_writer = csv.writer(fp)
             csv_writer.writerow(header)
-            csv_writer.writerows([[gen_report] for gen_report in ["Severe pneumonia left lung, and a smaller region of pneumonia, right lower lobe, worsened on ___, subsequently stable. Small left pleural effusion is presumed. Heart size normal. Left jugular line ends in the low SVC. No pneumothorax."]])
+            csv_writer.writerow([report])
 
         preds = label(path_chexbert_weights, csv_report_path)
 
