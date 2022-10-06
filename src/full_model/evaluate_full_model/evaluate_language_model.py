@@ -30,10 +30,12 @@ from PIL import Image
 import spacy
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
+import torch.nn as nn
 from tqdm import tqdm
 
 from src.CheXbert.src.constants import CONDITIONS
 from src.CheXbert.src.label import label
+from src.CheXbert.src.models.bert_labeler import bert_labeler
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.run_configurations import (
     BATCH_SIZE,
@@ -119,6 +121,18 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 
                 return preds_reports
 
+            def get_chexbert():
+                model = bert_labeler()
+                model = nn.DataParallel(model)  # needed since weights were saved with nn.DataParallel
+                checkpoint = torch.load(path_chexbert_weights, map_location=torch.device("cpu"))
+                model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                model = model.to(device)
+                model.eval()
+
+                return model
+
+            chexbert = get_chexbert()
+
             with tempfile.TemporaryDirectory() as temp_dir:
                 csv_gen_reports_file_path = os.path.join(temp_dir, "gen_reports.csv")
                 csv_ref_reports_file_path = os.path.join(temp_dir, "ref_reports.csv")
@@ -136,8 +150,8 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                     csv_writer.writerows([[ref_report] for ref_report in ref_reports])
 
                 # preds_*_reports are List[List[int]] with the labels extracted by CheXbert (see doc string for details)
-                preds_gen_reports = label(path_chexbert_weights, csv_gen_reports_file_path)
-                preds_ref_reports = label(path_chexbert_weights, csv_ref_reports_file_path)
+                preds_gen_reports = label(chexbert, csv_gen_reports_file_path)
+                preds_ref_reports = label(chexbert, csv_ref_reports_file_path)
 
             preds_gen_reports = convert_labels(preds_gen_reports)
             preds_ref_reports = convert_labels(preds_ref_reports)

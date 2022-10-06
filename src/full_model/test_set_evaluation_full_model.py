@@ -33,9 +33,9 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.path_datasets_and_weights import path_full_dataset
 
-RUN = 38
-CHECKPOINT = "checkpoint_val_loss_20.973_overall_steps_136051"
-BERTSCORE_SIMILARITY_THRESHOLD = 0.85
+RUN = 43
+CHECKPOINT = "checkpoint_val_loss_23.850_overall_steps_264152"
+BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
 NUM_WORKERS = 10
