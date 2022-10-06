@@ -1,11 +1,10 @@
 """
-Script creates train.csv, valid.csv, test.csv and test-2.csv for the full model.
+Script creates train.csv, valid.csv, test.csv and test-2.csv to train object detector (as a standalone module),
+object detector + binary classifiers, and full model.
 
 Each row in the csv files specifies information about a single image.
 
-These dataset csv files were used to train the object detector (as a standalone component, to see how well it performs) and the full model.
-
-The specific information of each row are:
+The specific information (i.e. columns) of each row are:
     - subject_id: id of the patient whose image is used
     - study_id: id of the study of that patient (since a patient can have several studies done to document the progression of a disease etc.)
     - image_id: id of the single image
@@ -22,6 +21,11 @@ The specific information of each row are:
     - bbox_is_abnormal (List[bool]): a list of (always) length 29 that indicates if a bbox was described as abnormal (True) by its reference phrase or not. bboxes that do
     not have a reference phrase are considered normal by default.
 
+The valid.csv, test.csv and test-2.csv have the additional information of:
+    - reference_report (str): the "findings" section of the MIMIC-CXR report corresponding to the image (see function get_reference_report)
+    - preds_chexbert_ref_report (list[int]): list of len 14 (corresponding to 14 conditions as specified in src/CheXbert/src/constants.py)
+    that contains 0's and 1's, where 1 means a condition is mentioned in the reference report
+
 For the validation set, we only include images that have bbox_coordinates, bbox_labels for all 29 regions.
 This is done because:
     1. We will usually not evaluate on the whole validation set (which contains 23,953 images), but only on a fraction of it (e.g. 5% - 20%).
@@ -32,9 +36,9 @@ For the test set, we split it into 1 test set that only contains images with bbo
 and 1 test set (called test-2.csv) that contains the remaining images that do not have bbox_coordinates, bbox_labels for all 29 regions (the remaining 5% of test set images).
 
 This is done such that we can apply vectorized, efficient code to evaluate the 1st test set (which contains 95% of all test set images),
-and more inefficient code to evaluate the 2nd test set (which only contains 5% of test set iamges).
+and more inefficient code to evaluate the 2nd test set (which only contains 5% of test set images), and of course the results of 1st and 2nd test set are reported together.
 
-The train set contains all train images, even those without bbox_coordinates, bbox_labels for all 29 regions.
+The train set contains all train images, even those without bbox_coordinates, bbox_labels for all 29 regions (because we don't need to evaluate on the train set).
 """
 import csv
 import json
@@ -66,20 +70,30 @@ log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
 # can be useful to create small sample datasets (e.g. of len 50) for testing things
-# if constant is None, then all possible rows are created
+# if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is None, then all possible rows are created
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
 
-def write_stats_to_log_file(dataset, num_images_ignored_or_avoided, missing_images, missing_reports, num_faulty_bboxes, num_images_without_29_regions):
+def write_stats_to_log_file(
+    dataset: str,
+    num_images_ignored_or_avoided: int,
+    missing_images: list[str],
+    missing_reports: list[str],
+    num_faulty_bboxes: int,
+    num_images_without_29_regions: int
+):
     with open(txt_file_for_logging, "a") as f:
         f.write(f"{dataset}:\n")
         f.write(f"\tnum_images_ignored_or_avoided: {num_images_ignored_or_avoided}\n")
+
         f.write(f"\tnum_missing_images: {len(missing_images)}\n")
         for missing_img in missing_images:
             f.write(f"\t\tmissing_img: {missing_img}\n")
+
         f.write(f"\tnum_missing_reports: {len(missing_reports)}\n")
         for missing_rep in missing_reports:
             f.write(f"\t\tmissing_rep: {missing_rep}\n")
+
         f.write(f"\tnum_faulty_bboxes: {num_faulty_bboxes}\n")
         f.write(f"\tnum_images_without_29_regions: {num_images_without_29_regions}\n\n")
 
@@ -617,16 +631,9 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
             if num_regions != 29:
                 num_images_without_29_regions += 1
 
-            # return early if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is specified
+            # break out of loop if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is specified
             if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES and num_rows_created >= NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES:
-                if dataset in ["valid", "test"]:
-                    append_ref_reports_and_chexbert_preds_to_csv_rows(csv_rows, reference_reports)
-
-                if dataset == "test":
-                    append_ref_reports_and_chexbert_preds_to_csv_rows(csv_rows_less_than_29_regions, reference_reports_less_than_29_regions)
-                    return csv_rows, csv_rows_less_than_29_regions
-                else:
-                    return csv_rows
+                break
 
     write_stats_to_log_file(dataset, num_images_ignored_or_avoided, missing_images, missing_reports, num_faulty_bboxes, num_images_without_29_regions)
 
@@ -656,7 +663,7 @@ def create_new_csv_file(dataset: str, path_csv_file: str, image_ids_to_avoid: se
 def create_new_csv_files(csv_files_dict, image_ids_to_avoid):
     if os.path.exists(path_full_dataset):
         log.error(f"Full dataset folder already exists at {path_full_dataset}.")
-        log.error("Delete dataset folder before running script to create new folder!")
+        log.error("Delete dataset folder or rename variable path_full_dataset in src/path_datasets_and_weights.py before running script to create new folder!")
         return None
 
     os.mkdir(path_full_dataset)

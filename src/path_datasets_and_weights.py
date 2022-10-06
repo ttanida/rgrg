@@ -8,12 +8,12 @@ https://physionet.org/content/mimic-cxr/2.0.0/.
 path_full_dataset specifies the path where the folder will be created (by module src/dataset/create_dataset.py) that will hold the
 train, valid, test and test-2 csv files, which will be used for training, evaluation and testing. See doc string of create_dataset.py for more information.
 
-path_chexbert_weights specifies the path to the weights of the CheXbert label extractor needed to compute the clinical efficacy metric scores.
+path_chexbert_weights specifies the path to the weights of the CheXbert labeler needed to extract the disease labels from the generated and reference reports.
 The weights can be downloaded here: https://github.com/stanfordmlgroup/CheXbert#checkpoint-download
 """
 
 path_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr"
 path_mimic_cxr_jpg = "/u/home/tanida/datasets/mimic-cxr-jpg"
-path_full_dataset = "/u/home/tanida/datasets/dataset-full-model-complete-new-method"
+path_full_dataset = "/u/home/tanida/datasets/dataset-with-chexbert"
 path_chexbert_weights = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/CheXbert/src/models/chexbert.pth"
