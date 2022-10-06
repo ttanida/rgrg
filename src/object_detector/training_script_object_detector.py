@@ -29,18 +29,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
-# set the seed value for reproducibility
-seed_val = 42
-
-random.seed(seed_val)
-np.random.seed(seed_val)
-torch.manual_seed(seed_val)
-torch.cuda.manual_seed_all(seed_val)
-
 # define configurations for training run
-RUN = 11
-# can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train object detector with avg_pooling and dim_reduction again."""
+RUN = 12
+# comment can be useful to add additional information to run_config.txt file
+RUN_COMMENT = """Train object detector with seed 43."""
+SEED = 43
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
@@ -54,6 +47,12 @@ PATIENCE_LR_SCHEDULER = 5  # number of evaluations to wait for val loss to reduc
 THRESHOLD_LR_SCHEDULER = 1e-3
 FACTOR_LR_SCHEDULER = 0.5
 COOLDOWN_LR_SCHEDULER = 5
+
+# set the seed value for reproducibility
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
 
 
 def get_title(region_set, region_indices, region_colors, class_detected_img):
@@ -469,10 +468,10 @@ def get_data_loaders(train_dataset, val_dataset):
         random.seed(worker_seed)
 
     g = torch.Generator()
-    g.manual_seed(seed_val)
+    g.manual_seed(SEED)
 
     train_loader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, worker_init_fn=seed_worker, generator=g, pin_memory=True)
-    val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, pin_memory=True)
 
     return train_loader, val_loader
 
@@ -577,6 +576,7 @@ def create_run_folder():
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
     config_parameters = {
         "COMMENT": RUN_COMMENT,
+        "SEED": SEED,
         "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
