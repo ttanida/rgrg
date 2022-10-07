@@ -62,7 +62,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
 # constant specifies how many rows to create in the customized csv files
-# can be useful to create small sample datasets (e.g. of len 50) for testing things
+# can be useful to create small sample datasets (e.g. of len 200) for testing things
 # if NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES is None, then all possible rows are created
 NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES = None
 
@@ -289,11 +289,6 @@ def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[tup
 
 def get_reference_report(subject_id: str, study_id: str, missing_reports: list[str]):
     def process_report(report: str):
-        SUBSTRING_TO_REMOVE_FROM_REPORT = "1. |2. |3. |4. |5. |6. |7. |8. |9."
-
-        # remove substrings
-        report = re.sub(SUBSTRING_TO_REMOVE_FROM_REPORT, "", report, flags=re.DOTALL)
-
         # remove unnecessary whitespaces
         report = " ".join(report.split())
 
@@ -324,7 +319,8 @@ def get_reference_report(subject_id: str, study_id: str, missing_reports: list[s
     sections, section_names, _ = sp.section_text(report)
 
     if "findings" in section_names:
-        findings_index = section_names.index("findings")
+        # get index of "findings" by matching from reverse (has to do with how section_names is constructed)
+        findings_index = len(section_names) - section_names[-1::-1].index("findings") - 1
         report = sections[findings_index]
     else:
         return -1  # skip all reports without "findings" sections
