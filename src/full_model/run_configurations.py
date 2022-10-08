@@ -1,36 +1,23 @@
 """
-Define configurations for training run.
+Define configurations for training run of full model.
 
-There are 3 different settings for the PRETRAIN_WITHOUT_LM_MODEL and PRETRAIN_LM_MODEL flags:
-
-(1) PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = False
-
-In this case, only the object detector and the 2 binary classifiers are trained in the full model,
+If PRETRAIN_WITHOUT_LM_MODEL = True, then only the object detector and the 2 binary classifiers are trained in the full model,
 with the language model (as the last component) being fully excluded from the model architecture.
-This setting is for pre-training the 2 binary classifiers, since it's assumed that the object detector
-was already trained separately in object_detector/training_script_object_detector.py
+This setting is for pre-training the 2 binary classifiers (together with the object detector),
+since it's assumed that the object detector was already trained separately in object_detector/training_script_object_detector.py
 
-(2) PRETRAIN_WITHOUT_LM_MODEL = False and PRETRAIN_LM_MODEL = True
+If PRETRAIN_WITHOUT_LM_MODEL = False, then the full model is trained end-to-end.
 
-In this case, all 4 components (object detector + 2 binary classifiers + language model) are included in the model architecture,
-but only the language model weights are updated. This setting is for pre-training the language model.
+Ideally, the training should go like this:
 
-(3) PRETRAIN_WITHOUT_LM_MODEL = False and PRETRAIN_LM_MODEL = False
-
-In this case, all 4 components are included in the model architecture, and all 4 are trained.
-This setting is for training the full model.
-
---------
-Ideally, the 3 settings should be gone through in order, i.e. first pre-training the binary classifiers,
-then pre-training the language model, then training the full model.
-
-Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
+(1) Object detector training
+(2) Object detector + binary classifiers training
+(3) Full model training
 """
 RUN = 45
 RUN_COMMENT = """Seed 44: redo run 37"""
 SEED = 44
 PRETRAIN_WITHOUT_LM_MODEL = True
-PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.05

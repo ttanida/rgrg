@@ -26,7 +26,6 @@ from src.full_model.run_configurations import (
     RUN_COMMENT,
     SEED,
     PRETRAIN_WITHOUT_LM_MODEL,
-    PRETRAIN_LM_MODEL,
     IMAGE_INPUT_SIZE,
     PERCENTAGE_OF_TRAIN_SET_TO_USE,
     PERCENTAGE_OF_VAL_SET_TO_USE,
@@ -203,16 +202,13 @@ def train_model(
                     # sum up all 4 losses from the object detector
                     obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
-                    if PRETRAIN_LM_MODEL:
-                        total_loss = language_model_loss
-                    else:
-                        # sum up the rest of the losses
-                        total_loss = (
-                            WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
-                        )
+                    # sum up the rest of the losses
+                    total_loss = (
+                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
+                    )
 
-                        if not PRETRAIN_WITHOUT_LM_MODEL:
-                            total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
+                    if not PRETRAIN_WITHOUT_LM_MODEL:
+                        total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
 
                 scaler.scale(total_loss).backward()
 
@@ -506,7 +502,6 @@ def create_run_folder():
         "COMMENT": RUN_COMMENT,
         "SEED": SEED,
         "PRETRAIN_WITHOUT_LM_MODEL": PRETRAIN_WITHOUT_LM_MODEL,
-        "PRETRAIN_LM_MODEL": PRETRAIN_LM_MODEL,
         "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
         "PERCENTAGE_OF_TRAIN_SET_TO_USE": PERCENTAGE_OF_TRAIN_SET_TO_USE,
         "PERCENTAGE_OF_VAL_SET_TO_USE": PERCENTAGE_OF_VAL_SET_TO_USE,
@@ -565,7 +560,7 @@ def main():
     #     "/u/home/tanida/runs/full_model/run_34/checkpoints/checkpoint_val_loss_62.389_overall_steps_120865.pt", map_location=device
     # )
 
-    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL, pretrain_lm_model=PRETRAIN_LM_MODEL)
+    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     model.to(device, non_blocking=True)
     # model.load_state_dict(checkpoint["model"])
     model.train()
