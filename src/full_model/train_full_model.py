@@ -437,15 +437,6 @@ def get_datasets(config_file_path):
     usecols.append("reference_report")
     datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols, converters=converters)
 
-    # bbox_phrases is a list of str
-    # replace each bbox_phrase that is empty (i.e. "") by "#"
-    # this is done such that model learns to generate the "#" symbol instead of "" for empty sentences
-    # this is done because generated sentences that are "" (i.e. have len = 0) will cause problems when computing e.g. Bleu scores
-    for dataset_df in datasets_as_dfs.values():
-        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(
-            lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases]
-        )
-
     total_num_samples_train = len(datasets_as_dfs["train"])
     total_num_samples_val = len(datasets_as_dfs["valid"])
 

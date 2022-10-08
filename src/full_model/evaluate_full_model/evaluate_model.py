@@ -113,7 +113,7 @@ def write_all_losses_and_scores_to_tensorboard(
                 acc: ...,
             },
             ...,
-            condition_5 : {
+            condition_14 : {
                 precision: ...,
                 recall: ...,
                 f1: ...,
@@ -122,7 +122,7 @@ def write_all_losses_and_scores_to_tensorboard(
         }
 
         where the "..." after the 4 metrics are the corresponding scores,
-        and condition_* are from the 5 conditions we evaluate on (i.e. "Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion")
+        and condition_* are from the 14 conditions in src/CheXbert/src/constants.py
         """
         metrics = {"precision", "recall", "f1", "acc"}
 
@@ -130,19 +130,34 @@ def write_all_losses_and_scores_to_tensorboard(
             if k in metrics:
                 writer.add_scalar(f"language_model/{subset}/CE/{k}", v, overall_steps_taken)
             else:
-                # k is a condition
+                # k is a condition (only applicable if subset = "report")
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
                     writer.add_scalar(f"language_model/{subset}/CE/{condition_name}/{metric}", score, overall_steps_taken)
 
     def write_language_model_scores():
+        """
+        language_model_scores is a dict with keys:
+            - all: for all generated sentences
+            - normal: for all generated sentences corresponding to normal regions
+            - abnormal: for all generated sentences corresponding to abnormal regions
+            - report: for all generated reports
+            - region: for generated sentences per region
+        """
         for subset in language_model_scores:
-            for metric, score in language_model_scores[subset].items():
-                if metric == "CE":
-                    ce_score_dict = language_model_scores[subset]["CE"]
-                    write_clinical_efficacy_scores(subset, ce_score_dict)
-                else:
-                    writer.add_scalar(f"language_model/{subset}/{metric}", score, overall_steps_taken)
+            if subset == "region":
+                for region_name in language_model_scores["region"]:
+                    for metric, score in language_model_scores["region"][region_name].items():
+                        # replace white space by underscore for region name (i.e. "right upper lung" -> "right_upper_lung")
+                        region_name_underscored = "_".join(region_name.split())
+                        writer.add_scalar(f"language_model/region/{region_name_underscored}/{metric}", score, overall_steps_taken)
+            else:
+                for metric, score in language_model_scores[subset].items():
+                    if metric == "CE":
+                        ce_score_dict = language_model_scores[subset]["CE"]
+                        write_clinical_efficacy_scores(subset, ce_score_dict)
+                    else:
+                        writer.add_scalar(f"language_model/{subset}/{metric}", score, overall_steps_taken)
 
     write_losses()
     write_obj_detector_scores()
