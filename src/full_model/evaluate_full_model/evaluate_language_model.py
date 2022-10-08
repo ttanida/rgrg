@@ -293,6 +293,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 def write_sentences_and_reports_to_file(
     gen_and_ref_sentences,
     gen_and_ref_reports,
+    gen_sentences_with_corresponding_regions,
     generated_sentences_and_reports_folder_path,
     overall_steps_taken,
 ):
@@ -318,28 +319,43 @@ def write_sentences_and_reports_to_file(
         )
 
         with open(txt_file_name, "w") as f:
-            for gen_report, ref_report, removed_similar_gen_sents in zip(generated_reports, reference_reports, removed_similar_generated_sentences):
+            for gen_report, ref_report, removed_similar_gen_sents, gen_sents_with_regions_single_report in zip(
+                generated_reports,
+                reference_reports,
+                removed_similar_generated_sentences,
+                gen_sentences_with_corresponding_regions
+            ):
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
+
+                f.write("Generated sentences with their regions:\n")
+                for region_name, gen_sent in gen_sents_with_regions_single_report:
+                    f.write(f"\t{region_name}: {gen_sent}\n")
+                f.write("\n")
+
                 f.write("Generated sentences that were removed:\n")
                 for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
                     f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
                 f.write("\n")
+
                 f.write("=" * 30)
                 f.write("\n\n")
 
+    num_generated_sentences_to_save = NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE * BATCH_SIZE
+    num_generated_reports_to_save = NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE
+
     # all below are list of str
-    generated_sentences = gen_and_ref_sentences["generated_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
-    generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
-    reference_sentences = gen_and_ref_sentences["reference_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
-    reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    generated_sentences = gen_and_ref_sentences["generated_sentences"][:num_generated_sentences_to_save]
+    generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
+    reference_sentences = gen_and_ref_sentences["reference_sentences"][:num_generated_sentences_to_save]
+    reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
 
     write_sentences()
 
     # all below are list of str except removed_similar_generated_sentences which is a list of dict
-    generated_reports = gen_and_ref_reports["generated_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
-    reference_reports = gen_and_ref_reports["reference_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
-    removed_similar_generated_sentences = gen_and_ref_reports["removed_similar_generated_sentences"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    generated_reports = gen_and_ref_reports["generated_reports"][:num_generated_reports_to_save]
+    reference_reports = gen_and_ref_reports["reference_reports"][:num_generated_reports_to_save]
+    removed_similar_generated_sentences = gen_and_ref_reports["removed_similar_generated_sentences"][:num_generated_reports_to_save]
 
     write_reports()
 
@@ -626,11 +642,49 @@ def plot_detections_and_sentences_to_tensorboard(
             plt.close(fig)
 
 
-def update_gen_and_ref_sentences_for_regions(
-    gen_and_ref_sentences,
+def update_gen_sentences_with_corresponding_regions(
+    gen_sentences_with_corresponding_regions,
     generated_sents_for_selected_regions,
-    reference_sents_for_selected_regions,
     selected_regions
+):
+    """_summary_
+
+    Args:
+        gen_sentences_with_corresponding_regions (list[list[tuple[str, str]]]):
+            len(outer_list)= (NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE),
+            and inner list has len of how many regions were selected for a given image.
+            Inner list hold tuples of (region_name, gen_sent), i.e. region name and its corresponding generated sentence
+        generated_sentences_for_selected_regions (List[str]): of length "num_regions_selected_in_batch"
+        selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
+    """
+    def get_region_name(region_index: int):
+        for i, region_name in enumerate(ANATOMICAL_REGIONS):
+            if i == region_index:
+                return region_name
+
+    index_gen_sentence = 0
+
+    # selected_regions_single_image is a row with 29 bool values corresponding to a single image
+    for selected_regions_single_image in selected_regions:
+        gen_sents_with_regions_single_image = []
+
+        for region_index, region_selected_bool in enumerate(selected_regions_single_image):
+            if region_selected_bool:
+                region_name = get_region_name(region_index)
+                gen_sent = generated_sents_for_selected_regions[index_gen_sentence]
+
+                gen_sents_with_regions_single_image.append((region_name, gen_sent))
+
+                index_gen_sentence += 1
+
+        gen_sentences_with_corresponding_regions.append(gen_sents_with_regions_single_image)
+
+
+def update_gen_and_ref_sentences_for_regions(
+    gen_and_ref_sentences: dict,
+    generated_sents_for_selected_regions: list[str],
+    reference_sents_for_selected_regions: list[str],
+    selected_regions: np.array
 ):
     """Updates the gen_and_ref_sentences dict for each of the 29 regions, i.e. appends the generated and reference sentences for the regions (if they exist)
 
@@ -865,6 +919,16 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
         "reference_reports": [],
     }
 
+    # gen_sentences_with_corresponding_regions will be a list[list[tuple[str, str]]],
+    # where len(outer_list) will be NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE
+    # the inner list will correspond to a single generated report / single image and hold tuples of (region_name, generated_sentence),
+    # i.e. each region that was selected for that single image, with the corresponding generated sentence (without any removal of similar generated sentences)
+    #
+    # gen_sentences_with_corresponding_regions will be used such that each generated sentences in a generated report can be directly attributed to a region
+    # because this information gets lost when we concatenated generated sentences
+    # this is only used to get more insights into the generated reports that are written to file
+    gen_sentences_with_corresponding_regions = []
+
     # we also want to plot a couple of images
     num_batches_to_process_for_image_plotting = NUM_IMAGES_TO_PLOT // BATCH_SIZE
 
@@ -965,6 +1029,9 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
             update_gen_and_ref_sentences_for_regions(gen_and_ref_sentences, generated_sents_for_selected_regions, reference_sents_for_selected_regions, selected_regions)
 
+            if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
+                update_gen_sentences_with_corresponding_regions(gen_sentences_with_corresponding_regions, generated_sents_for_selected_regions, selected_regions)
+
             if num_batch < num_batches_to_process_for_image_plotting:
                 plot_detections_and_sentences_to_tensorboard(
                     writer,
@@ -982,6 +1049,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     write_sentences_and_reports_to_file(
         gen_and_ref_sentences,
         gen_and_ref_reports,
+        gen_sentences_with_corresponding_regions,
         generated_sentences_and_reports_folder_path,
         overall_steps_taken,
     )
