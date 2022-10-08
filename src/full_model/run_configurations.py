@@ -26,21 +26,22 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 43
-RUN_COMMENT = """Redo run 36, save weights at thresholds"""
-PRETRAIN_WITHOUT_LM_MODEL = False
+RUN = 44
+RUN_COMMENT = """Seed 43: redo run 37"""
+SEED = 43
+PRETRAIN_WITHOUT_LM_MODEL = True
 PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.05
-BATCH_SIZE = 2
+BATCH_SIZE = 16
 EFFECTIVE_BATCH_SIZE = 64  # batch size after gradient accumulation
 NUM_WORKERS = 10
 EPOCHS = 20
-LR = 5e-5
+LR = 5e-4
 # how often to evaluate the model on the validation set and log metrics to tensorboard (additionally, model will always be evaluated at end of epoch)
 # EVALUATE_EVERY_K_BATCHES should be divisible by ACCUMULATION_STEPS = EFFECTIVE_BATCH_SIZE // BATCH_SIZE
-EVALUATE_EVERY_K_BATCHES = 4800
+EVALUATE_EVERY_K_BATCHES = 2400
 PATIENCE_LR_SCHEDULER = 10  # number of evaluations to wait for val loss to reduce before lr is reduced by 1e-1
 THRESHOLD_LR_SCHEDULER = 1e-3  # threshold for measuring the new optimum, to only focus on significant changes
 FACTOR_LR_SCHEDULER = 0.5

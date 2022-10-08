@@ -1,0 +1,14 @@
+valid:
+	num_images_ignored_or_avoided: 2
+	num_missing_images: 0
+	num_missing_reports: 0
+	num_faulty_bboxes: 3818
+	num_images_without_29_regions: 840
+
+test:
+	num_images_ignored_or_avoided: 4
+	num_missing_images: 0
+	num_missing_reports: 0
+	num_faulty_bboxes: 6521
+	num_images_without_29_regions: 1440
+

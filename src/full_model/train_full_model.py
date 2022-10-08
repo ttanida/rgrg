@@ -24,6 +24,7 @@ from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.run_configurations import (
     RUN,
     RUN_COMMENT,
+    SEED,
     PRETRAIN_WITHOUT_LM_MODEL,
     PRETRAIN_LM_MODEL,
     IMAGE_INPUT_SIZE,
@@ -58,13 +59,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
-# set the seed value for reproducibility
-seed_val = 42
-
-random.seed(seed_val)
-np.random.seed(seed_val)
-torch.manual_seed(seed_val)
-torch.cuda.manual_seed_all(seed_val)
+# set the seed for reproducibility
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
 
 
 def train_model(
@@ -307,7 +306,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
     custom_collate_val = CustomCollator(tokenizer=tokenizer, is_val=True, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
 
     g = torch.Generator()
-    g.manual_seed(seed_val)
+    g.manual_seed(SEED)
 
     train_loader = DataLoader(
         train_dataset,
@@ -505,6 +504,7 @@ def create_run_folder():
     config_file_path = os.path.join(run_folder_path, "run_config.txt")
     config_parameters = {
         "COMMENT": RUN_COMMENT,
+        "SEED": SEED,
         "PRETRAIN_WITHOUT_LM_MODEL": PRETRAIN_WITHOUT_LM_MODEL,
         "PRETRAIN_LM_MODEL": PRETRAIN_LM_MODEL,
         "IMAGE_INPUT_SIZE": IMAGE_INPUT_SIZE,
@@ -561,13 +561,13 @@ def main():
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     # resume_training = False
-    checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_34/checkpoints/checkpoint_val_loss_62.389_overall_steps_120865.pt", map_location=device
-    )
+    # checkpoint = torch.load(
+    #     "/u/home/tanida/runs/full_model/run_34/checkpoints/checkpoint_val_loss_62.389_overall_steps_120865.pt", map_location=device
+    # )
 
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL, pretrain_lm_model=PRETRAIN_LM_MODEL)
     model.to(device, non_blocking=True)
-    model.load_state_dict(checkpoint["model"])
+    # model.load_state_dict(checkpoint["model"])
     model.train()
 
     opt = AdamW(model.parameters(), lr=LR)
@@ -588,7 +588,7 @@ def main():
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
-    del checkpoint
+    # del checkpoint
 
     log.info("Starting training!")
 
