@@ -26,9 +26,9 @@ then pre-training the language model, then training the full model.
 
 Note that the setting of PRETRAIN_WITHOUT_LM_MODEL = True and PRETRAIN_LM_MODEL = True is undefined and thus should not be used.
 """
-RUN = 44
-RUN_COMMENT = """Seed 43: redo run 37"""
-SEED = 43
+RUN = 45
+RUN_COMMENT = """Seed 44: redo run 37"""
+SEED = 44
 PRETRAIN_WITHOUT_LM_MODEL = True
 PRETRAIN_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
