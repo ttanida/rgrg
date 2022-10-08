@@ -366,8 +366,8 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
     num_rows_created = 0
 
     # we split the test set into 1 that contains all images that have bbox coordinates for all 29 regions
-    # (which will be around 44969 images in total, or around 95% of all test set images),
-    # and 1 that contains the rest of the images (around 2420 images) that do not have bbox coordinates for all 29 regions
+    # (which will be around 31271 images in total, or around 95% of all test set images),
+    # and 1 that contains the rest of the images (around 1440 images) that do not have bbox coordinates for all 29 regions
     # this is done such that we can efficiently evaluate the first test set (since vectorized code can be written for it),
     # and evaluate the second test set a bit more inefficiently (using for loops) afterwards
     if dataset == "test":
