@@ -2,9 +2,9 @@ import torch
 
 
 class CustomCollator:
-    def __init__(self, tokenizer, is_val, pretrain_without_lm_model):
+    def __init__(self, tokenizer, is_val_or_test, pretrain_without_lm_model):
         self.tokenizer = tokenizer
-        self.is_val = is_val
+        self.is_val_or_test = is_val_or_test
         self.pretrain_without_lm_model = pretrain_without_lm_model
 
     def __call__(self, batch: list[dict[str]]):
@@ -18,9 +18,9 @@ class CustomCollator:
           - bbox_phrase_exists
           - bbox_is_abnormal
 
-        For the val dataset, we have the additional key:
+        For the val and test datasets, we have the additional key:
           - bbox_phrases
-          - study_id
+          - reference_report
         """
         # discard samples from batch where __getitem__ from custom_dataset failed (i.e. returned None)
         # otherwise, whole training loop would stop
@@ -41,13 +41,13 @@ class CustomCollator:
         bbox_is_abnormal_size = batch[0]["bbox_is_abnormal"].size()  # should be torch.Size([29])
         region_is_abnormal = torch.empty(size=(len(batch), *bbox_is_abnormal_size), dtype=torch.bool)
 
-        if self.is_val and not self.pretrain_without_lm_model:
-            # for a validation batch, create a List[List[str]] that hold the reference phrases (i.e. bbox_phrases) to compute BLEU/BERTscores
+        if self.is_val_or_test and not self.pretrain_without_lm_model:
+            # for a validation and test batch, create a List[List[str]] that hold the reference phrases (i.e. bbox_phrases) to compute e.g. BLEU scores
             # the inner list will hold all reference phrases for a single image
             bbox_phrases_batch = []
 
-            # also create a List[str] to hold the study ids for the images in the batch
-            study_ids = []
+            # also create a List[str] to hold the reference reports for the images in the batch
+            reference_reports = []
 
         for i, sample_dict in enumerate(batch):
             # remove image tensors from batch and store them in dedicated images_batch tensor
@@ -64,18 +64,19 @@ class CustomCollator:
             # remove bbox_is_abnormal tensors from batch and store them in dedicated region_is_abnormal tensor
             region_is_abnormal[i] = sample_dict.pop("bbox_is_abnormal")
 
-            if self.is_val and not self.pretrain_without_lm_model:
+            if self.is_val_or_test and not self.pretrain_without_lm_model:
                 # remove list bbox_phrases from batch and store it in the list bbox_phrases_batch
                 bbox_phrases_batch.append(sample_dict.pop("bbox_phrases"))
 
-                study_ids.append(sample_dict.pop("study_id"))
+                # same for reference_report
+                reference_reports.append(sample_dict.pop("reference_report"))
 
         if self.pretrain_without_lm_model:
             batch = {}
         else:
             # batch is now a list that only contains dicts with keys input_ids and attention_mask (both of which are List[List[int]])
             # i.e. batch is of type List[Dict[str, List[List[int]]]]
-            # each dict specifies the input_ids and attention_mask of a single image, thus the outer list always has 29 elements (i.e. inner lists)
+            # each dict specifies the input_ids and attention_mask of a single image, thus the outer lists always has 29 elements (with each element being a list)
             # for sentences describing 29 regions
             # we want to pad all input_ids and attention_mask to the max sequence length in the batch
             # we can use the pad method of the tokenizer for this, however it requires the input to be of type Dict[str, List[List[int]]
@@ -96,9 +97,9 @@ class CustomCollator:
         batch["region_has_sentence"] = region_has_sentence
         batch["region_is_abnormal"] = region_is_abnormal
 
-        if self.is_val and not self.pretrain_without_lm_model:
+        if self.is_val_or_test and not self.pretrain_without_lm_model:
             batch["reference_sentences"] = bbox_phrases_batch
-            batch["study_ids"] = study_ids
+            batch["reference_reports"] = reference_reports
 
         return batch
 

@@ -493,7 +493,7 @@ def evaluate_model(model, test_loader, tokenizer):
 
 def get_data_loader(tokenizer, test_dataset_complete):
     custom_collate_test = CustomCollator(
-        tokenizer=tokenizer, is_val=True, pretrain_without_lm_model=False
+        tokenizer=tokenizer, is_val_or_test=True, pretrain_without_lm_model=False
     )
 
     test_loader = DataLoader(

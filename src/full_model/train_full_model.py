@@ -298,8 +298,8 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         np.random.seed(worker_seed)
         random.seed(worker_seed)
 
-    custom_collate_train = CustomCollator(tokenizer=tokenizer, is_val=False, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    custom_collate_val = CustomCollator(tokenizer=tokenizer, is_val=True, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
+    custom_collate_train = CustomCollator(tokenizer=tokenizer, is_val_or_test=False, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
+    custom_collate_val = CustomCollator(tokenizer=tokenizer, is_val_or_test=True, pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
 
     g = torch.Generator()
     g.manual_seed(SEED)
@@ -319,7 +319,7 @@ def get_data_loaders(tokenizer, train_dataset, val_dataset):
         collate_fn=custom_collate_val,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=0,
+        num_workers=0,  # could also be set to NUM_WORKERS, but I had some problems with the val loader stopping sometimes when num_workers != 0
         pin_memory=True,
     )
 
@@ -355,8 +355,8 @@ def get_transforms(dataset: str):
         bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"]),
     )
 
-    # don't apply data augmentations to val and test set
-    val_test_transforms = A.Compose(
+    # don't apply data augmentations to val set (and test set)
+    val_transforms = A.Compose(
         [
             A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
             A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
@@ -369,7 +369,7 @@ def get_transforms(dataset: str):
     if dataset == "train":
         return train_transforms
     else:
-        return val_test_transforms
+        return val_transforms
 
 
 def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
@@ -387,8 +387,7 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     tokenized_val_dataset = raw_val_dataset.map(tokenize_function)
 
     # tokenized datasets will consist of the columns
-    #   - study_id
-    #   - mimic_image_file_path
+    #   - mimic_image_file_path (str)
     #   - bbox_coordinates (List[List[int]])
     #   - bbox_labels (List[int])
     #   - bbox_phrases (List[str])
@@ -396,6 +395,9 @@ def get_tokenized_datasets(tokenizer, raw_train_dataset, raw_val_dataset):
     #   - attention_mask (List[List[int]])
     #   - bbox_phrase_exists (List[bool])
     #   - bbox_is_abnormal (List[bool])
+    #
+    #   val dataset will have additional column:
+    #   - reference_report (str)
 
     return tokenized_train_dataset, tokenized_val_dataset
 
@@ -410,7 +412,6 @@ def get_tokenizer():
 
 def get_datasets(config_file_path):
     usecols = [
-        "study_id",
         "mimic_image_file_path",
         "bbox_coordinates",
         "bbox_labels",
@@ -429,11 +430,12 @@ def get_datasets(config_file_path):
         "bbox_is_abnormal": literal_eval,
     }
 
-    datasets_as_dfs = {dataset: os.path.join(path_full_dataset, dataset) + ".csv" for dataset in ["train", "valid"]}
+    datasets_as_dfs = {}
+    datasets_as_dfs["train"] = pd.read_csv(os.path.join(path_full_dataset, "train.csv"), usecols=usecols, converters=converters)
 
-    datasets_as_dfs = {
-        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters) for dataset, csv_file_path in datasets_as_dfs.items()
-    }
+    # val dataset has additional "reference_report" column
+    usecols.append("reference_report")
+    datasets_as_dfs["valid"] = pd.read_csv(os.path.join(path_full_dataset, "valid.csv"), usecols=usecols, converters=converters)
 
     # bbox_phrases is a list of str
     # replace each bbox_phrase that is empty (i.e. "") by "#"
@@ -470,8 +472,13 @@ def get_datasets(config_file_path):
 
 def create_run_folder():
     """
-    Run folder will contain a folder for saving the trained weights, a folder for the tensorboard files
-    as well as a config file that specifies the overall parameters used for training.
+    Run folder will contain:
+        - a folder called "checkpoints" for the saved checkpoints
+        - a folder called "tensorboard" for the saved tensorboard files
+        - a folder called "generated_sentences_and_reports" that store the generated sentences and reports
+        which were created at each evaluation
+        - a txt file called "log_file", which stores information like OOMs that happened during training
+        - a txt file called "run_config.txt", which stores the information specified in run_configurations.py
     """
     run_folder_path_parent_dir = "/u/home/tanida/runs/full_model"
 

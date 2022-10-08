@@ -32,8 +32,8 @@ class CustomDataset(Dataset):
                 # we only need the reference phrases when computing e.g. BLEU during evaluation
                 bbox_phrases = self.tokenized_dataset[index]["bbox_phrases"]  # List[str]
 
-                # we need the study_id to retrieve the corresponding mimic_cxr report during evaluation
-                study_id = self.tokenized_dataset[index]["study_id"]  # str
+                # same for the reference_report
+                reference_report = self.tokenized_dataset[index]["reference_report"]  # str
 
             # cv2.imread by default loads an image with 3 channels
             # since we have grayscale images, we only have 1 channel and thus use cv2.IMREAD_UNCHANGED to read in the 1 channel
@@ -58,7 +58,7 @@ class CustomDataset(Dataset):
 
             if self.dataset_name != "train":
                 sample["bbox_phrases"] = bbox_phrases
-                sample["study_id"] = study_id
+                sample["reference_report"] = reference_report
 
         except Exception as e:
             self.log.error(f"__getitem__ failed for: {image_path}")
