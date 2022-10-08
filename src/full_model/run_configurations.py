@@ -10,9 +10,21 @@ If PRETRAIN_WITHOUT_LM_MODEL = False, then the full model is trained end-to-end.
 
 Ideally, the training should go like this:
 
-(1) Object detector training
-(2) Object detector + binary classifiers training
-(3) Full model training
+(1) Object detector training:
+    - see src/object_detector/training_script_object_detector.py
+
+(2) Object detector + binary classifiers training:
+    - load best object detector weights from step (1) into the object detector in the __init__ method in src/full_model/report_generation_model.py
+    - set PRETRAIN_WITHOUT_LM_MODEL = True in this file
+    - make sure that in the main function of src/full_model/train_full_model.py, no other weights are loaded into the instantiated ReportGenerationModel
+    - pre-train full model without language model with src/full_model/train_full_model.py
+
+(3) Full model training:
+    - uncomment lines that load object detector weights in the __init__ method (since those weights will be overwritten anyway)
+    - set PRETRAIN_WITHOUT_LM_MODEL = False in this file
+    - load best pre-trained full model weights from step (2) in src/full_model/train_full_model.py by specifying them in
+    checkpoint = torch.load(...) in line 559 and (possible uncommenting) model.load_state_dict(checkpoint["model"]) in line 565
+    - train full model with src/full_model/train_full_model.py
 """
 RUN = 45
 RUN_COMMENT = """Seed 44: redo run 37"""
