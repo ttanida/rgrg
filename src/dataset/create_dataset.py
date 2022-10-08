@@ -383,8 +383,7 @@ def get_rows(dataset: str, path_csv_file: str, image_ids_to_avoid: set) -> list[
     num_faulty_bboxes = 0
     num_images_without_29_regions = 0
     missing_images = []
-    if dataset in ["valid", "test"]:
-        missing_reports = []
+    missing_reports = []
 
     with open(path_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
