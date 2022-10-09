@@ -43,8 +43,8 @@ BATCH_SIZE = 4
 NUM_WORKERS = 10
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 100
-NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 100
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 10  # 100
+NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 10  # 100
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -79,8 +79,8 @@ def write_all_scores_to_file(
 ):
     def write_obj_detector_scores():
         with open(final_scores_txt_file, "a") as f:
-            f.write(f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']}\n")
-            f.write(f"avg_iou: {obj_detector_scores['avg_iou']}\n")
+            f.write(f"avg_num_detected_regions_per_image: {obj_detector_scores['avg_num_detected_regions_per_image']:.5f}\n")
+            f.write(f"avg_iou: {obj_detector_scores['avg_iou']:.5f}\n")
 
         # replace white space by underscore for each region name (i.e. "right upper lung" -> "right_upper_lung")
         anatomical_regions = ["_".join(region.split()) for region in ANATOMICAL_REGIONS]
@@ -89,22 +89,22 @@ def write_all_scores_to_file(
 
         for region_, avg_detections_region in zip(anatomical_regions, avg_detections_per_region):
             with open(final_scores_txt_file, "a") as f:
-                f.write(f"num_detected_{region_}: {avg_detections_region}\n")
+                f.write(f"num_detected_{region_}: {avg_detections_region:.5f}\n")
 
         for region_, avg_iou_region in zip(anatomical_regions, avg_iou_per_region):
             with open(final_scores_txt_file, "a") as f:
-                f.write(f"iou_{region_}: {avg_iou_region}\n")
+                f.write(f"iou_{region_}: {avg_iou_region:.5f}\n")
 
     def write_region_selection_scores():
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
                 with open(final_scores_txt_file, "a") as f:
-                    f.write(f"region_select_{subset}_{metric}: {score}\n")
+                    f.write(f"region_select_{subset}_{metric}: {score:.5f}\n")
 
     def write_region_abnormal_scores():
         for metric, score in region_abnormal_scores.items():
             with open(final_scores_txt_file, "a") as f:
-                f.write(f"region_abnormal_{metric}: {score}\n")
+                f.write(f"region_abnormal_{metric}: {score:.5f}\n")
 
     def write_clinical_efficacy_scores(subset, ce_score_dict):
         """
@@ -144,13 +144,13 @@ def write_all_scores_to_file(
         for k, v in ce_score_dict.items():
             if k in metrics:
                 with open(final_scores_txt_file, "a") as f:
-                    f.write(f"language_model_{subset}_CE_{k}: {v}\n")
+                    f.write(f"language_model_{subset}_CE_{k}: {v:.5f}\n")
             else:
                 # k is a condition (only applicable if subset = "report")
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
                     with open(final_scores_txt_file, "a") as f:
-                        f.write(f"language_model_{subset}_CE_{condition_name}_{metric}: {score}\n")
+                        f.write(f"language_model_{subset}_CE_{condition_name}_{metric}: {score:.5f}\n")
 
     def write_language_model_scores():
         """
@@ -168,7 +168,7 @@ def write_all_scores_to_file(
                         # replace white space by underscore for region name (i.e. "right upper lung" -> "right_upper_lung")
                         region_name_underscored = "_".join(region_name.split())
                         with open(final_scores_txt_file, "a") as f:
-                            f.write(f"language_model_region_{region_name_underscored}_{metric}: {score}\n")
+                            f.write(f"language_model_region_{region_name_underscored}_{metric}: {score:.5f}\n")
             else:
                 for metric, score in language_model_scores[subset].items():
                     if metric == "CE":
@@ -176,7 +176,7 @@ def write_all_scores_to_file(
                         write_clinical_efficacy_scores(subset, ce_score_dict)
                     else:
                         with open(final_scores_txt_file, "a") as f:
-                            f.write(f"language_model_{subset}_{metric}: {score}\n")
+                            f.write(f"language_model_{subset}_{metric}: {score:.5f}\n")
 
     with open(final_scores_txt_file, "a") as f:
         f.write(f"Run: {RUN}\n")
@@ -791,8 +791,8 @@ def get_dataset():
     }
 
     datasets_as_dfs = {}
-    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test.csv"), usecols=usecols, converters=converters)
-    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-2.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000-2.csv"), usecols=usecols, converters=converters)
 
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
     raw_test_2_dataset = Dataset.from_pandas(datasets_as_dfs["test-2"])
