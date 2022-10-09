@@ -558,6 +558,10 @@ def main():
         "/u/home/tanida/runs/full_model/run_45/checkpoints/checkpoint_val_loss_106.395_overall_steps_56835.pt", map_location=device
     )
 
+    # if there is a key error when loading checkpoint, try uncommenting down below
+    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+
     model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
     model.to(device, non_blocking=True)
     model.load_state_dict(checkpoint["model"])

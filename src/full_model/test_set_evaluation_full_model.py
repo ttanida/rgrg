@@ -384,8 +384,13 @@ def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, token
     # this is only used to get more insights into the generated reports that are written to file
     gen_sentences_with_corresponding_regions = []
 
+    log.info("Test loader: generating sentences/reports...")
     iterate_over_test_loader(test_loader)
+    log.info("Test loader: generating sentences/reports... DONE.")
+
+    log.info("Test loader 2: generating sentences/reports...")
     iterate_over_test_loader(test_2_loader)
+    log.info("Test loader 2: generating sentences/reports... DONE.")
 
     write_sentences_and_reports_to_file_for_test_set(
         gen_and_ref_sentences,
@@ -396,7 +401,9 @@ def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, token
     with open(final_scores_txt_file, "a") as f:
         f.write(f"Num generated reports: {len(gen_and_ref_reports['generated_reports'])}\n")
 
+    log.info("Computing language_model_scores...")
     language_model_scores = compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports)
+    log.info("Computing language_model_scores... DONE.")
 
     return language_model_scores
 
@@ -436,7 +443,7 @@ def update_object_detector_metrics_test_loader_2(obj_detector_scores, detections
 
             gt_boxes_missing.append(gt_boxes_missing_single_image)
 
-        gt_boxes_missing = torch.tensor(gt_boxes_missing)
+        gt_boxes_missing = torch.tensor(gt_boxes_missing, device=device)
 
         return gt_boxes_missing
 
@@ -449,14 +456,14 @@ def update_object_detector_metrics_test_loader_2(obj_detector_scores, detections
 
             for gt_boxes_missing_bool in gt_boxes_missing_single_image:
                 if gt_boxes_missing_bool:
-                    gt_boxes_single_image.append([0, 0, 0, 0])
+                    gt_boxes_single_image.append(torch.tensor([0, 0, 0, 0], dtype=boxes_single_image.dtype, device=device))
                 else:
                     gt_boxes_single_image.append(boxes_single_image[curr_index_boxes_single_image])
                     curr_index_boxes_single_image += 1
 
-            gt_boxes.append(gt_boxes_single_image)
+            gt_boxes.append(torch.stack(gt_boxes_single_image))
 
-        gt_boxes = torch.tensor(gt_boxes)
+        gt_boxes = torch.stack(gt_boxes)
         return gt_boxes
 
     def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
@@ -638,8 +645,13 @@ def get_metric_scores(model, test_loader, test_2_loader):
 
     num_images = 0
 
+    log.info("Test loader: computing scores for object detector, region selection and region abnormal module...")
     num_images = iterate_over_test_loader(test_loader, num_images, is_test_2_loader=False)
+    log.info("Test loader: computing scores for object detector, region selection and region abnormal module... DONE.")
+
+    log.info("Test loader 2: computing scores for object detector, region selection and region abnormal module...")
     num_images = iterate_over_test_loader(test_2_loader, num_images, is_test_2_loader=True)
+    log.info("Test loader 2: computing scores for object detector, region selection and region abnormal module... DONE.")
 
     # compute object detector scores
     sum_intersection = obj_detector_scores["sum_intersection_area_per_region"]
@@ -809,8 +821,9 @@ def main():
         map_location=torch.device("cpu"),
     )
 
-    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+    # if there is a key error when loading checkpoint, try uncommenting down below
+    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
