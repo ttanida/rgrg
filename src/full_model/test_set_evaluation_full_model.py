@@ -34,7 +34,7 @@ from src.full_model.report_generation_model import ReportGenerationModel
 from src.path_datasets_and_weights import path_full_dataset
 
 RUN = 43
-CHECKPOINT = "checkpoint_val_loss_23.803_overall_steps_180901"
+CHECKPOINT = "checkpoint_val_loss_23.803_overall_steps_180901.pt"
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
@@ -62,7 +62,7 @@ torch.cuda.manual_seed_all(seed_val)
 path_to_test_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports"
 path_to_test_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports_findings_only"
 
-final_scores_txt_file = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "final_scores.txt")
+final_scores_txt_file = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/", "final_scores.txt")
 
 
 def write_all_scores_to_file(
@@ -354,7 +354,226 @@ def evaluate_language_model(model, test_loader, tokenizer):
     return language_model_scores
 
 
-def get_metric_scores(model, test_loader):
+def update_object_detector_metrics_test_loader_2(obj_detector_scores, detections, image_targets, class_detected):
+    def compute_box_area(box):
+        """
+        Calculate the area of a box given the 4 corner values.
+
+        Args:
+            box (Tensor[batch_size x 29 x 4])
+
+        Returns:
+            area (Tensor[batch_size x 29])
+        """
+        x0 = box[..., 0]
+        y0 = box[..., 1]
+        x1 = box[..., 2]
+        y1 = box[..., 3]
+
+        return (x1 - x0) * (y1 - y0)
+
+    def get_gt_boxes_missing(targets):
+        gt_boxes_missing = []
+
+        # targets is a list of dicts, with each dict containing the key "boxes" that contain the gt boxes of a single image,
+        # and key "labels" that contains the labels
+        # the labels is a list[int] that should go from 1 to 29 (with 0 being the background class), but in test_loader_2 there will be some missing numbers
+        for t in targets:
+            labels_single_image = t["labels"]
+            gt_boxes_missing_single_image = []
+            for num in range(1, 30):
+                if num not in labels_single_image:
+                    gt_boxes_missing_single_image.append(True)
+                else:
+                    gt_boxes_missing_single_image.append(False)
+
+            gt_boxes_missing.append(gt_boxes_missing_single_image)
+
+        gt_boxes_missing = torch.tensor(gt_boxes_missing)
+
+        return gt_boxes_missing
+
+    def get_gt_boxes(targets, gt_boxes_missing):
+        gt_boxes = []
+        for t, gt_boxes_missing_single_image in zip(targets, gt_boxes_missing):
+            curr_index_boxes_single_image = 0
+            boxes_single_image = t["boxes"]
+            gt_boxes_single_image = []
+
+            for gt_boxes_missing_bool in gt_boxes_missing_single_image:
+                if gt_boxes_missing_bool:
+                    gt_boxes_single_image.append([0, 0, 0, 0])
+                else:
+                    gt_boxes_single_image.append(boxes_single_image[curr_index_boxes_single_image])
+                    curr_index_boxes_single_image += 1
+
+            gt_boxes.append(gt_boxes_single_image)
+
+        gt_boxes = torch.tensor(gt_boxes)
+        return gt_boxes
+
+    def compute_intersection_and_union_area_per_region(detections, targets, class_detected):
+        # pred_boxes is of shape [batch_size x 29 x 4] and contains the predicted region boxes with the highest score (i.e. top-1)
+        # they are sorted in the 2nd dimension, meaning the 1st of the 29 boxes corresponds to the 1st region/class,
+        # the 2nd to the 2nd class and so on
+        pred_boxes = detections["top_region_boxes"]
+
+        # since we evaluate for test_loader_2, all the images tend to have different numbers of gt bbox coordinates and labels
+        # i.e. a given image has 20 gt bbox coordinates and labels, then another 23, another 18 and so on
+        # create a mask of shape [batch_size x 29] that is True if a gt bbox is missing
+        gt_boxes_missing = get_gt_boxes_missing(targets)
+
+        # create the ground-truth boxes of shape [batch_size x 29 x 4]
+        # replace missing ground-truth boxes by [0, 0, 0, 0]
+        # since the intersection and union areas corresponding to these boxes will be set to 0 later with the gt_boxes_missing mask,
+        # it does not really matter what values the missing gt boxes have (can actually be chosen arbitrarily)
+        gt_boxes = get_gt_boxes(targets, gt_boxes_missing)
+
+        # below tensors are of shape [batch_size x 29]
+        x0_max = torch.maximum(pred_boxes[..., 0], gt_boxes[..., 0])
+        y0_max = torch.maximum(pred_boxes[..., 1], gt_boxes[..., 1])
+        x1_min = torch.minimum(pred_boxes[..., 2], gt_boxes[..., 2])
+        y1_min = torch.minimum(pred_boxes[..., 3], gt_boxes[..., 3])
+
+        # intersection_boxes is of shape [batch_size x 29 x 4]
+        intersection_boxes = torch.stack([x0_max, y0_max, x1_min, y1_min], dim=-1)
+
+        # below tensors are of shape [batch_size x 29]
+        intersection_area = compute_box_area(intersection_boxes)
+        pred_area = compute_box_area(pred_boxes)
+        gt_area = compute_box_area(gt_boxes)
+
+        # if x0_max >= x1_min or y0_max >= y1_min, then there is no intersection
+        valid_intersection = torch.logical_and(x0_max < x1_min, y0_max < y1_min)
+
+        # also there is no intersection if the class was not detected by object detector
+        valid_intersection = torch.logical_and(valid_intersection, class_detected)
+
+        # set all non-valid intersection areas to 0
+        intersection_area = torch.where(
+            valid_intersection,
+            intersection_area,
+            torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device),
+        )
+
+        union_area = (pred_area + gt_area) - intersection_area
+
+        # set intersection_area and union_area to 0 if gt_boxes_missing is True for them
+        intersection_area[gt_boxes_missing] = 0
+        union_area[gt_boxes_missing] = 0
+
+        # sum up the values along the batch dimension (the values will divided by each other later to get the averages)
+        intersection_area = torch.sum(intersection_area, dim=0)
+        union_area = torch.sum(union_area, dim=0)
+
+        return intersection_area, union_area
+
+    # sum up detections for each region
+    region_detected_batch = torch.sum(class_detected, dim=0)
+
+    intersection_area_per_region_batch, union_area_per_region_batch = compute_intersection_and_union_area_per_region(detections, image_targets, class_detected)
+
+    obj_detector_scores["sum_region_detected"] += region_detected_batch
+    obj_detector_scores["sum_intersection_area_per_region"] += intersection_area_per_region_batch
+    obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
+
+
+def get_metric_scores(model, test_loader, test_2_loader):
+    def iterate_over_test_loader(test_loader, num_images, is_test_2_loader):
+        """
+        We have to distinguish between test_loader and test_2_loader,
+        since test_2_loader has less than 29 bbox_coordinates and bbox_labels
+        (as opposed to test_loader, which always has 29).
+
+        This is only a problem for the function update_object_detector_metrics,
+        since it's written in a vectorized form that always expect 29 elements.
+
+        So when is_test_2_loader=True, we use update_object_detector_metrics_test_loader_2,
+        which works with less than 29 elements.
+        """
+        # to potentially recover if anything goes wrong
+        oom = False
+
+        with torch.no_grad():
+            for num_batch, batch in tqdm(enumerate(test_loader)):
+                images = batch["images"]
+                image_targets = batch["image_targets"]
+                region_has_sentence = batch["region_has_sentence"]
+                region_is_abnormal = batch["region_is_abnormal"]
+                input_ids = batch["input_ids"]
+                attention_mask = batch["attention_mask"]
+
+                batch_size = images.size(0)
+                num_images += batch_size
+
+                images = images.to(device, non_blocking=True)
+                image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
+                region_has_sentence = region_has_sentence.to(device, non_blocking=True)
+                region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
+                input_ids = input_ids.to(device, non_blocking=True)
+                attention_mask = attention_mask.to(device, non_blocking=True)
+
+                try:
+                    with torch.autocast(device_type="cuda", dtype=torch.float16):
+                        output = model(
+                            images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal
+                        )
+                except RuntimeError as e:  # out of memory error
+                    if "out of memory" in str(e):
+                        oom = True
+
+                        with open(final_scores_txt_file, "a") as f:
+                            f.write(f"OOM at batch number {num_batch}.\n")
+                            f.write(f"Error message: {str(e)}\n\n")
+                    else:
+                        raise e
+
+                if oom:
+                    # free up memory
+                    torch.cuda.empty_cache()
+                    oom = False
+
+                    num_images -= batch_size
+
+                    continue
+
+                # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
+                if output == -1:
+                    with open(final_scores_txt_file, "a") as f:
+                        f.write(f"Empty region features before language model at batch number {num_batch}.\n\n")
+
+                    num_images -= batch_size
+                    continue
+
+                (
+                    _,
+                    _,
+                    _,
+                    _,
+                    detections,
+                    class_detected,  # bool tensor of shape [batch_size x 29]
+                    selected_regions,  # bool tensor of shape [batch_size x 29]
+                    predicted_abnormal_regions,  # bool tensor of shape [batch_size x 29]
+                ) = output
+
+                # update scores for object detector metrics
+                if is_test_2_loader:
+                    update_object_detector_metrics_test_loader_2(obj_detector_scores, detections, image_targets, class_detected)
+                else:
+                    update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected)
+
+                # update scores for region selection metrics
+                update_region_selection_metrics(
+                    region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal
+                )
+
+                # update scores for region abnormal detection metrics
+                update_region_abnormal_metrics(
+                    region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected
+                )
+
+        return num_images
+
     obj_detector_scores = {}
     obj_detector_scores["sum_intersection_area_per_region"] = torch.zeros(29, device=device)
     obj_detector_scores["sum_union_area_per_region"] = torch.zeros(29, device=device)
@@ -374,83 +593,10 @@ def get_metric_scores(model, test_loader):
         "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
     }
 
-    # to recover from out of memory error if a batch has a sequence that is too long
-    oom = False
-
     num_images = 0
 
-    with torch.no_grad():
-        for num_batch, batch in tqdm(enumerate(test_loader)):
-            images = batch["images"]
-            image_targets = batch["image_targets"]
-            region_has_sentence = batch["region_has_sentence"]
-            region_is_abnormal = batch["region_is_abnormal"]
-            input_ids = batch["input_ids"]
-            attention_mask = batch["attention_mask"]
-
-            batch_size = images.size(0)
-            num_images += batch_size
-
-            images = images.to(device, non_blocking=True)
-            image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
-            region_has_sentence = region_has_sentence.to(device, non_blocking=True)
-            region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
-            input_ids = input_ids.to(device, non_blocking=True)
-            attention_mask = attention_mask.to(device, non_blocking=True)
-
-            try:
-                with torch.autocast(device_type="cuda", dtype=torch.float16):
-                    output = model(
-                        images, image_targets, input_ids, attention_mask, region_has_sentence, region_is_abnormal
-                    )
-            except RuntimeError as e:  # out of memory error
-                if "out of memory" in str(e):
-                    oom = True
-
-                    print(f"OOM at batch number {num_batch}.\n")
-                    print(f"Error message: {str(e)}\n\n")
-
-                    raise e
-
-            if oom:
-                # free up memory
-                torch.cuda.empty_cache()
-                oom = False
-
-                num_images -= batch_size
-
-                continue
-
-            # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
-            if output == -1:
-                print(f"Empty region features before language model at batch number {num_batch}.\n\n")
-
-                num_images -= batch_size
-                continue
-
-            (
-                _,
-                _,
-                _,
-                _,
-                detections,
-                class_detected,  # bool tensor of shape [batch_size x 29]
-                selected_regions,  # bool tensor of shape [batch_size x 29]
-                predicted_abnormal_regions,  # bool tensor of shape [batch_size x 29]
-            ) = output
-
-            # update scores for object detector metrics
-            update_object_detector_metrics(obj_detector_scores, detections, image_targets, class_detected)
-
-            # update scores for region selection metrics
-            update_region_selection_metrics(
-                region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal
-            )
-
-            # update scores for region abnormal detection metrics
-            update_region_abnormal_metrics(
-                region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected
-            )
+    num_images = iterate_over_test_loader(test_loader, num_images, is_test_2_loader=False)
+    num_images = iterate_over_test_loader(test_2_loader, num_images, is_test_2_loader=True)
 
     # compute object detector scores
     sum_intersection = obj_detector_scores["sum_intersection_area_per_region"]
@@ -465,9 +611,7 @@ def get_metric_scores(model, test_loader):
     # compute the "micro" average scores for region_selection_scores
     for subset in region_selection_scores:
         for metric, score in region_selection_scores[subset].items():
-            region_selection_scores[subset][metric] = score.compute()[
-                1
-            ].item()  # only report results for the positive class (hence [1])
+            region_selection_scores[subset][metric] = score.compute()[1].item()  # only report results for the positive class (hence [1])
 
     # compute the "micro" average scores for region_abnormal_scores
     for metric, score in region_abnormal_scores.items():
@@ -476,10 +620,8 @@ def get_metric_scores(model, test_loader):
     return obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, test_loader, tokenizer):
-    obj_detector_scores, region_selection_scores, region_abnormal_scores = get_metric_scores(
-        model, test_loader
-    )
+def evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
+    obj_detector_scores, region_selection_scores, region_abnormal_scores = get_metric_scores(model, test_loader, test_2_loader)
 
     language_model_scores = evaluate_language_model(model, test_loader, tokenizer)
 
@@ -491,7 +633,7 @@ def evaluate_model(model, test_loader, tokenizer):
     )
 
 
-def get_data_loader(tokenizer, test_dataset_complete):
+def get_data_loaders(tokenizer, test_dataset_complete, test_2_dataset_complete):
     custom_collate_test = CustomCollator(
         tokenizer=tokenizer, is_val_or_test=True, pretrain_without_lm_model=False
     )
@@ -504,7 +646,17 @@ def get_data_loader(tokenizer, test_dataset_complete):
         num_workers=0,
         pin_memory=True,
     )
-    return test_loader
+
+    test_2_loader = DataLoader(
+        test_2_dataset_complete,
+        collate_fn=custom_collate_test,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=True,
+    )
+
+    return test_loader, test_2_loader
 
 
 def get_transforms():
@@ -526,7 +678,7 @@ def get_transforms():
     return test_transforms
 
 
-def get_tokenized_dataset(tokenizer, raw_test_dataset):
+def get_tokenized_dataset(tokenizer, raw_test_dataset, raw_test_2_dataset):
     def tokenize_function(example):
         phrases = example["bbox_phrases"]  # List[str]
         bos_token = "<|endoftext|>"  # note: in the GPT2 tokenizer, bos_token = eos_token = "<|endoftext|>"
@@ -538,10 +690,10 @@ def get_tokenized_dataset(tokenizer, raw_test_dataset):
         return tokenizer(phrases_with_special_tokens, truncation=True, max_length=1024)
 
     tokenized_test_dataset = raw_test_dataset.map(tokenize_function)
+    tokenized_test_2_dataset = raw_test_2_dataset.map(tokenize_function)
 
     # tokenized datasets will consist of the columns
-    #   - study_id
-    #   - mimic_image_file_path
+    #   - mimic_image_file_path (str)
     #   - bbox_coordinates (List[List[int]])
     #   - bbox_labels (List[int])
     #   - bbox_phrases (List[str])
@@ -549,8 +701,9 @@ def get_tokenized_dataset(tokenizer, raw_test_dataset):
     #   - attention_mask (List[List[int]])
     #   - bbox_phrase_exists (List[bool])
     #   - bbox_is_abnormal (List[bool])
+    #   - reference_report (str)
 
-    return tokenized_test_dataset
+    return tokenized_test_dataset, tokenized_test_2_dataset
 
 
 def get_tokenizer():
@@ -563,13 +716,13 @@ def get_tokenizer():
 
 def get_dataset():
     usecols = [
-        "study_id",
         "mimic_image_file_path",
         "bbox_coordinates",
         "bbox_labels",
         "bbox_phrases",
         "bbox_phrase_exists",
         "bbox_is_abnormal",
+        "reference_report"
     ]
 
     # all of the columns below are stored as strings in the csv_file
@@ -582,50 +735,39 @@ def get_dataset():
         "bbox_is_abnormal": literal_eval,
     }
 
-    datasets_as_dfs = {dataset: os.path.join(path_full_dataset, dataset) + ".csv" for dataset in ["test"]}
-
-    datasets_as_dfs = {
-        dataset: pd.read_csv(csv_file_path, usecols=usecols, converters=converters)
-        for dataset, csv_file_path in datasets_as_dfs.items()
-    }
-
-    # bbox_phrases is a list of str
-    # replace each bbox_phrase that is empty (i.e. "") by "#"
-    # this is done such that model learns to generate the "#" symbol instead of "" for empty sentences
-    # this is done because generated sentences that are "" (i.e. have len = 0) will cause problems when computing e.g. Bleu scores
-    for dataset_df in datasets_as_dfs.values():
-        dataset_df["bbox_phrases"] = dataset_df["bbox_phrases"].apply(
-            lambda bbox_phrases: [phrase if len(phrase) != 0 else "#" for phrase in bbox_phrases]
-        )
-
-    datasets_as_dfs["test"] = datasets_as_dfs["test"][:NUM_IMAGES_TO_USE_IN_TEST_SET]
+    datasets_as_dfs = {}
+    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-2.csv"), usecols=usecols, converters=converters)
 
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
+    raw_test_2_dataset = Dataset.from_pandas(datasets_as_dfs["test-2"])
 
-    return raw_test_dataset
+    return raw_test_dataset, raw_test_2_dataset
 
 
 def main():
     # the datasets still contain the untokenized phrases
-    raw_test_dataset = get_dataset()
+    raw_test_dataset, raw_test_2_dataset = get_dataset()
 
     tokenizer = get_tokenizer()
 
     # tokenize the raw datasets
-    tokenized_test_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset)
+    tokenized_test_dataset, tokenized_test_2_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset, raw_test_2_dataset)
 
     test_transforms = get_transforms()
 
     test_dataset_complete = CustomDataset("test", tokenized_test_dataset, test_transforms, log)
+    test_2_dataset_complete = CustomDataset("test", tokenized_test_2_dataset, test_transforms, log)
 
-    test_loader = get_data_loader(tokenizer, test_dataset_complete)
+    test_loader, test_2_loader = get_data_loaders(tokenizer, test_dataset_complete, test_2_dataset_complete)
 
     checkpoint = torch.load(
-        f"/u/home/tanida/runs/full_model/run_{RUN}/checkpoints/{CHECKPOINT}.pt",
+        f"/u/home/tanida/runs/full_model/run_{RUN}/checkpoints/{CHECKPOINT}",
         map_location=torch.device("cpu"),
     )
-    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+
+    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
@@ -634,7 +776,7 @@ def main():
 
     del checkpoint
 
-    evaluate_model(model, test_loader, tokenizer)
+    evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer)
 
 
 if __name__ == "__main__":
