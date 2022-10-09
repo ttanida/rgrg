@@ -647,8 +647,7 @@ def update_gen_sentences_with_corresponding_regions(
     generated_sents_for_selected_regions,
     selected_regions
 ):
-    """_summary_
-
+    """
     Args:
         gen_sentences_with_corresponding_regions (list[list[tuple[str, str]]]):
             len(outer_list)= (NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE),
@@ -935,7 +934,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    # used in function get_generated_and_reference_reports
+    # used in function get_generated_reports
     sentence_tokenizer = spacy.load("en_core_web_trf")
 
     with torch.no_grad():

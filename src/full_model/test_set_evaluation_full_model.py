@@ -27,14 +27,16 @@ from src.full_model.evaluate_full_model.evaluate_model import (
 from src.full_model.evaluate_full_model.evaluate_language_model import (
     get_ref_sentences_for_selected_regions,
     get_sents_for_normal_abnormal_selected_regions,
-    get_generated_and_reference_reports,
+    get_generated_reports,
+    update_gen_and_ref_sentences_for_regions,
+    update_gen_sentences_with_corresponding_regions,
     compute_language_model_scores
 )
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.path_datasets_and_weights import path_full_dataset
 
-RUN = 43
-CHECKPOINT = "checkpoint_val_loss_23.803_overall_steps_180901.pt"
+RUN = 38
+CHECKPOINT = "checkpoint_val_loss_20.850_overall_steps_195284.pt"
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
@@ -43,8 +45,6 @@ NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 100
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 100
-NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION = 500
-NUM_IMAGES_TO_USE_IN_TEST_SET = 5000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -59,10 +59,16 @@ np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
-path_to_test_mimic_reports_folder = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports"
-path_to_test_mimic_reports_folder_findings_only = "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports_findings_only"
+"""
+folder specified by path_to_folder_to_store_files will have these files after test set evaluation:
 
-final_scores_txt_file = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/", "final_scores.txt")
+    - final_scores.txt
+    - generated_sentences.txt
+    - generated_abnormal_sentences.txt
+    - generated_reports.txt
+"""
+path_to_folder_to_store_files = "/u/home/tanida/region-guided-chest-x-ray-report-generation/"
+final_scores_txt_file = os.path.join(path_to_folder_to_store_files, "final_scores.txt")
 
 
 def write_all_scores_to_file(
@@ -122,7 +128,7 @@ def write_all_scores_to_file(
                 acc: ...,
             },
             ...,
-            condition_5 : {
+            condition_14 : {
                 precision: ...,
                 recall: ...,
                 f1: ...,
@@ -131,7 +137,7 @@ def write_all_scores_to_file(
         }
 
         where the "..." after the 4 metrics are the corresponding scores,
-        and condition_* are from the 5 conditions we evaluate on (i.e. "Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion")
+        and condition_* are from the 14 conditions in src/CheXbert/src/constants.py
         """
         metrics = {"precision", "recall", "f1", "acc"}
 
@@ -140,26 +146,43 @@ def write_all_scores_to_file(
                 with open(final_scores_txt_file, "a") as f:
                     f.write(f"language_model_{subset}_CE_{k}: {v}\n")
             else:
-                # k is a condition
+                # k is a condition (only applicable if subset = "report")
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
                     with open(final_scores_txt_file, "a") as f:
                         f.write(f"language_model_{subset}_CE_{condition_name}_{metric}: {score}\n")
 
     def write_language_model_scores():
+        """
+        language_model_scores is a dict with keys:
+            - all: for all generated sentences
+            - normal: for all generated sentences corresponding to normal regions
+            - abnormal: for all generated sentences corresponding to abnormal regions
+            - report: for all generated reports
+            - region: for generated sentences per region
+        """
         for subset in language_model_scores:
-            for metric, score in language_model_scores[subset].items():
-                with open(final_scores_txt_file, "a") as f:
+            if subset == "region":
+                for region_name in language_model_scores["region"]:
+                    for metric, score in language_model_scores["region"][region_name].items():
+                        # replace white space by underscore for region name (i.e. "right upper lung" -> "right_upper_lung")
+                        region_name_underscored = "_".join(region_name.split())
+                        with open(final_scores_txt_file, "a") as f:
+                            f.write(f"language_model_region_{region_name_underscored}_{metric}: {score}\n")
+            else:
+                for metric, score in language_model_scores[subset].items():
                     if metric == "CE":
                         ce_score_dict = language_model_scores[subset]["CE"]
                         write_clinical_efficacy_scores(subset, ce_score_dict)
                     else:
-                        f.write(f"language_model_{subset}_{metric}: {score}\n")
+                        with open(final_scores_txt_file, "a") as f:
+                            f.write(f"language_model_{subset}_{metric}: {score}\n")
 
     with open(final_scores_txt_file, "a") as f:
         f.write(f"Run: {RUN}\n")
         f.write(f"Checkpoint: {CHECKPOINT}\n")
         f.write(f"BertScore: {BERTSCORE_SIMILARITY_THRESHOLD}\n")
+        f.write(f"Num beams: {NUM_BEAMS}\n")
 
     write_obj_detector_scores()
     write_region_selection_scores()
@@ -167,94 +190,168 @@ def write_all_scores_to_file(
     write_language_model_scores()
 
 
-def write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_reports):
-    def write_sentences(generated_sentences, generated_sentences_abnormal_regions, reference_sentences, reference_sentences_abnormal_regions):
-        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "generated_sentences.txt")
-        txt_file_name_abnormal = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "generated_abnormal_sentences.txt")
+def write_sentences_and_reports_to_file_for_test_set(
+    gen_and_ref_sentences,
+    gen_and_ref_reports,
+    gen_sentences_with_corresponding_regions
+):
+    def write_sentences():
+        txt_file_name = os.path.join(path_to_folder_to_store_files, "generated_sentences.txt")
+        txt_file_name_abnormal = os.path.join(path_to_folder_to_store_files, "generated_abnormal_sentences.txt")
 
         with open(txt_file_name, "w") as f:
             for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
                 f.write(f"Generated sentence: {gen_sent}\n")
-                # the hash symbol symbolizes an empty reference sentence, and thus can be replaced by '' when writing to file
-                f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
+                f.write(f"Reference sentence: {ref_sent}\n\n")
 
         with open(txt_file_name_abnormal, "w") as f:
             for gen_sent, ref_sent in zip(generated_sentences_abnormal_regions, reference_sentences_abnormal_regions):
                 f.write(f"Generated sentence: {gen_sent}\n")
-                f.write(f"Reference sentence: {ref_sent if ref_sent != '#' else ''}\n\n")
+                f.write(f"Reference sentence: {ref_sent}\n\n")
 
-    def write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences):
-        txt_file_name = os.path.join("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/", "generated_reports.txt")
+    def write_reports():
+        txt_file_name = os.path.join(path_to_folder_to_store_files, "generated_reports.txt")
 
         with open(txt_file_name, "w") as f:
-            for gen_report, ref_report, ref_report_mimic, ref_report_mimic_findings_only, removed_similar_gen_sents in zip(
-                generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences
+            for gen_report, ref_report, removed_similar_gen_sents, gen_sents_with_regions_single_report in zip(
+                generated_reports,
+                reference_reports,
+                removed_similar_generated_sentences,
+                gen_sentences_with_corresponding_regions
             ):
                 f.write(f"Generated report: {gen_report}\n\n")
                 f.write(f"Reference report: {ref_report}\n\n")
-                f.write(f"Ref report mimic: {ref_report_mimic}\n\n")
-                f.write(f"Ref report mimic findings only: {ref_report_mimic_findings_only if ref_report_mimic_findings_only is not None else '[EMPTY]'}\n\n")
+
+                f.write("Generated sentences with their regions:\n")
+                for region_name, gen_sent in gen_sents_with_regions_single_report:
+                    f.write(f"\t{region_name}: {gen_sent}\n")
+                f.write("\n")
+
                 f.write("Generated sentences that were removed:\n")
                 for gen_sent, list_similar_gen_sents in removed_similar_gen_sents.items():
                     f.write(f"\t{gen_sent} == {list_similar_gen_sents}\n")
                 f.write("\n")
+
                 f.write("=" * 30)
                 f.write("\n\n")
 
-    # all below are list of str
-    generated_sentences = gen_and_ref_sentences["generated_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
-    generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
-    reference_sentences = gen_and_ref_sentences["reference_sentences"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
-    reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE]
+    num_generated_sentences_to_save = NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE * BATCH_SIZE
+    num_generated_reports_to_save = NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE
 
-    write_sentences(generated_sentences, generated_sentences_abnormal_regions, reference_sentences, reference_sentences_abnormal_regions)
+    # all below are list of str
+    generated_sentences = gen_and_ref_sentences["generated_sentences"][:num_generated_sentences_to_save]
+    generated_sentences_abnormal_regions = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
+    reference_sentences = gen_and_ref_sentences["reference_sentences"][:num_generated_sentences_to_save]
+    reference_sentences_abnormal_regions = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"][:num_generated_sentences_to_save]
+
+    write_sentences()
 
     # all below are list of str except removed_similar_generated_sentences which is a list of dict
-    generated_reports = gen_and_ref_reports["generated_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
-    reference_reports = gen_and_ref_reports["reference_reports"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
-    reference_reports_mimic = gen_and_ref_reports["reference_reports_mimic"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
-    reference_reports_mimic_findings_only = gen_and_ref_reports["reference_reports_mimic_findings_only"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
-    removed_similar_generated_sentences = gen_and_ref_reports["removed_similar_generated_sentences"][:NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE]
+    generated_reports = gen_and_ref_reports["generated_reports"][:num_generated_reports_to_save]
+    reference_reports = gen_and_ref_reports["reference_reports"][:num_generated_reports_to_save]
+    removed_similar_generated_sentences = gen_and_ref_reports["removed_similar_generated_sentences"][:num_generated_reports_to_save]
 
-    write_reports(generated_reports, reference_reports, reference_reports_mimic, reference_reports_mimic_findings_only, removed_similar_generated_sentences)
+    write_reports()
 
 
-def get_reference_reports_mimic(study_ids) -> dict[str, list]:
-    """
-    The folder "/u/home/tanida/datasets/mimic-cxr-reports/test_2000_reports" (specified by path_to_test_mimic_reports_folder)
-    contains 2000 mimic-cxr reports that correspond to the first 2000 images in the test set.
+def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
+    def iterate_over_test_loader(test_loader):
+        # to recover from potential OOMs
+        oom = False
 
-    The number 2000 was chosen because we generate 2000 reports for the first 2000 images in the test set during each test set evaluation,
-    (2000 = NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION * BATCH_SIZE = 500 * 4)
-    since generating a report for every image in the test set would take too long.
+        # used in function get_generated_reports
+        sentence_tokenizer = spacy.load("en_core_web_trf")
 
-    The original mimic-cxr reports were processed (see dataset/convert_mimic_cxr_report_to_single_string.py) from txt files that
-    contained multiple lines (containing irrelevant information) to txt files that only contain a single line (containing the information
-    from the findings and impression sections of the original report).
-    """
-    reference_reports_mimic = {
-        "report_mimic": [],
-        "report_mimic_findings_only": []
-    }
+        with torch.no_grad():
+            for num_batch, batch in tqdm(enumerate(test_loader)):
 
-    for study_id in study_ids:
-        study_txt_file_path = os.path.join(path_to_test_mimic_reports_folder, f"s{study_id}.txt")
-        with open(study_txt_file_path) as f:
-            report = f.readline()
-            reference_reports_mimic["report_mimic"].append(report)
+                images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
+                region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
 
-        study_txt_file_path = os.path.join(path_to_test_mimic_reports_folder_findings_only, f"s{study_id}.txt")
-        if os.path.exists(study_txt_file_path):
-            with open(study_txt_file_path) as f:
-                report = f.readline()
-                reference_reports_mimic["report_mimic_findings_only"].append(report)
-        else:
-            reference_reports_mimic["report_mimic_findings_only"].append(None)
+                # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
+                reference_sentences = batch["reference_sentences"]
 
-    return reference_reports_mimic
+                # List[str] that holds the reference report for the images in the batch
+                reference_reports = batch["reference_reports"]
 
+                try:
+                    with torch.autocast(device_type='cuda', dtype=torch.float16):
+                        output = model.generate(
+                            images.to(device, non_blocking=True),
+                            max_length=MAX_NUM_TOKENS_GENERATE,
+                            num_beams=NUM_BEAMS,
+                            early_stopping=True,
+                        )
+                except RuntimeError as e:  # out of memory error
+                    if "out of memory" in str(e):
+                        oom = True
 
-def evaluate_language_model_on_test_set(model, test_loader, tokenizer):
+                        with open(final_scores_txt_file, "a") as f:
+                            f.write("Generation:\n")
+                            f.write(f"OOM at batch number {num_batch}.\n")
+                            f.write(f"Error message: {str(e)}\n\n")
+                    else:
+                        raise e
+
+                if oom:
+                    # free up memory
+                    torch.cuda.empty_cache()
+                    oom = False
+                    continue
+
+                # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
+                if output == -1:
+                    with open(final_scores_txt_file, "a") as f:
+                        f.write("Generation:\n")
+                        f.write(f"Empty region features before language model at batch number {num_batch}.\n\n")
+
+                    continue
+                else:
+                    # selected_regions is of shape [batch_size x 29] and is True for regions that should get a sentence
+                    beam_search_output, selected_regions, _, _ = output
+                    selected_regions = selected_regions.detach().cpu().numpy()
+
+                # generated_sentences_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
+                generated_sents_for_selected_regions = tokenizer.batch_decode(
+                    beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True
+                )
+
+                # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
+                # reference_sentences_for_selected_regions will therefore be a List[str] of length "num_regions_selected_in_batch"
+                # (i.e. same length as generated_sentences_for_selected_regions)
+                reference_sents_for_selected_regions = get_ref_sentences_for_selected_regions(
+                    reference_sentences, selected_regions
+                )
+
+                (
+                    gen_sents_for_normal_selected_regions,
+                    gen_sents_for_abnormal_selected_regions,
+                    ref_sents_for_normal_selected_regions,
+                    ref_sents_for_abnormal_selected_regions,
+                ) = get_sents_for_normal_abnormal_selected_regions(region_is_abnormal, selected_regions, generated_sents_for_selected_regions, reference_sents_for_selected_regions)
+
+                generated_reports, removed_similar_generated_sentences = get_generated_reports(
+                    generated_sents_for_selected_regions,
+                    selected_regions,
+                    sentence_tokenizer,
+                    BERTSCORE_SIMILARITY_THRESHOLD
+                )
+
+                gen_and_ref_sentences["generated_sentences"].extend(generated_sents_for_selected_regions)
+                gen_and_ref_sentences["generated_sentences_normal_selected_regions"].extend(gen_sents_for_normal_selected_regions)
+                gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(gen_sents_for_abnormal_selected_regions)
+                gen_and_ref_sentences["reference_sentences"].extend(reference_sents_for_selected_regions)
+                gen_and_ref_sentences["reference_sentences_normal_selected_regions"].extend(ref_sents_for_normal_selected_regions)
+                gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
+                gen_and_ref_reports["generated_reports"].extend(generated_reports)
+                gen_and_ref_reports["reference_reports"].extend(reference_reports)
+                gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
+
+                update_gen_and_ref_sentences_for_regions(gen_and_ref_sentences, generated_sents_for_selected_regions, reference_sents_for_selected_regions, selected_regions)
+
+                if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
+                    update_gen_sentences_with_corresponding_regions(gen_sentences_with_corresponding_regions, generated_sents_for_selected_regions, selected_regions)
+
     gen_and_ref_sentences = {
         "generated_sentences": [],
         "generated_sentences_normal_selected_regions": [],
@@ -264,90 +361,40 @@ def evaluate_language_model_on_test_set(model, test_loader, tokenizer):
         "reference_sentences_abnormal_selected_regions": [],
     }
 
+    # also examine the generated and reference sentences on per region basis
+    for region_index, _ in enumerate(ANATOMICAL_REGIONS):
+        gen_and_ref_sentences[region_index] = {
+            "generated_sentences": [],
+            "reference_sentences": []
+        }
+
     gen_and_ref_reports = {
         "generated_reports": [],
         "removed_similar_generated_sentences": [],
         "reference_reports": [],
-        "reference_reports_mimic": [],
-        "reference_reports_mimic_findings_only": []
     }
 
-    # used in function get_generated_and_reference_reports
-    sentence_tokenizer = spacy.load("en_core_web_trf")
+    # gen_sentences_with_corresponding_regions will be a list[list[tuple[str, str]]],
+    # where len(outer_list) will be NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE * BATCH_SIZE
+    # the inner list will correspond to a single generated report / single image and hold tuples of (region_name, generated_sentence),
+    # i.e. each region that was selected for that single image, with the corresponding generated sentence (without any removal of similar generated sentences)
+    #
+    # gen_sentences_with_corresponding_regions will be used such that each generated sentences in a generated report can be directly attributed to a region
+    # because this information gets lost when we concatenated generated sentences
+    # this is only used to get more insights into the generated reports that are written to file
+    gen_sentences_with_corresponding_regions = []
 
-    with torch.no_grad():
-        for num_batch, batch in tqdm(enumerate(test_loader), total=NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION):
-            # since generating sentences takes some time, we limit the number of batches used to compute bleu/rouge-l/meteor
-            if num_batch >= NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION:
-                break
+    iterate_over_test_loader(test_loader)
+    iterate_over_test_loader(test_2_loader)
 
-            images = batch["images"]  # shape [batch_size x 1 x 512 x 512]
-            region_is_abnormal = batch["region_is_abnormal"].numpy()  # boolean array of shape [batch_size x 29]
-
-            # List[List[str]] that holds the reference phrases. The inner list holds all reference phrases of a single image
-            reference_sentences = batch["reference_sentences"]
-
-            # List[str] that holds the study ids for the images in the batch. These are used to retrieve the corresponding
-            # MIMIC-CXR reports from a separate folder
-            study_ids = batch["study_ids"]
-
-            with torch.autocast(device_type='cuda', dtype=torch.float16):
-                output = model.generate(
-                    images.to(device, non_blocking=True),
-                    max_length=MAX_NUM_TOKENS_GENERATE,
-                    num_beams=NUM_BEAMS,
-                    early_stopping=True,
-                )
-
-            beam_search_output, selected_regions, _, _ = output
-            selected_regions = selected_regions.detach().cpu().numpy()
-
-            # generated_sentences_for_selected_regions is a List[str] of length "num_regions_selected_in_batch"
-            generated_sentences_for_selected_regions = tokenizer.batch_decode(
-                beam_search_output, skip_special_tokens=True, clean_up_tokenization_spaces=True
-            )
-
-            # filter reference_sentences to those that correspond to the generated_sentences for the selected regions.
-            # reference_sentences_for_selected_regions will therefore be a List[str] of length "num_regions_selected_in_batch"
-            # (i.e. same length as generated_sentences_for_selected_regions)
-            reference_sentences_for_selected_regions = get_ref_sentences_for_selected_regions(
-                reference_sentences, selected_regions
-            )
-
-            (
-                gen_sents_for_normal_selected_regions,
-                gen_sents_for_abnormal_selected_regions,
-                ref_sents_for_normal_selected_regions,
-                ref_sents_for_abnormal_selected_regions,
-            ) = get_sents_for_normal_abnormal_selected_regions(region_is_abnormal, selected_regions, generated_sentences_for_selected_regions, reference_sentences_for_selected_regions)
-
-            (
-                generated_reports,
-                reference_reports,
-                removed_similar_generated_sentences,
-            ) = get_generated_and_reference_reports(
-                generated_sentences_for_selected_regions, reference_sentences, selected_regions, sentence_tokenizer, BERTSCORE_SIMILARITY_THRESHOLD
-            )
-
-            reference_reports_mimic = get_reference_reports_mimic(study_ids)
-
-            gen_and_ref_sentences["generated_sentences"].extend(generated_sentences_for_selected_regions)
-            gen_and_ref_sentences["generated_sentences_normal_selected_regions"].extend(gen_sents_for_normal_selected_regions)
-            gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"].extend(gen_sents_for_abnormal_selected_regions)
-            gen_and_ref_sentences["reference_sentences"].extend(reference_sentences_for_selected_regions)
-            gen_and_ref_sentences["reference_sentences_normal_selected_regions"].extend(ref_sents_for_normal_selected_regions)
-            gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"].extend(ref_sents_for_abnormal_selected_regions)
-            gen_and_ref_reports["generated_reports"].extend(generated_reports)
-            gen_and_ref_reports["reference_reports"].extend(reference_reports)
-            gen_and_ref_reports["reference_reports_mimic"].extend(reference_reports_mimic["report_mimic"])
-            gen_and_ref_reports["reference_reports_mimic_findings_only"].extend(reference_reports_mimic["report_mimic_findings_only"])
-            gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
-
-    write_sentences_and_reports_to_file(gen_and_ref_sentences, gen_and_ref_reports)
+    write_sentences_and_reports_to_file_for_test_set(
+        gen_and_ref_sentences,
+        gen_and_ref_reports,
+        gen_sentences_with_corresponding_regions,
+    )
 
     with open(final_scores_txt_file, "a") as f:
         f.write(f"Num generated reports: {len(gen_and_ref_reports['generated_reports'])}\n")
-        f.write(f"Num reference reports findings only: {len([report for report in gen_and_ref_reports['reference_reports_mimic_findings_only'] if report is not None])}\n")
 
     language_model_scores = compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports)
 
@@ -619,8 +666,7 @@ def get_metric_scores(model, test_loader, test_2_loader):
 def evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
     obj_detector_scores, region_selection_scores, region_abnormal_scores = get_metric_scores(model, test_loader, test_2_loader)
 
-    # TODO: implement evaluate_language_model_on_test_set, also with test_2_loader
-    language_model_scores = evaluate_language_model_on_test_set(model, test_loader, tokenizer)
+    language_model_scores = evaluate_language_model_on_test_set(model, test_loader, test_2_loader, tokenizer)
 
     write_all_scores_to_file(
         obj_detector_scores,
