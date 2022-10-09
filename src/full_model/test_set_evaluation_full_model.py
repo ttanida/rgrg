@@ -254,7 +254,7 @@ def get_reference_reports_mimic(study_ids) -> dict[str, list]:
     return reference_reports_mimic
 
 
-def evaluate_language_model(model, test_loader, tokenizer):
+def evaluate_language_model_on_test_set(model, test_loader, tokenizer):
     gen_and_ref_sentences = {
         "generated_sentences": [],
         "generated_sentences_normal_selected_regions": [],
@@ -450,11 +450,7 @@ def update_object_detector_metrics_test_loader_2(obj_detector_scores, detections
         valid_intersection = torch.logical_and(valid_intersection, class_detected)
 
         # set all non-valid intersection areas to 0
-        intersection_area = torch.where(
-            valid_intersection,
-            intersection_area,
-            torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device),
-        )
+        intersection_area[~valid_intersection] = 0
 
         union_area = (pred_area + gt_area) - intersection_area
 
@@ -623,7 +619,8 @@ def get_metric_scores(model, test_loader, test_2_loader):
 def evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
     obj_detector_scores, region_selection_scores, region_abnormal_scores = get_metric_scores(model, test_loader, test_2_loader)
 
-    language_model_scores = evaluate_language_model(model, test_loader, tokenizer)
+    # TODO: implement evaluate_language_model_on_test_set, also with test_2_loader
+    language_model_scores = evaluate_language_model_on_test_set(model, test_loader, tokenizer)
 
     write_all_scores_to_file(
         obj_detector_scores,

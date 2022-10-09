@@ -265,11 +265,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
         valid_intersection = torch.logical_and(valid_intersection, class_detected)
 
         # set all non-valid intersection areas to 0
-        intersection_area = torch.where(
-            valid_intersection,
-            intersection_area,
-            torch.tensor(0, dtype=intersection_area.dtype, device=intersection_area.device),
-        )
+        intersection_area[~valid_intersection] = 0
 
         union_area = (pred_area + gt_area) - intersection_area
 
