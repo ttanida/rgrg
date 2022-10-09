@@ -26,9 +26,9 @@ Ideally, the training should go like this:
     checkpoint = torch.load(...) in line 559 and (possible uncommenting) model.load_state_dict(checkpoint["model"]) in line 565
     - train full model with src/full_model/train_full_model.py
 """
-RUN = 46
-RUN_COMMENT = """Seed 43: redo run 38"""
-SEED = 43
+RUN = 47
+RUN_COMMENT = """Seed 44: redo run 38"""
+SEED = 44
 PRETRAIN_WITHOUT_LM_MODEL = False
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
