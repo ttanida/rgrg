@@ -130,7 +130,7 @@ def write_all_losses_and_scores_to_tensorboard(
             if k in metrics:
                 writer.add_scalar(f"language_model/report/CE/{k}", v, overall_steps_taken)
             else:
-                # k is a condition (only applicable if subset = "report")
+                # k is a condition
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
                     writer.add_scalar(f"language_model/report/CE/{condition_name}/{metric}", score, overall_steps_taken)
