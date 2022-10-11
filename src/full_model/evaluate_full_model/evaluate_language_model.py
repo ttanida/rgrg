@@ -191,7 +191,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                     language_model_scores[subset][metric] = float(meteor_result)
                 elif metric == "bert_score":
                     bert_score_result = score(preds=gen_sents, target=ref_sents)["f1"]  # is a list of scores for each pred-target pair
-                    bert_score_result = np.array(bert_score_result).mean()
+                    bert_score_result = np.mean(bert_score_result)
                     language_model_scores[subset][metric] = float(bert_score_result)
 
         def compute_sent_level_scores_for_region(region_name, gen_sents, ref_sents):
@@ -201,7 +201,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                     language_model_scores["region"][region_name][metric] = float(meteor_result)
                 elif metric == "bert_score":
                     bert_score_result = score(preds=gen_sents, target=ref_sents)["f1"]  # is a list of scores for each pred-target pair
-                    bert_score_result = np.array(bert_score_result).mean()
+                    bert_score_result = np.mean(bert_score_result)
                     language_model_scores["region"][region_name][metric] = float(bert_score_result)
 
         generated_sents = gen_and_ref_sentences["generated_sentences"]
@@ -249,7 +249,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                 language_model_scores["report"][metric] = float(rouge_result)
             elif metric == "bert_score":
                 bert_score_result = score(preds=gen_reports, target=ref_reports)["f1"]  # is a list of scores for each pred-target pair
-                bert_score_result = np.array(bert_score_result).mean()
+                bert_score_result = np.mean(bert_score_result)
                 language_model_scores["report"][metric] = float(bert_score_result)
             elif metric == "CE":
                 compute_clinical_efficacy_scores(gen_reports, ref_reports)
