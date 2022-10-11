@@ -31,6 +31,7 @@ import spacy
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
 import torch.nn as nn
+from torchmetrics.text.bert import BERTScore
 from tqdm import tqdm
 
 from src.CheXbert.src.constants import CONDITIONS
@@ -53,7 +54,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
-    def compute_clinical_efficacy_scores(subset: str, gen_reports: list[str], ref_reports: list[str]):
+    def compute_clinical_efficacy_scores(gen_reports: list[str], ref_reports: list[str]):
         """
         Note that this function is also used to compute the CE scores for generated and reference sentences (as opposed to reports).
 
@@ -151,23 +152,21 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                 total_preds_gen_reports_5_conditions.extend(preds_gen_reports_condition)
                 total_preds_ref_reports_5_conditions.extend(preds_ref_reports_condition)
 
-            # only evaluate each individual condition for the reference reports
-            if subset == "report":
-                precision, recall, f1, _ = precision_recall_fscore_support(preds_ref_reports_condition, preds_gen_reports_condition, average="binary")
-                acc = accuracy_score(preds_ref_reports_condition, preds_gen_reports_condition)
+            precision, recall, f1, _ = precision_recall_fscore_support(preds_ref_reports_condition, preds_gen_reports_condition, average="binary")
+            acc = accuracy_score(preds_ref_reports_condition, preds_gen_reports_condition)
 
-                language_model_scores[subset]["CE"][condition]["precision"] = precision
-                language_model_scores[subset]["CE"][condition]["recall"] = recall
-                language_model_scores[subset]["CE"][condition]["f1"] = f1
-                language_model_scores[subset]["CE"][condition]["acc"] = acc
+            language_model_scores["report"]["CE"][condition]["precision"] = precision
+            language_model_scores["report"]["CE"][condition]["recall"] = recall
+            language_model_scores["report"]["CE"][condition]["f1"] = f1
+            language_model_scores["report"]["CE"][condition]["acc"] = acc
 
         precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions, average="binary")
         acc = accuracy_score(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions)
 
-        language_model_scores[subset]["CE"]["precision"] = precision
-        language_model_scores[subset]["CE"]["recall"] = recall
-        language_model_scores[subset]["CE"]["f1"] = f1
-        language_model_scores[subset]["CE"]["acc"] = acc
+        language_model_scores["report"]["CE"]["precision"] = precision
+        language_model_scores["report"]["CE"]["recall"] = recall
+        language_model_scores["report"]["CE"]["f1"] = f1
+        language_model_scores["report"]["CE"]["acc"] = acc
 
     def compute_sentence_level_scores():
         def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
@@ -187,18 +186,23 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 
         def compute_sent_level_scores_for_subset(subset, gen_sents, ref_sents):
             for metric, score in language_model_scores[subset].items():
-                if metric.startswith("bleu"):
-                    bleu_score_type = int(metric[-1])
-                    bleu_result = score.compute(predictions=gen_sents, references=ref_sents, max_order=bleu_score_type)["bleu"]
-                    language_model_scores[subset][metric] = bleu_result
-                elif metric == "CE":
-                    compute_clinical_efficacy_scores(subset, gen_sents, ref_sents)
+                if metric == "meteor":
+                    meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
+                    language_model_scores[subset][metric] = float(meteor_result)
+                elif metric == "bert_score":
+                    bert_score_result = score(preds=gen_sents, target=ref_sents)["f1"]  # is a list of scores for each pred-target pair
+                    bert_score_result = np.array(bert_score_result).mean()
+                    language_model_scores[subset][metric] = float(bert_score_result)
 
         def compute_sent_level_scores_for_region(region_name, gen_sents, ref_sents):
             for metric, score in language_model_scores["region"][region_name].items():
-                bleu_score_type = int(metric[-1])
-                bleu_result = score.compute(predictions=gen_sents, references=ref_sents, max_order=bleu_score_type)["bleu"]
-                language_model_scores["region"][region_name][metric] = bleu_result
+                if metric == "meteor":
+                    meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
+                    language_model_scores["region"][region_name][metric] = float(meteor_result)
+                elif metric == "bert_score":
+                    bert_score_result = score(preds=gen_sents, target=ref_sents)["f1"]  # is a list of scores for each pred-target pair
+                    bert_score_result = np.array(bert_score_result).mean()
+                    language_model_scores["region"][region_name][metric] = float(bert_score_result)
 
         generated_sents = gen_and_ref_sentences["generated_sentences"]
         generated_sents_normal = gen_and_ref_sentences["generated_sentences_normal_selected_regions"]
@@ -243,26 +247,36 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             elif metric == "rouge":
                 rouge_result = score.compute(predictions=gen_reports, references=ref_reports)["rougeL"]
                 language_model_scores["report"][metric] = float(rouge_result)
+            elif metric == "bert_score":
+                bert_score_result = score(preds=gen_reports, target=ref_reports)["f1"]  # is a list of scores for each pred-target pair
+                bert_score_result = np.array(bert_score_result).mean()
+                language_model_scores["report"][metric] = float(bert_score_result)
             elif metric == "CE":
-                compute_clinical_efficacy_scores("report", gen_reports, ref_reports)
+                compute_clinical_efficacy_scores(gen_reports, ref_reports)
 
     def create_language_model_scores_dict():
         language_model_scores = {}
 
-        # compute bleu scores and clinical efficacy (CE) scores for all, normal, abnormal reference sentences and reference reports
-        for subset in ["all", "normal", "abnormal", "report"]:
-            language_model_scores[subset] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
-            language_model_scores[subset]["CE"] = {
-                # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases:
-                # Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
-                # the averages will be calculated with sklearn precision_recall_fscore_support and accuracy_score later
-                "precision": None,
-                "recall": None,
-                "f1": None,
-                "acc": None
-            }
-
-        # for the reference report, we also compute the CE scores for each of the 14 conditions individually
+        # on report-level, we evalute on:
+        # BLEU 1-4
+        # METEOR
+        # ROUGE-L
+        # BertScore (F1)
+        # CE scores (P, R, F1, acc)
+        language_model_scores["report"] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+        language_model_scores["report"]["meteor"] = evaluate.load("meteor")
+        language_model_scores["report"]["rouge"] = evaluate.load("rouge")
+        language_model_scores["report"]["bert_score"] = BERTScore(device=device)
+        language_model_scores["report"]["CE"] = {
+            # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases:
+            # Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
+            # the averages will be calculated with sklearn precision_recall_fscore_support and accuracy_score later
+            "precision": None,
+            "recall": None,
+            "f1": None,
+            "acc": None
+        }
+        # we also compute the CE scores for each of the 14 conditions individually
         for condition in CONDITIONS:
             language_model_scores["report"]["CE"][condition] = {
                 "precision": None,
@@ -271,14 +285,22 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                 "acc": None
             }
 
-        # compute meteor, rouge-L for reference reports
-        language_model_scores["report"]["meteor"] = evaluate.load("meteor")
-        language_model_scores["report"]["rouge"] = evaluate.load("rouge")
+        # on sentence-level, we evaluate on:
+        # METEOR
+        # BertScore (F1)
+        # since these 2 metrics give meaningful values on sentence-level
+        # we distinguish between generated sentences for all, normal, and abnormal regions
+        for subset in ["all", "normal", "abnormal"]:
+            language_model_scores[subset] = {}
+            language_model_scores[subset]["meteor"] = evaluate.load("meteor")
+            language_model_scores[subset]["bert_score"] = BERTScore(device=device)
 
-        # also compute bleu scores for reference sentences of each region individually
+        # we also compute these scores for each region individually
         language_model_scores["region"] = {}
         for region_name in ANATOMICAL_REGIONS:
-            language_model_scores["region"][region_name] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
+            language_model_scores["region"][region_name] = {}
+            language_model_scores["region"][region_name]["meteor"] = evaluate.load("meteor")
+            language_model_scores["region"][region_name]["bert_score"] = BERTScore(device=device)
 
         return language_model_scores
 

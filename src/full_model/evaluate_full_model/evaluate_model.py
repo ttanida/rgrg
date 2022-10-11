@@ -91,7 +91,7 @@ def write_all_losses_and_scores_to_tensorboard(
         for metric, score in region_abnormal_scores.items():
             writer.add_scalar(f"region_abnormal/{metric}", score, overall_steps_taken)
 
-    def write_clinical_efficacy_scores(subset, ce_score_dict):
+    def write_clinical_efficacy_scores(ce_score_dict):
         """
         ce_score_dict is of the structure:
 
@@ -128,12 +128,12 @@ def write_all_losses_and_scores_to_tensorboard(
 
         for k, v in ce_score_dict.items():
             if k in metrics:
-                writer.add_scalar(f"language_model/{subset}/CE/{k}", v, overall_steps_taken)
+                writer.add_scalar(f"language_model/report/CE/{k}", v, overall_steps_taken)
             else:
                 # k is a condition (only applicable if subset = "report")
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
-                    writer.add_scalar(f"language_model/{subset}/CE/{condition_name}/{metric}", score, overall_steps_taken)
+                    writer.add_scalar(f"language_model/report/CE/{condition_name}/{metric}", score, overall_steps_taken)
 
     def write_language_model_scores():
         """
@@ -154,8 +154,8 @@ def write_all_losses_and_scores_to_tensorboard(
             else:
                 for metric, score in language_model_scores[subset].items():
                     if metric == "CE":
-                        ce_score_dict = language_model_scores[subset]["CE"]
-                        write_clinical_efficacy_scores(subset, ce_score_dict)
+                        ce_score_dict = language_model_scores["report"]["CE"]
+                        write_clinical_efficacy_scores(ce_score_dict)
                     else:
                         writer.add_scalar(f"language_model/{subset}/{metric}", score, overall_steps_taken)
 
