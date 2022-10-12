@@ -1,20 +1,23 @@
 import evaluate
+from nltk.translate.meteor_score import single_meteor_score
+from nltk import word_tokenize
 import numpy as np
-import torch
-from torchmetrics.text.bert import BERTScore
+# import torch
+# from torchmetrics.text.bert import BERTScore
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # bleu_1 = evaluate.load("bleu")
 # bleu_2 = evaluate.load("bleu")
 # bleu_3 = evaluate.load("bleu")
 # bleu_4 = evaluate.load("bleu")
+meteor = evaluate.load("meteor")
 
 # print("Sleeping 5")
 # time.sleep(5)
 # print("Sleeping finished")
-bertscore_torchmetric = BERTScore(device=device)
-bert_score = evaluate.load("bertscore")
+# bertscore_torchmetric = BERTScore(device=device)
+# bert_score = evaluate.load("bertscore")
 
 # rouge = evaluate.load("rouge")
 # meteor = evaluate.load("meteor")
@@ -43,17 +46,30 @@ bert_score = evaluate.load("bertscore")
 
 gen_sents = ["There is no focal consolidation, effusion, or pneumothorax.", "The cardiac silhouette is normal.", "The spine is normal."]
 ref_sents = ["No large effusion or pneumothorax.", "The heart size is normal.", "No abnormality in the spine."]
-bert_score_torchmetrics = bertscore_torchmetric(preds=gen_sents, target=ref_sents)['f1']
-# bert_score_result_distil = bert_score.compute(predictions=gen_sents, references=ref_sents, model_type="distilbert-base-uncased", device=device)
-bert_score_result_roberta = bert_score.compute(lang="en", predictions=gen_sents, references=ref_sents)
 
-print(f"bert_score torchmetrics f1: {bert_score_torchmetrics}")
-print(f"bert_score torchmetrics f1: {type(bert_score_torchmetrics)}")
-print(f"bert_score torchmetrics f1 average: {np.array(bert_score_torchmetrics).mean()}")
-print(f"bert_score torchmetrics f1 average: {type(np.array(bert_score_torchmetrics).mean())}")
-print(f"bert_score torchmetrics f1 average: {type(float(np.array(bert_score_torchmetrics).mean()))}")
-# print(f"bert_score: {bert_score_result_distil}")
-print(f"bert_score_roberta f1: {bert_score_result_roberta['f1']}")
+scores = [
+    single_meteor_score(
+        word_tokenize(ref), word_tokenize(pred)
+    )
+    for ref, pred in zip(ref_sents, gen_sents)
+]
+
+print("mean", np.mean(scores))
+
+# bert_score_torchmetrics = bertscore_torchmetric(preds=gen_sents, target=ref_sents)['f1']
+# bert_score_result_distil = bert_score.compute(predictions=gen_sents, references=ref_sents, model_type="distilbert-base-uncased", device=device)
+# bert_score_result_roberta = bert_score.compute(lang="en", predictions=gen_sents, references=ref_sents)
+
+# print(f"bert_score torchmetrics f1: {bert_score_torchmetrics}")
+# print(f"bert_score torchmetrics f1: {type(bert_score_torchmetrics)}")
+# print(f"bert_score torchmetrics f1 average: {np.array(bert_score_torchmetrics).mean()}")
+# print(f"bert_score torchmetrics f1 average: {type(np.array(bert_score_torchmetrics).mean())}")
+# print(f"bert_score torchmetrics f1 average: {type(float(np.array(bert_score_torchmetrics).mean()))}")
+# # print(f"bert_score: {bert_score_result_distil}")
+# print(f"bert_score_roberta f1: {bert_score_result_roberta['f1']}")
+
+result = meteor.compute(predictions=gen_sents, references=ref_sents)
+print(result)
 
 
 # rouge_result = rouge.compute(rouge_types=["rougeL"], use_aggregator=True)["rougeL"]

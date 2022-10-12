@@ -33,10 +33,11 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
     compute_language_model_scores
 )
 from src.full_model.report_generation_model import ReportGenerationModel
-from src.path_datasets_and_weights import path_full_dataset
+from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
 
-RUN = 38
-CHECKPOINT = "checkpoint_val_loss_20.850_overall_steps_195284.pt"
+# specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
+RUN = 46
+CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
@@ -75,7 +76,7 @@ def write_all_scores_to_file(
     obj_detector_scores,
     region_selection_scores,
     region_abnormal_scores,
-    language_model_scores,
+    language_model_scores
 ):
     def write_obj_detector_scores():
         with open(final_scores_txt_file, "a") as f:
@@ -106,7 +107,7 @@ def write_all_scores_to_file(
             with open(final_scores_txt_file, "a") as f:
                 f.write(f"region_abnormal_{metric}: {score:.5f}\n")
 
-    def write_clinical_efficacy_scores(subset, ce_score_dict):
+    def write_clinical_efficacy_scores(ce_score_dict):
         """
         ce_score_dict is of the structure:
 
@@ -144,13 +145,13 @@ def write_all_scores_to_file(
         for k, v in ce_score_dict.items():
             if k in metrics:
                 with open(final_scores_txt_file, "a") as f:
-                    f.write(f"language_model_{subset}_CE_{k}: {v:.5f}\n")
+                    f.write(f"report_CE_{k}: {v:.5f}\n")
             else:
-                # k is a condition (only applicable if subset = "report")
+                # k is a condition
                 condition_name = "_".join(k.lower().split())
                 for metric, score in ce_score_dict[k].items():
                     with open(final_scores_txt_file, "a") as f:
-                        f.write(f"language_model_{subset}_CE_{condition_name}_{metric}: {score:.5f}\n")
+                        f.write(f"report_CE_{condition_name}_{metric}: {score:.5f}\n")
 
     def write_language_model_scores():
         """
@@ -168,20 +169,20 @@ def write_all_scores_to_file(
                         # replace white space by underscore for region name (i.e. "right upper lung" -> "right_upper_lung")
                         region_name_underscored = "_".join(region_name.split())
                         with open(final_scores_txt_file, "a") as f:
-                            f.write(f"language_model_region_{region_name_underscored}_{metric}: {score:.5f}\n")
+                            f.write(f"region_{region_name_underscored}_{metric}: {score:.5f}\n")
             else:
                 for metric, score in language_model_scores[subset].items():
                     if metric == "CE":
-                        ce_score_dict = language_model_scores[subset]["CE"]
-                        write_clinical_efficacy_scores(subset, ce_score_dict)
+                        ce_score_dict = language_model_scores["report"]["CE"]
+                        write_clinical_efficacy_scores(ce_score_dict)
                     else:
                         with open(final_scores_txt_file, "a") as f:
-                            f.write(f"language_model_{subset}_{metric}: {score:.5f}\n")
+                            f.write(f"{subset}_{metric}: {score:.5f}\n")
 
     with open(final_scores_txt_file, "a") as f:
         f.write(f"Run: {RUN}\n")
         f.write(f"Checkpoint: {CHECKPOINT}\n")
-        f.write(f"BertScore: {BERTSCORE_SIMILARITY_THRESHOLD}\n")
+        f.write(f"BertScore for removing similar generated sentences: {BERTSCORE_SIMILARITY_THRESHOLD}\n")
         f.write(f"Num beams: {NUM_BEAMS}\n")
 
     write_obj_detector_scores()
@@ -199,12 +200,12 @@ def write_sentences_and_reports_to_file_for_test_set(
         txt_file_name = os.path.join(path_to_folder_to_store_files, "generated_sentences.txt")
         txt_file_name_abnormal = os.path.join(path_to_folder_to_store_files, "generated_abnormal_sentences.txt")
 
-        with open(txt_file_name, "w") as f:
+        with open(txt_file_name, "a") as f:
             for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
                 f.write(f"Generated sentence: {gen_sent}\n")
                 f.write(f"Reference sentence: {ref_sent}\n\n")
 
-        with open(txt_file_name_abnormal, "w") as f:
+        with open(txt_file_name_abnormal, "a") as f:
             for gen_sent, ref_sent in zip(generated_sentences_abnormal_regions, reference_sentences_abnormal_regions):
                 f.write(f"Generated sentence: {gen_sent}\n")
                 f.write(f"Reference sentence: {ref_sent}\n\n")
@@ -212,7 +213,7 @@ def write_sentences_and_reports_to_file_for_test_set(
     def write_reports():
         txt_file_name = os.path.join(path_to_folder_to_store_files, "generated_reports.txt")
 
-        with open(txt_file_name, "w") as f:
+        with open(txt_file_name, "a") as f:
             for gen_report, ref_report, removed_similar_gen_sents, gen_sents_with_regions_single_report in zip(
                 generated_reports,
                 reference_reports,
@@ -684,7 +685,7 @@ def evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
-        language_model_scores,
+        language_model_scores
     )
 
 
@@ -791,8 +792,8 @@ def get_dataset():
     }
 
     datasets_as_dfs = {}
-    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000.csv"), usecols=usecols, converters=converters)
-    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000-2.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test-200.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-200-2.csv"), usecols=usecols, converters=converters)
 
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
     raw_test_2_dataset = Dataset.from_pandas(datasets_as_dfs["test-2"])
@@ -817,7 +818,7 @@ def main():
     test_loader, test_2_loader = get_data_loaders(tokenizer, test_dataset_complete, test_2_dataset_complete)
 
     checkpoint = torch.load(
-        f"/u/home/tanida/runs/full_model/run_{RUN}/checkpoints/{CHECKPOINT}",
+        os.path.join(path_runs_full_model, f"run_{RUN}", "checkpoints", f"{CHECKPOINT}"),
         map_location=torch.device("cpu"),
     )
 

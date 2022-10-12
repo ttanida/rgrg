@@ -31,7 +31,6 @@ import spacy
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
 import torch.nn as nn
-from torchmetrics.text.bert import BERTScore
 from tqdm import tqdm
 
 from src.CheXbert.src.constants import CONDITIONS
@@ -186,23 +185,13 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 
         def compute_sent_level_scores_for_subset(subset, gen_sents, ref_sents):
             for metric, score in language_model_scores[subset].items():
-                if metric == "meteor":
-                    meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
-                    language_model_scores[subset][metric] = float(meteor_result)
-                elif metric == "bert_score":
-                    bert_score_result = score(preds=gen_sents, target=ref_sents)["f1"]  # is a list of scores for each pred-target pair
-                    bert_score_result = np.mean(bert_score_result)
-                    language_model_scores[subset][metric] = float(bert_score_result)
+                meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
+                language_model_scores[subset][metric] = float(meteor_result)
 
         def compute_sent_level_scores_for_region(region_name, gen_sents, ref_sents):
             for metric, score in language_model_scores["region"][region_name].items():
-                if metric == "meteor":
-                    meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
-                    language_model_scores["region"][region_name][metric] = float(meteor_result)
-                elif metric == "bert_score":
-                    bert_score_result = score(preds=gen_sents, target=ref_sents)["f1"]  # is a list of scores for each pred-target pair
-                    bert_score_result = np.mean(bert_score_result)
-                    language_model_scores["region"][region_name][metric] = float(bert_score_result)
+                meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
+                language_model_scores["region"][region_name][metric] = float(meteor_result)
 
         generated_sents = gen_and_ref_sentences["generated_sentences"]
         generated_sents_normal = gen_and_ref_sentences["generated_sentences_normal_selected_regions"]
@@ -247,10 +236,6 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             elif metric == "rouge":
                 rouge_result = score.compute(predictions=gen_reports, references=ref_reports)["rougeL"]
                 language_model_scores["report"][metric] = float(rouge_result)
-            elif metric == "bert_score":
-                bert_score_result = score(preds=gen_reports, target=ref_reports)["f1"]  # is a list of scores for each pred-target pair
-                bert_score_result = np.mean(bert_score_result)
-                language_model_scores["report"][metric] = float(bert_score_result)
             elif metric == "CE":
                 compute_clinical_efficacy_scores(gen_reports, ref_reports)
 
@@ -261,12 +246,10 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         # BLEU 1-4
         # METEOR
         # ROUGE-L
-        # BertScore (F1)
         # CE scores (P, R, F1, acc)
         language_model_scores["report"] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
         language_model_scores["report"]["meteor"] = evaluate.load("meteor")
         language_model_scores["report"]["rouge"] = evaluate.load("rouge")
-        language_model_scores["report"]["bert_score"] = BERTScore(device=device)
         language_model_scores["report"]["CE"] = {
             # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases:
             # Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
@@ -285,22 +268,15 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                 "acc": None
             }
 
-        # on sentence-level, we evaluate on:
-        # METEOR
-        # BertScore (F1)
-        # since these 2 metrics give meaningful values on sentence-level
+        # on sentence-level, we evaluate on METEOR, since this gives meaningful scores on sentence-level
         # we distinguish between generated sentences for all, normal, and abnormal regions
         for subset in ["all", "normal", "abnormal"]:
-            language_model_scores[subset] = {}
-            language_model_scores[subset]["meteor"] = evaluate.load("meteor")
-            language_model_scores[subset]["bert_score"] = BERTScore(device=device)
+            language_model_scores[subset] = {"meteor": evaluate.load("meteor")}
 
         # we also compute these scores for each region individually
         language_model_scores["region"] = {}
         for region_name in ANATOMICAL_REGIONS:
-            language_model_scores["region"][region_name] = {}
-            language_model_scores["region"][region_name]["meteor"] = evaluate.load("meteor")
-            language_model_scores["region"][region_name]["bert_score"] = BERTScore(device=device)
+            language_model_scores["region"][region_name] = {"meteor": evaluate.load("meteor")}
 
         return language_model_scores
 
