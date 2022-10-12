@@ -22,7 +22,7 @@ from tqdm import tqdm
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.object_detector.custom_image_dataset_object_detector import CustomImageDataset
 from src.object_detector.object_detector import ObjectDetector
-from src.path_datasets_and_weights import path_full_dataset
+from src.path_datasets_and_weights import path_full_dataset, path_runs_object_detector
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -556,9 +556,7 @@ def create_run_folder():
     Run folder will contain a folder for saving the trained weights, a folder for the tensorboard files
     as well as a config file that specifies the overall parameters used for training.
     """
-    run_folder_path_parent_dir = "/u/home/tanida/runs/object_detector"
-
-    run_folder_path = os.path.join(run_folder_path_parent_dir, f"run_{RUN}")
+    run_folder_path = os.path.join(path_runs_object_detector, f"run_{RUN}")
     weights_folder_path = os.path.join(run_folder_path, "weights")
     tensorboard_folder_path = os.path.join(run_folder_path, "tensorboard")
 

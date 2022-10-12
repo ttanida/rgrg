@@ -51,7 +51,7 @@ from src.full_model.run_configurations import (
     WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS,
     WEIGHT_LANGUAGE_MODEL_LOSS,
 )
-from src.path_datasets_and_weights import path_full_dataset
+from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -471,9 +471,7 @@ def create_run_folder():
         - a txt file called "log_file", which stores information like OOMs that happened during training
         - a txt file called "run_config.txt", which stores the information specified in run_configurations.py
     """
-    run_folder_path_parent_dir = "/u/home/tanida/runs/full_model"
-
-    run_folder_path = os.path.join(run_folder_path_parent_dir, f"run_{RUN}")
+    run_folder_path = os.path.join(path_runs_full_model, f"run_{RUN}")
     checkpoints_folder_path = os.path.join(run_folder_path, "checkpoints")
     tensorboard_folder_path = os.path.join(run_folder_path, "tensorboard")
     generated_sentences_and_reports_folder_path = os.path.join(run_folder_path, "generated_sentences_and_reports")

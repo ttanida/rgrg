@@ -10,6 +10,9 @@ train, valid, test and test-2 csv files, which will be used for training, evalua
 
 path_chexbert_weights specifies the path to the weights of the CheXbert labeler needed to extract the disease labels from the generated and reference reports.
 The weights can be downloaded here: https://github.com/stanfordmlgroup/CheXbert#checkpoint-download
+
+path_runs_* specify the directories where all the run folders (containing checkpoints, tensorboard files etc.) will be created
+when training the object detector and full model, respectively.
 """
 
 path_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
@@ -17,3 +20,5 @@ path_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr"
 path_mimic_cxr_jpg = "/u/home/tanida/datasets/mimic-cxr-jpg"
 path_full_dataset = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000"
 path_chexbert_weights = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/CheXbert/src/models/chexbert.pth"
+path_runs_object_detector = "/u/home/tanida/runs/object_detector"
+path_runs_full_model = "/u/home/tanida/runs/full_model"
