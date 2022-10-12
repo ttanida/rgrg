@@ -719,6 +719,28 @@ def evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
     )
 
 
+def get_model():
+    checkpoint = torch.load(
+        os.path.join(path_runs_full_model, f"run_{RUN}", "checkpoints", f"{CHECKPOINT}"),
+        map_location=torch.device("cpu"),
+    )
+
+    # if there is a key error when loading checkpoint, try uncommenting down below
+    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+
+    # pretrain_without_lm_model=True, since we don't need to compute the language model loss (see forward method of full model)
+    # we evaluate the language model in function evaluate_language_model_on_test_set by generating sentences/reports based on input images
+    model = ReportGenerationModel(pretrain_without_lm_model=True)
+    model.load_state_dict(checkpoint["model"])
+    model.to(device, non_blocking=True)
+    model.eval()
+
+    del checkpoint
+
+    return model
+
+
 def get_data_loaders(tokenizer, test_dataset_complete, test_2_dataset_complete):
     custom_collate_test = CustomCollator(
         tokenizer=tokenizer, is_val_or_test=True, pretrain_without_lm_model=False
@@ -827,8 +849,9 @@ def main():
     raw_test_dataset, raw_test_2_dataset = get_dataset()
 
     # note that we don't actually need to tokenize anything (i.e. we don't need the input ids and attention mask),
-    # since we evaluate the language model on it's generation capabilities (for which we only need the input images)
-    # but since the custom dataset and collator are build in a way that they expect input ids and attention mask (since they were originally made for training the model),
+    # because we evaluate the language model on it's generation capabilities (for which we only need the input images)
+    # but since the custom dataset and collator are build in a way that they expect input ids and attention mask
+    # (as they were originally made for training the model),
     # it's better to just leave it as it is instead of adding unnecessary complexity
     tokenizer = get_tokenizer()
     tokenized_test_dataset, tokenized_test_2_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset, raw_test_2_dataset)
@@ -840,23 +863,7 @@ def main():
 
     test_loader, test_2_loader = get_data_loaders(tokenizer, test_dataset_complete, test_2_dataset_complete)
 
-    checkpoint = torch.load(
-        os.path.join(path_runs_full_model, f"run_{RUN}", "checkpoints", f"{CHECKPOINT}"),
-        map_location=torch.device("cpu"),
-    )
-
-    # if there is a key error when loading checkpoint, try uncommenting down below
-    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
-
-    # pretrain_without_lm_model=True, since we don't need to compute the language model loss (see forward method of full model)
-    # we evaluate the language model in function evaluate_language_model_on_test_set by generating sentences/reports based on input images
-    model = ReportGenerationModel(pretrain_without_lm_model=True)
-    model.load_state_dict(checkpoint["model"])
-    model.to(device, non_blocking=True)
-    model.eval()
-
-    del checkpoint
+    model = get_model()
 
     evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer)
 

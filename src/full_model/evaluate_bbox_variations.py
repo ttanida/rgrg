@@ -11,17 +11,22 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
-# from tqdm import tqdm
+from tqdm import tqdm
 
 from src.full_model.custom_collator import CustomCollator
 from src.full_model.custom_dataset import CustomDataset
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.train_full_model import get_tokenizer
-from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
+from src.path_datasets_and_weights import path_runs_full_model
 
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
 RUN = 46
 CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
+
+# NUM_IMAGES_TO_EVALUATE_PER_VARIATION is fixed to 1000, since the test set we use (test-1000.csv) also has exactly 1000 images
+# if you want to change NUM_IMAGES_TO_EVALUATE_PER_VARIATION, then you also have to create a test set with the same number of images
+# (you can set the number of rows/images to create in the csv files by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py
+# to the desired number)
 NUM_IMAGES_TO_EVALUATE_PER_VARIATION = 1000
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
@@ -40,14 +45,22 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 
-def evaluate_model_on_bbox_variations(model, test_loader, tokenizer):
-    # make sure varied bboxes are clipped at 0 and image width/height.
-    # pass bbox through object detector to get feature vectors for each bbox
-    # (pass all 29 bboxes per image, but later remove generated senteces corresponding to empty reference sentences)
-    object_detector = model.object_detector
-    # pass those features vector to language model to generate sentence for each bbox (use language_model.generate(bbox_features))
-    language_model = model.language_model
-    pass
+def evaluate_on_position_variations(model, test_loader, tokenizer):
+    mean = 0
+    stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]
+
+    # we have 1000 images, with each image having 29 bboxes, and we need 2 values to vary the bbox position in x and y direction
+    num_values_to_sample = NUM_IMAGES_TO_EVALUATE_PER_VARIATION * 29 * 2
+
+    for std in stds_to_evaluate:
+        sampled_values = np.random.normal(mean, std, size=num_values_to_sample)
+
+
+
+    for batch in tqdm(test_loader):
+        pass
+
+
 
 
 def get_data_loader(tokenizer, test_dataset_complete):
@@ -144,21 +157,40 @@ def get_dataset():
     return raw_test_dataset
 
 
+def evaluate_on_position_variations(model, tokenizer):
+    log.info("Evaluating position variations.")
+
+    mean = 0
+    stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]
+
+    # for each of the 29 bboxes in each image, we need 2 values to vary the bbox position in x and y direction
+    num_values_to_sample = NUM_IMAGES_TO_EVALUATE_PER_VARIATION * 29 * 2
+
+    for std in stds_to_evaluate:
+        log.info(f"Evaluating position variation, std: {std}")
+        sampled_values = np.random.normal(mean, std, size=num_values_to_sample)
+
+
+
+    for batch in tqdm(test_loader):
+        pass
+
+
+def evaluate_model_on_bbox_variations(model, tokenizer):
+    evaluate_on_position_variations(model, tokenizer)
+    evaluate_on_scale_variations(model, tokenizer)
+    evaluate_on_aspect_ratio_variations(model, tokenizer)
+
+    # make sure varied bboxes are clipped at 0 and image width/height.
+    # pass bbox through object detector to get feature vectors for each bbox
+    # (pass all 29 bboxes per image, but later remove generated senteces corresponding to empty reference sentences when computing scores)
+    # object_detector = model.object_detector
+    # pass those features vector to language model to generate sentence for each bbox (use language_model.generate(bbox_features))
+    # language_model = model.language_model
+    # pass
+
+
 def main():
-    raw_test_dataset = get_dataset()
-
-    # note that we don't actually need to tokenize anything (i.e. we don't need the input ids and attention mask),
-    # since we evaluate the model on it's generation capabilities for different bbox variations (for which we only need the input images)
-    # but since the custom dataset and collator are build in a way that they expect input ids and attention mask (since they were originally made for training the model),
-    # it's better to just leave it as it is instead of adding unnecessary complexity
-    tokenizer = get_tokenizer()
-    tokenized_test_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset)
-
-    test_transforms = get_transforms()
-
-    test_dataset_complete = CustomDataset("test", tokenized_test_dataset, test_transforms, log)
-    test_loader = get_data_loader(tokenizer, test_dataset_complete)
-
     checkpoint = torch.load(
         os.path.join(path_runs_full_model, f"run_{RUN}", "checkpoints", f"{CHECKPOINT}"),
         map_location=torch.device("cpu"),
@@ -175,8 +207,25 @@ def main():
 
     del checkpoint
 
-    evaluate_model_on_bbox_variations(model, test_loader, tokenizer)
+    # to decode (i.e. turn into human-readable text) the generated ids by the language model
+    tokenizer = get_tokenizer()
 
+    evaluate_model_on_bbox_variations(model, tokenizer)
+
+    # raw_test_dataset = get_dataset()
+
+    # # note that we don't actually need to tokenize anything (i.e. we don't need the input ids and attention mask),
+    # # because we evaluate the model on it's generation capabilities for different bbox variations (for which we only need the input images)
+    # # but since the custom dataset and collator are build in a way that they expect input ids and attention mask
+    # # (as they were originally made for training the model),
+    # # it's better to just leave it as it is instead of adding unnecessary complexity
+    # tokenizer = get_tokenizer()
+    # tokenized_test_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset)
+
+    # test_transforms = get_transforms()
+
+    # test_dataset_complete = CustomDataset("test", tokenized_test_dataset, test_transforms, log)
+    # test_loader = get_data_loader(tokenizer, test_dataset_complete)
 
 if __name__ == "__main__":
     main()
