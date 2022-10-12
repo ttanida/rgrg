@@ -529,7 +529,7 @@ def update_object_detector_metrics_test_loader_2(obj_detector_scores, detections
     obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
 
 
-def evaluate_obj_detector_and_binary_classifiers(model, test_loader, test_2_loader):
+def evaluate_obj_detector_and_binary_classifiers_on_test_set(model, test_loader, test_2_loader):
     def iterate_over_test_loader(test_loader, num_images, is_test_2_loader):
         """
         We have to distinguish between test_loader and test_2_loader,
@@ -614,11 +614,42 @@ def evaluate_obj_detector_and_binary_classifiers(model, test_loader, test_2_load
 
         return num_images
 
+    """
+    For the object detector, we want to compute:
+      - average overall IoU
+      - average IoU per region,
+      - average number of detected regions per image (ideally 29.0)
+      - average number each region is detected in an image (ideally 1.0 for all regions)
+
+    To compute these metrics, we allocate several tensors:
+
+    sum_intersection_area_per_region: for accumulating the intersection area of each region
+    (will be divided by union area of each region at the end of get the IoU for each region)
+
+    sum_union_area_per_region: for accumulating the union area of each region
+    (will divide the intersection area of each region at the end of get the IoU for each region)
+
+    sum_region_detected: for accumulating the number of times a region is detected over all images
+    (this 1D array will be divided by num_images to get the average number each region is detected in an image,
+    and these averages will be summed up to get the average number of detected regions in an image)
+    """
     obj_detector_scores = {}
     obj_detector_scores["sum_intersection_area_per_region"] = torch.zeros(29, device=device)
     obj_detector_scores["sum_union_area_per_region"] = torch.zeros(29, device=device)
     obj_detector_scores["sum_region_detected"] = torch.zeros(29, device=device)
 
+    """
+    For the binary classifier for region selection, we want to compute the precision, recall and f1 for:
+      - all regions
+      - normal regions
+      - abnormal regions
+
+    Evaluation according to:
+      TP: (normal/abnormal) region has sentence (gt), and is selected by classifier to get sentence (pred)
+      FP: (normal/abnormal) region does not have sentence (gt), but is selected by classifier to get sentence (pred)
+      TN: (normal/abnormal) region does not have sentence (gt), and is not selected by classifier to get sentence (pred)
+      FN: (normal/abnormal) region has sentence (gt), but is not selected by classifier to get sentence (pred)
+    """
     region_selection_scores = {}
     for subset in ["all", "normal", "abnormal"]:
         region_selection_scores[subset] = {
@@ -627,6 +658,16 @@ def evaluate_obj_detector_and_binary_classifiers(model, test_loader, test_2_load
             "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
         }
 
+    """
+    For the binary classifier for region normal/abnormal detection, we want to compute the precision, recall and f1 for:
+      - all regions
+
+    Evaluation according to:
+      TP: region is abnormal (gt), and is predicted as abnormal by classifier (pred)
+      FP: region is normal (gt), but is predicted as abnormal by classifier (pred)
+      TN: region is normal (gt), and is predicted as normal by classifier (pred)
+      FN: region is abnormal (gt), but is predicted as normal by classifier (pred)
+    """
     region_abnormal_scores = {
         "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
         "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
@@ -666,7 +707,7 @@ def evaluate_obj_detector_and_binary_classifiers(model, test_loader, test_2_load
 
 
 def evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
-    obj_detector_scores, region_selection_scores, region_abnormal_scores = evaluate_obj_detector_and_binary_classifiers(model, test_loader, test_2_loader)
+    obj_detector_scores, region_selection_scores, region_abnormal_scores = evaluate_obj_detector_and_binary_classifiers_on_test_set(model, test_loader, test_2_loader)
 
     language_model_scores = evaluate_language_model_on_test_set(model, test_loader, test_2_loader, tokenizer)
 

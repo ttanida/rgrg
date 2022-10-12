@@ -285,7 +285,7 @@ def update_object_detector_metrics(obj_detector_scores, detections, image_target
     obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
 
 
-def get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch):
+def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_dl, log_file, epoch):
     """
     Args:
         model (nn.Module): The input model to be evaluated.
@@ -547,7 +547,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         obj_detector_scores,
         region_selection_scores,
         region_abnormal_scores,
-    ) = get_val_losses_and_other_metric_scores(model, val_dl, log_file, epoch)
+    ) = get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_dl, log_file, epoch)
 
     # TODO: delete 2nd and 3rd condition (since they are only there to save time)
     if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000 and bool_evaluate_language_model:
