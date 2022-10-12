@@ -29,7 +29,7 @@ class CustomDataset(Dataset):
             bbox_is_abnormal = self.tokenized_dataset[index]["bbox_is_abnormal"]  # List[bool]
 
             if self.dataset_name != "train":
-                # we only need the reference phrases when computing e.g. BLEU during evaluation
+                # we only need the reference phrases during evaluation when computing scores for metrics
                 bbox_phrases = self.tokenized_dataset[index]["bbox_phrases"]  # List[str]
 
                 # same for the reference_report

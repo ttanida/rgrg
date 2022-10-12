@@ -3,20 +3,28 @@ import logging
 import os
 import random
 
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import cv2
 from datasets import Dataset
 import numpy as np
 import pandas as pd
 import torch
-from transformers import GPT2Tokenizer
-from tqdm import tqdm
+from torch.utils.data import DataLoader
+# from tqdm import tqdm
 
+from src.full_model.custom_collator import CustomCollator
+from src.full_model.custom_dataset import CustomDataset
+from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.train_full_model import get_tokenizer
-from src.path_datasets_and_weights import path_full_dataset
+from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
 
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
 RUN = 46
 CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
 NUM_IMAGES_TO_EVALUATE_PER_VARIATION = 1000
+IMAGE_INPUT_SIZE = 512
+BATCH_SIZE = 4
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -30,6 +38,52 @@ random.seed(seed_val)
 np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
+
+
+def evaluate_model_on_bbox_variations(model, test_loader, tokenizer):
+    # make sure varied bboxes are clipped at 0 and image width/height.
+    # pass bbox through object detector to get feature vectors for each bbox
+    # (pass all 29 bboxes per image, but later remove generated senteces corresponding to empty reference sentences)
+    object_detector = model.object_detector
+    # pass those features vector to language model to generate sentence for each bbox (use language_model.generate(bbox_features))
+    language_model = model.language_model
+    pass
+
+
+def get_data_loader(tokenizer, test_dataset_complete):
+    custom_collate_test = CustomCollator(
+        tokenizer=tokenizer, is_val_or_test=True, pretrain_without_lm_model=False
+    )
+
+    test_loader = DataLoader(
+        test_dataset_complete,
+        collate_fn=custom_collate_test,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=True,
+    )
+
+    return test_loader
+
+
+def get_transforms():
+    # see compute_mean_std_dataset.py in src/dataset
+    mean = 0.471
+    std = 0.302
+
+    # don't apply data augmentations to test set
+    test_transforms = A.Compose(
+        [
+            A.LongestMaxSize(max_size=IMAGE_INPUT_SIZE, interpolation=cv2.INTER_AREA),
+            A.PadIfNeeded(min_height=IMAGE_INPUT_SIZE, min_width=IMAGE_INPUT_SIZE, border_mode=cv2.BORDER_CONSTANT),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+        ],
+        bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"]),
+    )
+
+    return test_transforms
 
 
 def get_tokenized_dataset(tokenizer, raw_test_dataset):
@@ -63,16 +117,21 @@ def get_dataset():
     usecols = [
         "mimic_image_file_path",
         "bbox_coordinates",
+        "bbox_labels",
         "bbox_phrases",
-        "bbox_phrase_exists"
+        "bbox_phrase_exists",
+        "bbox_is_abnormal",
+        "reference_report"
     ]
 
     # all of the columns below are stored as strings in the csv_file
     # however, as they are actually lists, we apply the literal_eval func to convert them to lists
     converters = {
         "bbox_coordinates": literal_eval,
+        "bbox_labels": literal_eval,
         "bbox_phrases": literal_eval,
-        "bbox_phrase_exists": literal_eval
+        "bbox_phrase_exists": literal_eval,
+        "bbox_is_abnormal": literal_eval,
     }
 
     dataset_as_df = pd.read_csv(os.path.join(path_full_dataset, "test.csv"), usecols=usecols, converters=converters)
@@ -86,20 +145,19 @@ def get_dataset():
 
 
 def main():
-    # the datasets still contain the untokenized phrases
     raw_test_dataset = get_dataset()
 
+    # note that we don't actually need to tokenize anything (i.e. we don't need the input ids and attention mask),
+    # since we evaluate the model on it's generation capabilities for different bbox variations (for which we only need the input images)
+    # but since the custom dataset and collator are build in a way that they expect input ids and attention mask (since they were originally made for training the model),
+    # it's better to just leave it as it is instead of adding unnecessary complexity
     tokenizer = get_tokenizer()
-
-    # tokenize the raw datasets
-    tokenized_test_dataset, tokenized_test_2_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset)
+    tokenized_test_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset)
 
     test_transforms = get_transforms()
 
     test_dataset_complete = CustomDataset("test", tokenized_test_dataset, test_transforms, log)
-    test_2_dataset_complete = CustomDataset("test", tokenized_test_2_dataset, test_transforms, log)
-
-    test_loader, test_2_loader = get_data_loaders(tokenizer, test_dataset_complete, test_2_dataset_complete)
+    test_loader = get_data_loader(tokenizer, test_dataset_complete)
 
     checkpoint = torch.load(
         os.path.join(path_runs_full_model, f"run_{RUN}", "checkpoints", f"{CHECKPOINT}"),
@@ -117,7 +175,8 @@ def main():
 
     del checkpoint
 
-    evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer)
+    evaluate_model_on_bbox_variations(model, test_loader, tokenizer)
+
 
 if __name__ == "__main__":
     main()
