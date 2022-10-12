@@ -7,6 +7,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
 from datasets import Dataset
+import imagesize
 import numpy as np
 import pandas as pd
 import torch
@@ -23,10 +24,11 @@ from src.path_datasets_and_weights import path_runs_full_model
 RUN = 46
 CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
 
-# NUM_IMAGES_TO_EVALUATE_PER_VARIATION is fixed to 1000, since the test set we use (test-1000.csv) also has exactly 1000 images
+# test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
+path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
+
+# NUM_IMAGES_TO_EVALUATE_PER_VARIATION is fixed to 1000, since test-1000.csv also has exactly 1000 images
 # if you want to change NUM_IMAGES_TO_EVALUATE_PER_VARIATION, then you also have to create a test set with the same number of images
-# (you can set the number of rows/images to create in the csv files by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py
-# to the desired number)
 NUM_IMAGES_TO_EVALUATE_PER_VARIATION = 1000
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
@@ -43,24 +45,6 @@ random.seed(seed_val)
 np.random.seed(seed_val)
 torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
-
-
-def evaluate_on_position_variations(model, test_loader, tokenizer):
-    mean = 0
-    stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]
-
-    # we have 1000 images, with each image having 29 bboxes, and we need 2 values to vary the bbox position in x and y direction
-    num_values_to_sample = NUM_IMAGES_TO_EVALUATE_PER_VARIATION * 29 * 2
-
-    for std in stds_to_evaluate:
-        sampled_values = np.random.normal(mean, std, size=num_values_to_sample)
-
-
-
-    for batch in tqdm(test_loader):
-        pass
-
-
 
 
 def get_data_loader(tokenizer, test_dataset_complete):
@@ -157,7 +141,7 @@ def get_dataset():
     return raw_test_dataset
 
 
-def evaluate_on_position_variations(model, tokenizer):
+def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
     log.info("Evaluating position variations.")
 
     mean = 0
@@ -168,7 +152,9 @@ def evaluate_on_position_variations(model, tokenizer):
 
     for std in stds_to_evaluate:
         log.info(f"Evaluating position variation, std: {std}")
+
         sampled_values = np.random.normal(mean, std, size=num_values_to_sample)
+        sampled_values = sampled_values.reshape(NUM_IMAGES_TO_EVALUATE_PER_VARIATION, 29, 2)
 
 
 
@@ -176,10 +162,10 @@ def evaluate_on_position_variations(model, tokenizer):
         pass
 
 
-def evaluate_model_on_bbox_variations(model, tokenizer):
-    evaluate_on_position_variations(model, tokenizer)
-    evaluate_on_scale_variations(model, tokenizer)
-    evaluate_on_aspect_ratio_variations(model, tokenizer)
+def evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer):
+    evaluate_on_position_variations(model, test_set_as_df, tokenizer)
+    evaluate_on_scale_variations(model, test_set_as_df, tokenizer)
+    evaluate_on_aspect_ratio_variations(model, test_set_as_df, tokenizer)
 
     # make sure varied bboxes are clipped at 0 and image width/height.
     # pass bbox through object detector to get feature vectors for each bbox
@@ -190,7 +176,53 @@ def evaluate_model_on_bbox_variations(model, tokenizer):
     # pass
 
 
-def main():
+def get_test_set_as_df():
+    def compute_bbox_widths_heights(row):
+        bbox_coordinates_single_image = row["bbox_coordinates"]
+        widths_heights = []
+        for bbox_coords in bbox_coordinates_single_image:
+            x1, y1, x2, y2 = bbox_coords
+            width = x2 - x1
+            height = y2 - y1
+            widths_heights.append([width, height])
+
+        return widths_heights
+
+    def retrieve_image_widths_heights(row):
+        mimic_image_file_path = row["mimic_image_file_path"]
+        width, height = imagesize.get(mimic_image_file_path)
+        return [width, height]
+
+    usecols = [
+        "mimic_image_file_path",
+        "bbox_coordinates",
+        "bbox_labels",
+        "bbox_phrases",
+        "bbox_phrase_exists",
+        "bbox_is_abnormal",
+        "reference_report"
+    ]
+
+    # all of the columns below are stored as strings in the csv_file
+    # however, as they are actually lists, we apply the literal_eval func to convert them to lists
+    converters = {
+        "bbox_coordinates": literal_eval,
+        "bbox_labels": literal_eval,
+        "bbox_phrases": literal_eval,
+        "bbox_phrase_exists": literal_eval,
+        "bbox_is_abnormal": literal_eval,
+    }
+
+    test_set_as_df = pd.read_csv(path_to_partial_test_set, usecols=usecols, converters=converters)
+
+    # add new columns
+    test_set_as_df["bbox_widths_heights"] = test_set_as_df.apply(lambda row: compute_bbox_widths_heights(row), axis=1)
+    test_set_as_df["image_width_height"] = test_set_as_df.apply(lambda row: retrieve_image_widths_heights(row), axis=1)
+
+    return test_set_as_df
+
+
+def get_model():
     checkpoint = torch.load(
         os.path.join(path_runs_full_model, f"run_{RUN}", "checkpoints", f"{CHECKPOINT}"),
         map_location=torch.device("cpu"),
@@ -207,10 +239,17 @@ def main():
 
     del checkpoint
 
+    return model
+
+
+def main():
+    model = get_model()
+    test_set_as_df = get_test_set_as_df()
+
     # to decode (i.e. turn into human-readable text) the generated ids by the language model
     tokenizer = get_tokenizer()
 
-    evaluate_model_on_bbox_variations(model, tokenizer)
+    evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer)
 
     # raw_test_dataset = get_dataset()
 
