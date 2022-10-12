@@ -44,8 +44,8 @@ BATCH_SIZE = 4
 NUM_WORKERS = 10
 NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
-NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 10  # 100
-NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 10  # 100
+NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 100
+NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 100
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -792,8 +792,8 @@ def get_dataset():
     }
 
     datasets_as_dfs = {}
-    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test-200.csv"), usecols=usecols, converters=converters)
-    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-200-2.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-2.csv"), usecols=usecols, converters=converters)
 
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
     raw_test_2_dataset = Dataset.from_pandas(datasets_as_dfs["test-2"])
