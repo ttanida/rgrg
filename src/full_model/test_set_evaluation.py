@@ -13,7 +13,6 @@ import spacy
 import torch
 from torch.utils.data import DataLoader
 import torchmetrics
-from transformers import GPT2Tokenizer
 from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS
@@ -33,6 +32,7 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
     compute_language_model_scores
 )
 from src.full_model.report_generation_model import ReportGenerationModel
+from src.full_model.train_full_model import get_tokenizer
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
 
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
@@ -529,7 +529,7 @@ def update_object_detector_metrics_test_loader_2(obj_detector_scores, detections
     obj_detector_scores["sum_union_area_per_region"] += union_area_per_region_batch
 
 
-def get_metric_scores(model, test_loader, test_2_loader):
+def evaluate_obj_detector_and_binary_classifiers(model, test_loader, test_2_loader):
     def iterate_over_test_loader(test_loader, num_images, is_test_2_loader):
         """
         We have to distinguish between test_loader and test_2_loader,
@@ -551,8 +551,8 @@ def get_metric_scores(model, test_loader, test_2_loader):
                 image_targets = batch["image_targets"]
                 region_has_sentence = batch["region_has_sentence"]
                 region_is_abnormal = batch["region_is_abnormal"]
-                input_ids = batch["input_ids"]
-                attention_mask = batch["attention_mask"]
+                input_ids = None  # not needed, since here we evaluate everything except language model
+                attention_mask = None  # not needed, since here we evaluate everything except language model
 
                 batch_size = images.size(0)
                 num_images += batch_size
@@ -561,8 +561,6 @@ def get_metric_scores(model, test_loader, test_2_loader):
                 image_targets = [{k: v.to(device, non_blocking=True) for k, v in t.items()} for t in image_targets]
                 region_has_sentence = region_has_sentence.to(device, non_blocking=True)
                 region_is_abnormal = region_is_abnormal.to(device, non_blocking=True)
-                input_ids = input_ids.to(device, non_blocking=True)
-                attention_mask = attention_mask.to(device, non_blocking=True)
 
                 try:
                     with torch.autocast(device_type="cuda", dtype=torch.float16):
@@ -588,16 +586,7 @@ def get_metric_scores(model, test_loader, test_2_loader):
 
                     continue
 
-                # output == -1 if the region features that would have been passed into the language model were empty (see forward method for more details)
-                if output == -1:
-                    with open(final_scores_txt_file, "a") as f:
-                        f.write(f"Empty region features before language model at batch number {num_batch}.\n\n")
-
-                    num_images -= batch_size
-                    continue
-
                 (
-                    _,
                     _,
                     _,
                     _,
@@ -677,7 +666,7 @@ def get_metric_scores(model, test_loader, test_2_loader):
 
 
 def evaluate_model_on_test_set(model, test_loader, test_2_loader, tokenizer):
-    obj_detector_scores, region_selection_scores, region_abnormal_scores = get_metric_scores(model, test_loader, test_2_loader)
+    obj_detector_scores, region_selection_scores, region_abnormal_scores = evaluate_obj_detector_and_binary_classifiers(model, test_loader, test_2_loader)
 
     language_model_scores = evaluate_language_model_on_test_set(model, test_loader, test_2_loader, tokenizer)
 
@@ -762,14 +751,6 @@ def get_tokenized_dataset(tokenizer, raw_test_dataset, raw_test_2_dataset):
     return tokenized_test_dataset, tokenized_test_2_dataset
 
 
-def get_tokenizer():
-    checkpoint = "healx/gpt-2-pubmed-medium"
-    tokenizer = GPT2Tokenizer.from_pretrained(checkpoint)
-    tokenizer.pad_token = tokenizer.eos_token
-
-    return tokenizer
-
-
 def get_dataset():
     usecols = [
         "mimic_image_file_path",
@@ -802,12 +783,13 @@ def get_dataset():
 
 
 def main():
-    # the datasets still contain the untokenized phrases
     raw_test_dataset, raw_test_2_dataset = get_dataset()
 
+    # note that we don't actually need to tokenize anything (i.e. we don't need the input ids and attention mask),
+    # since we evaluate the language model on it's generation capabilities (for which we only need the input images)
+    # but since the custom dataset and collator are build in a way that they expect input ids and attention mask,
+    # it's better to just leave it as it is instead of adding unnecessary complexity
     tokenizer = get_tokenizer()
-
-    # tokenize the raw datasets
     tokenized_test_dataset, tokenized_test_2_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset, raw_test_2_dataset)
 
     test_transforms = get_transforms()
@@ -826,7 +808,9 @@ def main():
     checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
     checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
-    model = ReportGenerationModel()
+    # pretrain_without_lm_model=True, since we don't need to compute the language model loss (see forward method of full model)
+    # we evaluate the language model in function evaluate_language_model_on_test_set by generating sentences/reports based on input images
+    model = ReportGenerationModel(pretrain_without_lm_model=True)
     model.load_state_dict(checkpoint["model"])
     model.to(device, non_blocking=True)
     model.eval()
