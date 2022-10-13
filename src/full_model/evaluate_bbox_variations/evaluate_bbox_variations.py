@@ -22,6 +22,8 @@ RUN = 46
 CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
+NUM_BEAMS = 4
+MAX_NUM_TOKENS_GENERATE = 300
 
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
 path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
@@ -30,6 +32,26 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
+
+
+def get_bbox_features(model, images, bbox_coordinates):
+    features = model.object_detector.backbone(images)
+    images, features = model.object_detector._transform_inputs_for_rpn_and_roi(images, features)
+    image_shapes = images.image_sizes
+
+    # bbox_roi_pool_feature_maps is a tensor of shape (batch_size * 29) x 2048 x H x W (where H = W = RoI feature map size)
+    bbox_roi_pool_feature_maps = model.object_detector.roi_heads.box_roi_pool(features, bbox_coordinates, image_shapes)
+
+    # average over the spatial dimensions, i.e. transform roi pooling features maps from [(batch_size * 29), 2048, 8, 8] to [(batch_size * 29), 2048, 1, 1]
+    bbox_features = model.object_detector.roi_heads.avg_pool(bbox_roi_pool_feature_maps)
+
+    # remove all dims of size 1
+    bbox_features = torch.squeeze(bbox_features)
+
+    # bbox_features is a tensor of shape (batch_size * 29) x 1024
+    bbox_features = model.object_detector.roi_heads.dim_reduction(bbox_features)
+
+    return bbox_features
 
 
 def get_data_loader(test_dataset):
@@ -156,18 +178,24 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
         for batch in tqdm(test_loader):
             images = batch["images"]  # torch.tensor of shape batch_size x 1 x 512 x 512
             bbox_coordinates = batch["bbox_coordinates"]  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
-            bbox_phrases = batch["bbox_phrases"]
-            bbox_phrase_exists = batch["bbox_phrase_exists"]
+            bbox_phrases = batch["bbox_phrases"]  # List[List[str]], with len(outer_list)=batch_size and len(inner_list)=29
+            bbox_phrase_exists = batch["bbox_phrase_exists"]  # List[List[bool]], with len(outer_list)=batch_size and len(inner_list)=29
 
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
             bbox_coordinates = [bbox_coords.to(device, non_blocking=True) for bbox_coords in bbox_coordinates]
 
-            features = model.object_detector.backbone(images)
-            images, features = model.object_detector._transform_inputs_for_rpn_and_roi(images, features)
-            image_shapes = images.image_sizes
+            # bbox_features is a tensor of shape (batch_size * 29) x 1024 (i.e. 1 feature vector for every bbox)
+            bbox_features = get_bbox_features(model, images, bbox_coordinates)
 
-            # roi_pool_feature_maps is a tensor of shape (batch_size * 29) x 2048 x H x W (where H = W = RoI feature map size)
-            roi_pool_feature_maps = model.object_detector.roi_heads.box_roi_pool(features, bbox_coordinates, image_shapes)
+            output_ids = model.language_model.generate(
+                bbox_features,
+                max_length=MAX_NUM_TOKENS_GENERATE,
+                num_beams=NUM_BEAMS,
+                early_stopping=True,
+            )
+
+            # generated_sents_for_bboxes is a List[str] of length (batch_size * 29) (i.e. 1 generated sentence for each bbox)
+            generated_sents_for_bboxes = tokenizer.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
 
 def evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer):
