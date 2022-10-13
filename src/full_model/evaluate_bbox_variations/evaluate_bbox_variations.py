@@ -5,7 +5,6 @@ import os
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
-from datasets import Dataset
 import imagesize
 import numpy as np
 import pandas as pd
@@ -13,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from src.full_model.evaluate_bbox_variations.custom_dataset_bbox_variations import CustomDatasetBboxVariations
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.train_full_model import get_tokenizer
 from src.path_datasets_and_weights import path_runs_full_model
@@ -32,20 +32,39 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
 
-def get_data_loader(tokenizer, test_dataset_complete):
-    custom_collate_test = CustomCollator(
-        tokenizer=tokenizer, is_val_or_test=True, pretrain_without_lm_model=False
-    )
+def get_data_loader(test_dataset):
+    def collate_fn(batch: list[dict[str]]):
+        # each dict in batch (which is a list) is for a single image and has the keys "image", "bbox_coordinates", "bbox_phrases", "bbox_phrase_exists"
 
-    test_loader = DataLoader(
-        test_dataset_complete,
-        collate_fn=custom_collate_test,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        num_workers=0,
-        pin_memory=True,
-    )
+        # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. returned None)
+        # otherwise, whole training loop will stop (even if only 1 image fails to open)
+        batch = list(filter(lambda x: x is not None, batch))
 
+        image_shape = batch[0]["image"].size()
+        # allocate an empty images_batch tensor that will store all images of the batch
+        images_batch = torch.empty(size=(len(batch), *image_shape))
+
+        bbox_coordinates = []
+        bbox_phrases = []
+        bbox_phrase_exists = []
+
+        for i, sample in enumerate(batch):
+            # remove image tensors from batch and store them in dedicated images_batch tensor
+            images_batch[i] = sample.pop("image")
+            bbox_coordinates.append(sample.pop("bbox_coordinates"))
+            bbox_phrases.append(sample.pop("bbox_phrases"))
+            bbox_phrase_exists.append(sample.pop("bbox_phrase_exists"))
+
+        # create a new batch variable to store images_batch and targets
+        batch_new = {}
+        batch_new["images"] = images_batch  # torch.tensor of shape batch_size x 1 x 512 x 512
+        batch_new["bbox_coordinates"] = bbox_coordinates  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
+        batch_new["bbox_phrases"] = bbox_phrases  # List[List[str]], with len(outer_list)=batch_size and len(inner_list)=29
+        batch_new["bbox_phrase_exists"] = bbox_phrase_exists  # List[List[bool]], with len(outer_list)=batch_size and len(inner_list)=29
+
+        return batch_new
+
+    test_loader = DataLoader(test_dataset, collate_fn=collate_fn, batch_size=BATCH_SIZE, shuffle=False, num_workers=0, pin_memory=True)
     return test_loader
 
 
@@ -68,75 +87,18 @@ def get_transforms():
     return test_transforms
 
 
-def get_tokenized_dataset(tokenizer, raw_test_dataset):
-    def tokenize_function(example):
-        phrases = example["bbox_phrases"]  # List[str]
-        bos_token = "<|endoftext|>"  # note: in the GPT2 tokenizer, bos_token = eos_token = "<|endoftext|>"
-        eos_token = "<|endoftext|>"
-
-        phrases_with_special_tokens = [bos_token + phrase + eos_token for phrase in phrases]
-
-        # the tokenizer will return input_ids of type List[List[int]] and attention_mask of type List[List[int]]
-        return tokenizer(phrases_with_special_tokens, truncation=True, max_length=1024)
-
-    tokenized_test_dataset = raw_test_dataset.map(tokenize_function)
-
-    # tokenized dataset will consist of the columns
-    #   - mimic_image_file_path (str)
-    #   - bbox_coordinates (List[List[int]])
-    #   - bbox_labels (List[int])
-    #   - bbox_phrases (List[str])
-    #   - input_ids (List[List[int]])
-    #   - attention_mask (List[List[int]])
-    #   - bbox_phrase_exists (List[bool])
-    #   - bbox_is_abnormal (List[bool])
-    #   - reference_report (str)
-
-    return tokenized_test_dataset
-
-
-def get_dataset():
-    usecols = [
-        "mimic_image_file_path",
-        "bbox_coordinates",
-        "bbox_labels",
-        "bbox_phrases",
-        "bbox_phrase_exists",
-        "bbox_is_abnormal",
-        "reference_report"
-    ]
-
-    # all of the columns below are stored as strings in the csv_file
-    # however, as they are actually lists, we apply the literal_eval func to convert them to lists
-    converters = {
-        "bbox_coordinates": literal_eval,
-        "bbox_labels": literal_eval,
-        "bbox_phrases": literal_eval,
-        "bbox_phrase_exists": literal_eval,
-        "bbox_is_abnormal": literal_eval,
-    }
-
-    dataset_as_df = pd.read_csv(os.path.join(path_full_dataset, "test.csv"), usecols=usecols, converters=converters)
-
-    # limit test images to NUM_IMAGES_TO_EVALUATE_PER_VARIATION (most likely 1000)
-    dataset_as_df = dataset_as_df[:NUM_IMAGES_TO_EVALUATE_PER_VARIATION]
-
-    raw_test_dataset = Dataset.from_pandas(dataset_as_df)
-
-    return raw_test_dataset
+def check_coordinate(coord, dimension):
+    """Make sure that new (varied) coordinate is still within the image."""
+    if coord < 0:
+        return 0
+    elif coord > dimension:
+        return dimension
+    else:
+        return coord
 
 
 def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
     def vary_bbox_coords_position(row):
-        def check_coordinate(coord, dimension):
-            """Make sure that new coordinate is still within the image."""
-            if coord < 0:
-                return 0
-            elif coord > dimension:
-                return dimension
-            else:
-                return coord
-
         bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
         bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
         relative_position_variation_bboxes = row["relative_position_variations"]  # List[List[float]] of shape 29 x 2
@@ -175,6 +137,8 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
     mean = 0
     stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]
 
+    transforms = get_transforms()
+
     for std in stds_to_evaluate:
         log.info(f"Evaluating position variation, std: {std}")
 
@@ -186,16 +150,30 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
         test_set_as_df["relative_position_variations"] = relative_position_variations.tolist()
         test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: vary_bbox_coords_position(row), axis=1)
 
+        test_dataset = CustomDatasetBboxVariations(dataset_as_df=test_set_as_df, transforms=transforms, log=log)
+        test_loader = get_data_loader(test_dataset)
 
+        for batch in tqdm(test_loader):
+            images = batch["images"]  # torch.tensor of shape batch_size x 1 x 512 x 512
+            bbox_coordinates = batch["bbox_coordinates"]  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
+            bbox_phrases = batch["bbox_phrases"]
+            bbox_phrase_exists = batch["bbox_phrase_exists"]
 
-    # for batch in tqdm(test_loader):
-    #     pass
+            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
+            bbox_coordinates = [bbox_coords.to(device, non_blocking=True) for bbox_coords in bbox_coordinates]
+
+            features = model.object_detector.backbone(images)
+            images, features = model.object_detector._transform_inputs_for_rpn_and_roi(images, features)
+            image_shapes = images.image_sizes
+
+            # roi_pool_feature_maps is a tensor of shape (batch_size * 29) x 2048 x H x W (where H = W = RoI feature map size)
+            roi_pool_feature_maps = model.object_detector.roi_heads.box_roi_pool(features, bbox_coordinates, image_shapes)
 
 
 def evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer):
     evaluate_on_position_variations(model, test_set_as_df, tokenizer)
-    evaluate_on_scale_variations(model, test_set_as_df, tokenizer)
-    evaluate_on_aspect_ratio_variations(model, test_set_as_df, tokenizer)
+    # evaluate_on_scale_variations(model, test_set_as_df, tokenizer)
+    # evaluate_on_aspect_ratio_variations(model, test_set_as_df, tokenizer)
 
     # make sure varied bboxes are clipped at 0 and image width/height.
     # pass bbox through object detector to get feature vectors for each bbox
@@ -291,6 +269,7 @@ def main():
 
     # test_dataset_complete = CustomDataset("test", tokenized_test_dataset, test_transforms, log)
     # test_loader = get_data_loader(tokenizer, test_dataset_complete)
+
 
 if __name__ == "__main__":
     main()

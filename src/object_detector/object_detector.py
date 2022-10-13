@@ -257,5 +257,5 @@ class ObjectDetector(nn.Module):
                 return losses, top_region_features, class_detected
             else:
                 # we additionally need the detections to evaluate the object detector
-                # losses with be an empty dict if targets == None (i.e. during inference)
+                # losses will be an empty dict if targets == None (i.e. during inference)
                 return losses, detections, top_region_features, class_detected
