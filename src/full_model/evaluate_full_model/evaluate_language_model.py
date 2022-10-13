@@ -170,7 +170,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
     def compute_sentence_level_scores():
         def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
             """
-            We can't compute scores on generated sentences, whose corresponding reference sentence is empty.
+            We can't compute scores on generated sentences whose corresponding reference sentence is empty.
             So we need to discard them both.
             """
             filtered_gen_sents = []

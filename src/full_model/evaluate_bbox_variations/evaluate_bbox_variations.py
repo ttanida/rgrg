@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 def compute_meteor_score(bbox_generated_sentences_list, bbox_reference_sentences_list):
     def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
         """
-        We can't compute scores on generated sentences, whose corresponding reference sentence is empty.
+        We can't compute scores on generated sentences whose corresponding reference sentence is empty.
         So we need to discard them both.
         """
         filtered_gen_sents = []
@@ -305,7 +305,7 @@ def get_model():
 def main():
     model = get_model()
     test_set_as_df = get_test_set_as_df()
-    tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated ids by the language model
+    tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated output ids by the language model
 
     evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer)
 
