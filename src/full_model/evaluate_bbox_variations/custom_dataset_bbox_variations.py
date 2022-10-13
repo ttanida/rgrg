@@ -36,7 +36,7 @@ class CustomDatasetBboxVariations(Dataset):
 
             sample = {
                 "image": transformed_image,
-                "bbox_coordinates": torch.tensor(transformed_bbox_coordinates),
+                "bbox_coordinates": torch.tensor(transformed_bbox_coordinates, dtype=torch.float),
                 "bbox_reference_sentences": bbox_phrases,  # List[str]
             }
 

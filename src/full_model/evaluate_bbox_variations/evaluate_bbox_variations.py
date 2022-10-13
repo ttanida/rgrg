@@ -177,7 +177,7 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
 
         return varied_bbox_coords_single_image
 
-    log.info("Evaluating position variations.")
+    log.info("Evaluating bbox position variations.")
 
     num_images = len(test_set_as_df)
 
@@ -303,10 +303,15 @@ def get_model():
 
 
 def main():
+    log.info("Instantiating model...")
     model = get_model()
+
+    log.info("Preparing test set with 1000 images as a dataframe...")
     test_set_as_df = get_test_set_as_df()
+
     tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated output ids by the language model
 
+    log.info("Starting to evaluate bbox variation.")
     evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer)
 
 
