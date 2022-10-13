@@ -5,6 +5,7 @@ import os
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
+import evaluate
 import imagesize
 import numpy as np
 import pandas as pd
@@ -28,10 +29,37 @@ MAX_NUM_TOKENS_GENERATE = 300
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
 path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
 
+# path where "bbox_variations_results.txt" will be saved
+path_results_txt_file = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/bbox_variations_results.txt"
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
+
+
+def compute_meteor_score(bbox_generated_sentences_list, bbox_reference_sentences_list):
+    def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
+        """
+        We can't compute scores on generated sentences, whose corresponding reference sentence is empty.
+        So we need to discard them both.
+        """
+        filtered_gen_sents = []
+        filtered_ref_sents = []
+
+        for gen_sent, ref_sent in zip(gen_sents, ref_sents):
+            if ref_sent != "":
+                filtered_gen_sents.append(gen_sent)
+                filtered_ref_sents.append(ref_sent)
+
+        return filtered_gen_sents, filtered_ref_sents
+
+    gen_sents, ref_sents = remove_gen_sents_corresponding_to_empty_ref_sents(bbox_generated_sentences_list, bbox_reference_sentences_list)
+
+    meteor_score = evaluate.load("meteor")
+    meteor_result = meteor_score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
+
+    return float(meteor_result)
 
 
 def get_bbox_features(model, images, bbox_coordinates):
@@ -56,7 +84,7 @@ def get_bbox_features(model, images, bbox_coordinates):
 
 def get_data_loader(test_dataset):
     def collate_fn(batch: list[dict[str]]):
-        # each dict in batch (which is a list) is for a single image and has the keys "image", "bbox_coordinates", "bbox_phrases", "bbox_phrase_exists"
+        # each dict in batch (which is a list) is for a single image and has the keys "image", "bbox_coordinates", "bbox_reference_sentences"
 
         # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. returned None)
         # otherwise, whole training loop will stop (even if only 1 image fails to open)
@@ -67,22 +95,19 @@ def get_data_loader(test_dataset):
         images_batch = torch.empty(size=(len(batch), *image_shape))
 
         bbox_coordinates = []
-        bbox_phrases = []
-        bbox_phrase_exists = []
+        bbox_reference_sentences = []
 
         for i, sample in enumerate(batch):
             # remove image tensors from batch and store them in dedicated images_batch tensor
             images_batch[i] = sample.pop("image")
             bbox_coordinates.append(sample.pop("bbox_coordinates"))
-            bbox_phrases.append(sample.pop("bbox_phrases"))
-            bbox_phrase_exists.append(sample.pop("bbox_phrase_exists"))
+            bbox_reference_sentences.extend(sample.pop("bbox_reference_sentences"))
 
         # create a new batch variable to store images_batch and targets
         batch_new = {}
         batch_new["images"] = images_batch  # torch.tensor of shape batch_size x 1 x 512 x 512
         batch_new["bbox_coordinates"] = bbox_coordinates  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
-        batch_new["bbox_phrases"] = bbox_phrases  # List[List[str]], with len(outer_list)=batch_size and len(inner_list)=29
-        batch_new["bbox_phrase_exists"] = bbox_phrase_exists  # List[List[bool]], with len(outer_list)=batch_size and len(inner_list)=29
+        batch_new["bbox_reference_sentences"] = bbox_reference_sentences  # List[str] of length (batch_size * 29)
 
         return batch_new
 
@@ -175,11 +200,14 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
         test_dataset = CustomDatasetBboxVariations(dataset_as_df=test_set_as_df, transforms=transforms, log=log)
         test_loader = get_data_loader(test_dataset)
 
+        # to store all the generated and reference sentences when iterating through test_loader
+        bbox_generated_sentences_list = []
+        bbox_reference_sentences_list = []
+
         for batch in tqdm(test_loader):
             images = batch["images"]  # torch.tensor of shape batch_size x 1 x 512 x 512
             bbox_coordinates = batch["bbox_coordinates"]  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
-            bbox_phrases = batch["bbox_phrases"]  # List[List[str]], with len(outer_list)=batch_size and len(inner_list)=29
-            bbox_phrase_exists = batch["bbox_phrase_exists"]  # List[List[bool]], with len(outer_list)=batch_size and len(inner_list)=29
+            bbox_reference_sentences = batch["bbox_reference_sentences"]  # List[str] of length (batch_size * 29)
 
             images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
             bbox_coordinates = [bbox_coords.to(device, non_blocking=True) for bbox_coords in bbox_coordinates]
@@ -194,22 +222,22 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
                 early_stopping=True,
             )
 
-            # generated_sents_for_bboxes is a List[str] of length (batch_size * 29) (i.e. 1 generated sentence for each bbox)
-            generated_sents_for_bboxes = tokenizer.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            # bbox_generated_sentences is a List[str] of length (batch_size * 29) (i.e. 1 generated sentence for each bbox)
+            bbox_generated_sentences = tokenizer.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+            bbox_generated_sentences_list.extend(bbox_generated_sentences)
+            bbox_reference_sentences_list.extend(bbox_reference_sentences)
+
+        meteor_result = compute_meteor_score(bbox_generated_sentences_list, bbox_reference_sentences_list)
+
+        with open(path_results_txt_file, "a") as f:
+            f.write(f"Position variation, std {std}, meteor score: {meteor_result:.5f}")
 
 
 def evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer):
     evaluate_on_position_variations(model, test_set_as_df, tokenizer)
     # evaluate_on_scale_variations(model, test_set_as_df, tokenizer)
     # evaluate_on_aspect_ratio_variations(model, test_set_as_df, tokenizer)
-
-    # make sure varied bboxes are clipped at 0 and image width/height.
-    # pass bbox through object detector to get feature vectors for each bbox
-    # (pass all 29 bboxes per image, but later remove generated senteces corresponding to empty reference sentences when computing scores)
-    # object_detector = model.object_detector
-    # pass those features vector to language model to generate sentence for each bbox (use language_model.generate(bbox_features))
-    # language_model = model.language_model
-    # pass
 
 
 def get_test_set_as_df():
@@ -233,8 +261,7 @@ def get_test_set_as_df():
         "mimic_image_file_path",
         "bbox_coordinates",
         "bbox_labels",
-        "bbox_phrases",
-        "bbox_phrase_exists",
+        "bbox_phrases"
     ]
 
     # all of the columns below are stored as strings in the csv_file
@@ -242,8 +269,7 @@ def get_test_set_as_df():
     converters = {
         "bbox_coordinates": literal_eval,
         "bbox_labels": literal_eval,
-        "bbox_phrases": literal_eval,
-        "bbox_phrase_exists": literal_eval,
+        "bbox_phrases": literal_eval
     }
 
     test_set_as_df = pd.read_csv(path_to_partial_test_set, usecols=usecols, converters=converters)
@@ -282,21 +308,6 @@ def main():
     tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated ids by the language model
 
     evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer)
-
-    # raw_test_dataset = get_dataset()
-
-    # # note that we don't actually need to tokenize anything (i.e. we don't need the input ids and attention mask),
-    # # because we evaluate the model on it's generation capabilities for different bbox variations (for which we only need the input images)
-    # # but since the custom dataset and collator are build in a way that they expect input ids and attention mask
-    # # (as they were originally made for training the model),
-    # # it's better to just leave it as it is instead of adding unnecessary complexity
-    # tokenizer = get_tokenizer()
-    # tokenized_test_dataset = get_tokenized_dataset(tokenizer, raw_test_dataset)
-
-    # test_transforms = get_transforms()
-
-    # test_dataset_complete = CustomDataset("test", tokenized_test_dataset, test_transforms, log)
-    # test_loader = get_data_loader(tokenizer, test_dataset_complete)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,6 @@ class CustomDatasetBboxVariations(Dataset):
             bbox_coordinates_varied = self.dataset_as_df.iloc[index]["bbox_coordinates_varied"]  # List[List[int]] of shape 29 x 4
             bbox_labels = self.dataset_as_df.iloc[index]["bbox_labels"]  # List[int] of len 29
             bbox_phrases = self.dataset_as_df.iloc[index]["bbox_phrases"]  # List[str] of len 29
-            bbox_phrase_exists = self.dataset_as_df.iloc[index]["bbox_phrase_exists"]  # List[bool] of len 29
 
             # cv2.imread by default loads an image with 3 channels
             # since we have grayscale images, we only have 1 channel and thus use cv2.IMREAD_UNCHANGED to read in the 1 channel
@@ -38,8 +37,7 @@ class CustomDatasetBboxVariations(Dataset):
             sample = {
                 "image": transformed_image,
                 "bbox_coordinates": torch.tensor(transformed_bbox_coordinates),
-                "bbox_phrases": bbox_phrases,  # List[str]
-                "bbox_phrase_exists": bbox_phrase_exists,  # List[bool]
+                "bbox_reference_sentences": bbox_phrases,  # List[str]
             }
 
         except Exception as e:
