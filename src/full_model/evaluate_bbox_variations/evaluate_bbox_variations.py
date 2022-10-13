@@ -27,7 +27,7 @@ NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 300
 
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
-path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
+path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial/test-200.csv"
 
 # path where "bbox_variations_results.txt" will be saved
 path_results_txt_file = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/bbox_variations_results.txt"
@@ -115,6 +115,86 @@ def get_data_loader(test_dataset):
     return test_loader
 
 
+def check_coordinate(coord, dimension):
+    """Make sure that new (varied) coordinate is still within the image."""
+    if coord < 0:
+        return 0
+    elif coord > dimension:
+        return dimension
+    else:
+        return coord
+
+
+def vary_bbox_coords_by_scale(row):
+    bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
+    bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
+    scale_variations_bboxes = row["scale_variations"]  # List[float] of len 29
+    image_width, image_height = row["image_width_height"]  # two integers
+
+    # to store the new bbox coordinates after they have been varied
+    varied_bbox_coords_single_image = []
+
+    for bbox_coords, bbox_width_height, scale_variations in zip(bbox_coords_single_image, bbox_widths_heights_single_image, scale_variations_bboxes):
+        x1, y1, x2, y2 = bbox_coords
+        bbox_width, bbox_height = bbox_width_height
+        scale_factor = scale_variations  # single positive float, e.g. 1.232 or 0.845
+
+        # gt_bbox_mid_point stays the same for the scaled bbox, so it serves as the "anchor point" to compute the new bbox coordinates (using the new bbox width and height)
+        ground_truth_bbox_mid_point_x = x1 + bbox_width / 2
+        ground_truth_bbox_mid_point_y = y1 + bbox_height / 2
+
+        bbox_width_scaled = bbox_width * scale_factor
+        bbox_height_scaled = bbox_height * scale_factor
+
+        x1_new = ground_truth_bbox_mid_point_x - bbox_width_scaled / 2
+        x2_new = ground_truth_bbox_mid_point_x + bbox_width_scaled / 2
+
+        y1_new = ground_truth_bbox_mid_point_y - bbox_height_scaled / 2
+        y2_new = ground_truth_bbox_mid_point_y + bbox_height_scaled / 2
+
+        x1 = check_coordinate(int(x1_new), image_width)
+        x2 = check_coordinate(int(x2_new), image_width)
+        y1 = check_coordinate(int(y1_new), image_height)
+        y2 = check_coordinate(int(y2_new), image_height)
+
+        varied_bbox_coords_single_image.append([x1, y1, x2, y2])
+
+    return varied_bbox_coords_single_image
+
+
+def vary_bbox_coords_by_position(row):
+    bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
+    bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
+    relative_position_variation_bboxes = row["relative_position_variations"]  # List[List[float]] of shape 29 x 2
+    image_width, image_height = row["image_width_height"]  # two integers
+
+    # to store the new bbox coordinates after they have been varied
+    varied_bbox_coords_single_image = []
+
+    for bbox_coords, bbox_width_height, relative_position_variations in zip(bbox_coords_single_image, bbox_widths_heights_single_image, relative_position_variation_bboxes):
+        x1, y1, x2, y2 = bbox_coords
+        bbox_width, bbox_height = bbox_width_height
+        x_rel, y_rel = relative_position_variations
+
+        # if e.g. x_rel = 0.5 and bbox_width = 100, then x_var = 50
+        x_var = int(bbox_width * x_rel)
+        y_var = int(bbox_height * y_rel)
+
+        x1 += x_var
+        x2 += x_var
+        y1 += y_var
+        y2 += y_var
+
+        x1 = check_coordinate(x1, image_width)
+        x2 = check_coordinate(x2, image_width)
+        y1 = check_coordinate(y1, image_height)
+        y2 = check_coordinate(y2, image_height)
+
+        varied_bbox_coords_single_image.append([x1, y1, x2, y2])
+
+    return varied_bbox_coords_single_image
+
+
 def get_transforms():
     # see compute_mean_std_dataset.py in src/dataset
     mean = 0.471
@@ -134,50 +214,8 @@ def get_transforms():
     return test_transforms
 
 
-def check_coordinate(coord, dimension):
-    """Make sure that new (varied) coordinate is still within the image."""
-    if coord < 0:
-        return 0
-    elif coord > dimension:
-        return dimension
-    else:
-        return coord
-
-
-def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
-    def vary_bbox_coords_position(row):
-        bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
-        bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
-        relative_position_variation_bboxes = row["relative_position_variations"]  # List[List[float]] of shape 29 x 2
-        image_width, image_height = row["image_width_height"]  # two integers
-
-        # to store the new bbox coordinates after they have been varied
-        varied_bbox_coords_single_image = []
-
-        for bbox_coords, bbox_width_height, relative_position_variations in zip(bbox_coords_single_image, bbox_widths_heights_single_image, relative_position_variation_bboxes):
-            x1, y1, x2, y2 = bbox_coords
-            bbox_width, bbox_height = bbox_width_height
-            x_rel, y_rel = relative_position_variations
-
-            # if e.g. x_rel = 0.5 and bbox_width = 100, then x_var = 50
-            x_var = int(bbox_width * x_rel)
-            y_var = int(bbox_height * y_rel)
-
-            x1 += x_var
-            x2 += x_var
-            y1 += y_var
-            y2 += y_var
-
-            x1 = check_coordinate(x1, image_width)
-            x2 = check_coordinate(x2, image_width)
-            y1 = check_coordinate(y1, image_height)
-            y2 = check_coordinate(y2, image_height)
-
-            varied_bbox_coords_single_image.append([x1, y1, x2, y2])
-
-        return varied_bbox_coords_single_image
-
-    log.info("Evaluating bbox position variations.")
+def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tokenizer):
+    log.info(f"Evaluating bbox {variation_type} variations.")
 
     num_images = len(test_set_as_df)
 
@@ -187,15 +225,33 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
     transforms = get_transforms()
 
     for std in stds_to_evaluate:
-        log.info(f"Evaluating position variation, std: {std}")
+        log.info(f"Evaluating {variation_type} variation, std: {std}")
 
-        # for each of the 29 bboxes in each image, we need 2 float values to vary the bbox position in x and y direction
-        # relative to the corresponding bbox width and height
-        # e.g. 0.0 denotes "no change" and 0.5 denotes "half of the bbox width/height" (depending if 0.5 was sampled for x or y direction)
-        relative_position_variations = np.random.normal(mean, std, size=(num_images, 29, 2))
+        if variation_type == "position":
+            # for each of the 29 bboxes in each image, we need 2 float values to vary the bbox position in x and y direction relative to the corresponding bbox width and height
+            # e.g. 0.0 denotes "no change" and 0.5 denotes "half of the bbox width/height" (depending if 0.5 was sampled for x or y direction)
+            relative_position_variations = np.random.normal(mean, std, size=(num_images, 29, 2))
 
-        test_set_as_df["relative_position_variations"] = relative_position_variations.tolist()
-        test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: vary_bbox_coords_position(row), axis=1)
+            test_set_as_df["relative_position_variations"] = relative_position_variations.tolist()
+
+            variation_func = vary_bbox_coords_by_position
+
+        elif variation_type == "scale":
+            # for each of the 29 bboxes in each image, we need 1 float value to scale the bbox (relative to its ground-truth midpoint)
+            # e.g. 1.0 denotes "no change" and 1.5 denotes that bbox width and height are augmented by 150%
+            # np.random.normal returns positive and negative values around mean=0, but we need positive values around 1.0, hence we apply np.exp
+            scale_variations = np.exp(np.random.normal(mean, std, size=(num_images, 29)))
+
+            test_set_as_df["scale_variations"] = scale_variations.tolist()
+
+            variation_func = vary_bbox_coords_by_scale
+
+        elif variation_type == "aspect_ratio":
+            pass
+
+        # create (or more likely overwrite) column bbox_coordinates_varied that will hold the varied bbox coordinates created by the corresponding variation_func
+        # (variation_func can be vary_bbox_coords_by_position/scale/aspect_ratio)
+        test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: variation_func(row), axis=1)
 
         test_dataset = CustomDatasetBboxVariations(dataset_as_df=test_set_as_df, transforms=transforms, log=log)
         test_loader = get_data_loader(test_dataset)
@@ -231,13 +287,10 @@ def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
         meteor_result = compute_meteor_score(bbox_generated_sentences_list, bbox_reference_sentences_list)
 
         with open(path_results_txt_file, "a") as f:
-            f.write(f"Position variation, std {std}, meteor score: {meteor_result:.5f}")
+            f.write(f"{variation_type} variation, std {std}, meteor score: {meteor_result:.5f}\n")
 
-
-def evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer):
-    evaluate_on_position_variations(model, test_set_as_df, tokenizer)
-    # evaluate_on_scale_variations(model, test_set_as_df, tokenizer)
-    # evaluate_on_aspect_ratio_variations(model, test_set_as_df, tokenizer)
+    with open(path_results_txt_file, "a") as f:
+        f.write("\n")
 
 
 def get_test_set_as_df():
@@ -289,8 +342,8 @@ def get_model():
     )
 
     # if there is a key error when loading checkpoint, try uncommenting down below
-    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
@@ -311,8 +364,8 @@ def main():
 
     tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated output ids by the language model
 
-    log.info("Starting to evaluate bbox variation.")
-    evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer)
+    for variation_type in ["position", "scale", "aspect_ratio"]:
+        evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tokenizer)
 
 
 if __name__ == "__main__":
