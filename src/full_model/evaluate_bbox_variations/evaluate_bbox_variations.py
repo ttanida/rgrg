@@ -1,7 +1,6 @@
 from ast import literal_eval
 import logging
 import os
-import random
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -14,8 +13,6 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.full_model.custom_collator import CustomCollator
-from src.full_model.custom_dataset import CustomDataset
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.train_full_model import get_tokenizer
 from src.path_datasets_and_weights import path_runs_full_model
@@ -23,28 +20,16 @@ from src.path_datasets_and_weights import path_runs_full_model
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
 RUN = 46
 CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
+IMAGE_INPUT_SIZE = 512
+BATCH_SIZE = 4
 
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
 path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
-
-# NUM_IMAGES_TO_EVALUATE_PER_VARIATION is fixed to 1000, since test-1000.csv also has exactly 1000 images
-# if you want to change NUM_IMAGES_TO_EVALUATE_PER_VARIATION, then you also have to create a test set with the same number of images
-NUM_IMAGES_TO_EVALUATE_PER_VARIATION = 1000
-IMAGE_INPUT_SIZE = 512
-BATCH_SIZE = 4
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
-
-# set the seed value for reproducibility
-seed_val = 42
-
-random.seed(seed_val)
-np.random.seed(seed_val)
-torch.manual_seed(seed_val)
-torch.cuda.manual_seed_all(seed_val)
 
 
 def get_data_loader(tokenizer, test_dataset_complete):
@@ -142,24 +127,69 @@ def get_dataset():
 
 
 def evaluate_on_position_variations(model, test_set_as_df, tokenizer):
+    def vary_bbox_coords_position(row):
+        def check_coordinate(coord, dimension):
+            """Make sure that new coordinate is still within the image."""
+            if coord < 0:
+                return 0
+            elif coord > dimension:
+                return dimension
+            else:
+                return coord
+
+        bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
+        bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
+        relative_position_variation_bboxes = row["relative_position_variations"]  # List[List[float]] of shape 29 x 2
+        image_width, image_height = row["image_width_height"]  # two integers
+
+        # to store the new bbox coordinates after they have been varied
+        varied_bbox_coords_single_image = []
+
+        for bbox_coords, bbox_width_height, relative_position_variations in zip(bbox_coords_single_image, bbox_widths_heights_single_image, relative_position_variation_bboxes):
+            x1, y1, x2, y2 = bbox_coords
+            bbox_width, bbox_height = bbox_width_height
+            x_rel, y_rel = relative_position_variations
+
+            # if e.g. x_rel = 0.5 and bbox_width = 100, then x_var = 50
+            x_var = int(bbox_width * x_rel)
+            y_var = int(bbox_height * y_rel)
+
+            x1 += x_var
+            x2 += x_var
+            y1 += y_var
+            y2 += y_var
+
+            x1 = check_coordinate(x1, image_width)
+            x2 = check_coordinate(x2, image_width)
+            y1 = check_coordinate(y1, image_height)
+            y2 = check_coordinate(y2, image_height)
+
+            varied_bbox_coords_single_image.append([x1, y1, x2, y2])
+
+        return varied_bbox_coords_single_image
+
     log.info("Evaluating position variations.")
+
+    num_images = len(test_set_as_df)
 
     mean = 0
     stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]
 
-    # for each of the 29 bboxes in each image, we need 2 values to vary the bbox position in x and y direction
-    num_values_to_sample = NUM_IMAGES_TO_EVALUATE_PER_VARIATION * 29 * 2
-
     for std in stds_to_evaluate:
         log.info(f"Evaluating position variation, std: {std}")
 
-        sampled_values = np.random.normal(mean, std, size=num_values_to_sample)
-        sampled_values = sampled_values.reshape(NUM_IMAGES_TO_EVALUATE_PER_VARIATION, 29, 2)
+        # for each of the 29 bboxes in each image, we need 2 float values to vary the bbox position in x and y direction
+        # relative to the corresponding bbox width and height
+        # e.g. 0.0 denotes "no change" and 0.5 denotes "half of the bbox width/height" (depending if 0.5 was sampled for x or y direction)
+        relative_position_variations = np.random.normal(mean, std, size=(num_images, 29, 2))
+
+        test_set_as_df["relative_position_variations"] = relative_position_variations.tolist()
+        test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: vary_bbox_coords_position(row), axis=1)
 
 
 
-    for batch in tqdm(test_loader):
-        pass
+    # for batch in tqdm(test_loader):
+    #     pass
 
 
 def evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer):
@@ -199,8 +229,6 @@ def get_test_set_as_df():
         "bbox_labels",
         "bbox_phrases",
         "bbox_phrase_exists",
-        "bbox_is_abnormal",
-        "reference_report"
     ]
 
     # all of the columns below are stored as strings in the csv_file
@@ -210,12 +238,12 @@ def get_test_set_as_df():
         "bbox_labels": literal_eval,
         "bbox_phrases": literal_eval,
         "bbox_phrase_exists": literal_eval,
-        "bbox_is_abnormal": literal_eval,
     }
 
     test_set_as_df = pd.read_csv(path_to_partial_test_set, usecols=usecols, converters=converters)
 
-    # add new columns
+    # add new columns that contain the bbox_widths_heights (List[List[int]] with len(outer_list)=29 and len(inner_list) = 2)
+    # and image_width_height (List[int] of len 2)
     test_set_as_df["bbox_widths_heights"] = test_set_as_df.apply(lambda row: compute_bbox_widths_heights(row), axis=1)
     test_set_as_df["image_width_height"] = test_set_as_df.apply(lambda row: retrieve_image_widths_heights(row), axis=1)
 
@@ -245,9 +273,7 @@ def get_model():
 def main():
     model = get_model()
     test_set_as_df = get_test_set_as_df()
-
-    # to decode (i.e. turn into human-readable text) the generated ids by the language model
-    tokenizer = get_tokenizer()
+    tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated ids by the language model
 
     evaluate_model_on_bbox_variations(model, test_set_as_df, tokenizer)
 

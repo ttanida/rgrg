@@ -12,7 +12,7 @@ path_chexbert_weights specifies the path to the weights of the CheXbert labeler 
 The weights can be downloaded here: https://github.com/stanfordmlgroup/CheXbert#checkpoint-download
 
 path_runs_* specify the directories where all the run folders (containing checkpoints, tensorboard files etc.) will be created
-when training the object detector and full model, respectively.
+when training the object detector and full model (with and without the language model), respectively.
 """
 
 path_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
