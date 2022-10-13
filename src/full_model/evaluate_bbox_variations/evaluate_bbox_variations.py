@@ -38,7 +38,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
 
-def compute_meteor_score(bbox_generated_sentences_list, bbox_reference_sentences_list):
+def compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences):
     def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
         """
         We can't compute scores on generated sentences whose corresponding reference sentence is empty.
@@ -54,7 +54,7 @@ def compute_meteor_score(bbox_generated_sentences_list, bbox_reference_sentences
 
         return filtered_gen_sents, filtered_ref_sents
 
-    gen_sents, ref_sents = remove_gen_sents_corresponding_to_empty_ref_sents(bbox_generated_sentences_list, bbox_reference_sentences_list)
+    gen_sents, ref_sents = remove_gen_sents_corresponding_to_empty_ref_sents(bbox_generated_sentences, bbox_reference_sentences)
 
     meteor_score = evaluate.load("meteor")
     meteor_result = meteor_score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
@@ -80,6 +80,38 @@ def get_bbox_features(model, images, bbox_coordinates):
     bbox_features = model.object_detector.roi_heads.dim_reduction(bbox_features)
 
     return bbox_features
+
+
+def iterate_over_data_loader(bbox_generated_sentences_list, bbox_reference_sentences_list, test_loader, model, tokenizer):
+    # to store all the generated and reference sentences when iterating over test_loader
+    bbox_generated_sentences_list = []
+    bbox_reference_sentences_list = []
+
+    for batch in tqdm(test_loader):
+        images = batch["images"]  # torch.tensor of shape batch_size x 1 x 512 x 512
+        bbox_coordinates = batch["bbox_coordinates"]  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
+        bbox_reference_sentences = batch["bbox_reference_sentences"]  # List[str] of length (batch_size * 29)
+
+        images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
+        bbox_coordinates = [bbox_coords.to(device, non_blocking=True) for bbox_coords in bbox_coordinates]
+
+        # bbox_features is a tensor of shape (batch_size * 29) x 1024 (i.e. 1 feature vector for every bbox)
+        bbox_features = get_bbox_features(model, images, bbox_coordinates)
+
+        output_ids = model.language_model.generate(
+            bbox_features,
+            max_length=MAX_NUM_TOKENS_GENERATE,
+            num_beams=NUM_BEAMS,
+            early_stopping=True,
+        )
+
+        # bbox_generated_sentences is a List[str] of length (batch_size * 29) (i.e. 1 generated sentence for each bbox)
+        bbox_generated_sentences = tokenizer.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+        bbox_generated_sentences_list.extend(bbox_generated_sentences)
+        bbox_reference_sentences_list.extend(bbox_reference_sentences)
+
+    return bbox_generated_sentences_list, bbox_reference_sentences_list
 
 
 def get_data_loader(test_dataset):
@@ -163,6 +195,16 @@ def vary_bbox_coords_by_scale(row):
 
 
 def vary_bbox_coords_by_position(row):
+    def move_coordinate_from_border(coord_1, coord_2, dimension):
+        num_pixels_to_move = 10
+
+        if coord_2 == 0:
+            coord_2 += num_pixels_to_move
+        if coord_1 == dimension:
+            coord_1 -= num_pixels_to_move
+
+        return coord_1, coord_2
+
     bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
     bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
     relative_position_variation_bboxes = row["relative_position_variations"]  # List[List[float]] of shape 29 x 2
@@ -190,9 +232,42 @@ def vary_bbox_coords_by_position(row):
         y1 = check_coordinate(y1, image_height)
         y2 = check_coordinate(y2, image_height)
 
+        # if the standard deviation is set high, it can happen that x1 == x2 == 0 or x1 == x2 == image_width (vice-versa for y)
+        # to prevent these cases from throwing errors, we slightly increase x2 in the first case and slightly decrease x1 in the second case (vice-versa for y)
+        if x1 == x2:
+            x1, x2 = move_coordinate_from_border(x1, x2, image_width)
+        if y1 == y2:
+            y1, y2 = move_coordinate_from_border(y1, y2, image_height)
+
         varied_bbox_coords_single_image.append([x1, y1, x2, y2])
 
     return varied_bbox_coords_single_image
+
+
+def vary_bbox_coords(variation_type, num_images, mean, std, test_set_as_df):
+    if variation_type == "position":
+        # for each of the 29 bboxes in each image, we need 2 float values to vary the bbox position in x and y direction relative to the corresponding bbox width and height
+        # e.g. 0.0 denotes "no change" and 0.5 denotes "half of the bbox width/height" (depending if 0.5 was sampled for x or y direction)
+        relative_position_variations = np.random.normal(mean, std, size=(num_images, 29, 2))
+
+        test_set_as_df["relative_position_variations"] = relative_position_variations.tolist()
+        variation_func = vary_bbox_coords_by_position
+
+    elif variation_type == "scale":
+        # for each of the 29 bboxes in each image, we need 1 float value to scale the bbox (relative to its ground-truth midpoint)
+        # e.g. 1.0 denotes "no change" and 1.5 denotes that bbox width and height are augmented by 150%
+        # np.random.normal returns positive and negative values around mean=0, but we need positive values around 1.0, hence we apply np.exp
+        scale_variations = np.exp(np.random.normal(mean, std, size=(num_images, 29)))
+
+        test_set_as_df["scale_variations"] = scale_variations.tolist()
+        variation_func = vary_bbox_coords_by_scale
+
+    elif variation_type == "aspect_ratio":
+        pass
+
+    # create (or more likely overwrite) column bbox_coordinates_varied that will hold the varied bbox coordinates created by the corresponding variation_func
+    # (variation_func can be vary_bbox_coords_by_position/scale/aspect_ratio)
+    test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: variation_func(row), axis=1)
 
 
 def get_transforms():
@@ -218,7 +293,6 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
     log.info(f"Evaluating bbox {variation_type} variations.")
 
     num_images = len(test_set_as_df)
-
     mean = 0
     stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]
 
@@ -227,64 +301,14 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
     for std in stds_to_evaluate:
         log.info(f"Evaluating {variation_type} variation, std: {std}")
 
-        if variation_type == "position":
-            # for each of the 29 bboxes in each image, we need 2 float values to vary the bbox position in x and y direction relative to the corresponding bbox width and height
-            # e.g. 0.0 denotes "no change" and 0.5 denotes "half of the bbox width/height" (depending if 0.5 was sampled for x or y direction)
-            relative_position_variations = np.random.normal(mean, std, size=(num_images, 29, 2))
-
-            test_set_as_df["relative_position_variations"] = relative_position_variations.tolist()
-
-            variation_func = vary_bbox_coords_by_position
-
-        elif variation_type == "scale":
-            # for each of the 29 bboxes in each image, we need 1 float value to scale the bbox (relative to its ground-truth midpoint)
-            # e.g. 1.0 denotes "no change" and 1.5 denotes that bbox width and height are augmented by 150%
-            # np.random.normal returns positive and negative values around mean=0, but we need positive values around 1.0, hence we apply np.exp
-            scale_variations = np.exp(np.random.normal(mean, std, size=(num_images, 29)))
-
-            test_set_as_df["scale_variations"] = scale_variations.tolist()
-
-            variation_func = vary_bbox_coords_by_scale
-
-        elif variation_type == "aspect_ratio":
-            pass
-
-        # create (or more likely overwrite) column bbox_coordinates_varied that will hold the varied bbox coordinates created by the corresponding variation_func
-        # (variation_func can be vary_bbox_coords_by_position/scale/aspect_ratio)
-        test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: variation_func(row), axis=1)
+        vary_bbox_coords(variation_type, num_images, mean, std, test_set_as_df)
 
         test_dataset = CustomDatasetBboxVariations(dataset_as_df=test_set_as_df, transforms=transforms, log=log)
         test_loader = get_data_loader(test_dataset)
 
-        # to store all the generated and reference sentences when iterating through test_loader
-        bbox_generated_sentences_list = []
-        bbox_reference_sentences_list = []
+        bbox_generated_sentences, bbox_reference_sentences = iterate_over_data_loader(test_loader, model, tokenizer)
 
-        for batch in tqdm(test_loader):
-            images = batch["images"]  # torch.tensor of shape batch_size x 1 x 512 x 512
-            bbox_coordinates = batch["bbox_coordinates"]  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
-            bbox_reference_sentences = batch["bbox_reference_sentences"]  # List[str] of length (batch_size * 29)
-
-            images = images.to(device, non_blocking=True)  # shape (batch_size x 1 x 512 x 512)
-            bbox_coordinates = [bbox_coords.to(device, non_blocking=True) for bbox_coords in bbox_coordinates]
-
-            # bbox_features is a tensor of shape (batch_size * 29) x 1024 (i.e. 1 feature vector for every bbox)
-            bbox_features = get_bbox_features(model, images, bbox_coordinates)
-
-            output_ids = model.language_model.generate(
-                bbox_features,
-                max_length=MAX_NUM_TOKENS_GENERATE,
-                num_beams=NUM_BEAMS,
-                early_stopping=True,
-            )
-
-            # bbox_generated_sentences is a List[str] of length (batch_size * 29) (i.e. 1 generated sentence for each bbox)
-            bbox_generated_sentences = tokenizer.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-
-            bbox_generated_sentences_list.extend(bbox_generated_sentences)
-            bbox_reference_sentences_list.extend(bbox_reference_sentences)
-
-        meteor_result = compute_meteor_score(bbox_generated_sentences_list, bbox_reference_sentences_list)
+        meteor_result = compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences)
 
         with open(path_results_txt_file, "a") as f:
             f.write(f"{variation_type} variation, std {std}, meteor score: {meteor_result:.5f}\n")
