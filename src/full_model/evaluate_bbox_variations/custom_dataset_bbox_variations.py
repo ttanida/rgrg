@@ -1,5 +1,6 @@
 import cv2
-# import torch
+import torch
+from torchvision.transforms.functional import crop
 from torch.utils.data import Dataset
 
 
@@ -32,14 +33,17 @@ class CustomDataset(Dataset):
             # apply transformations to image, bbox_coordinates and bbox_labels
             transformed = self.transforms(image=image, bboxes=bbox_coordinates_varied, class_labels=bbox_labels)
 
-            transformed_image = transformed["image"]
-            transformed_bbox_coordinates = transformed["bboxes"]
+            transformed_image = transformed["image"]  # torch.tensor of shape 1 x 512 x 512 and dtype=float
+            transformed_bbox_coordinates = transformed["bboxes"]  # List[List[float]]
+            transformed_bbox_coordinates = self._change_bbox_coords_to_int(transformed_bbox_coordinates)  # List[List[int]]
+
+            # List[torch.tensor], i.e. list of len 29 where each tensor is of shape 1 x bbox_coord_height x bbox_coord_width
+            bboxes = self._get_cropped_bboxes(transformed_image, transformed_bbox_coordinates)
 
             sample = {
-                "image": transformed_image,
-                "bbox_coordinates": transformed_bbox_coordinates,
-                "bbox_phrases": bbox_phrases,
-                "bbox_phrase_exists": bbox_phrase_exists,
+                "bboxes": bboxes,  # List[torch.tensor]
+                "bbox_phrases": bbox_phrases,  # List[str]
+                "bbox_phrase_exists": bbox_phrase_exists,  # List[bool]
             }
 
         except Exception as e:
@@ -48,3 +52,23 @@ class CustomDataset(Dataset):
             return None
 
         return sample
+
+    def _change_bbox_coords_to_int(self, bbox_coords_float: list[list[float]]):
+        bbox_coords_int = []
+        for bbox_coords in bbox_coords_float:
+            x1, y1, x2, y2 = bbox_coords
+            bbox_coords_int.append([int(x1), int(y1), int(x2), int(y2)])
+
+        return bbox_coords_int
+
+    def _get_cropped_bboxes(self, image: torch.tensor, bbox_coords: list[list[int]]):
+        bboxes = []
+        for coords in bbox_coords:
+            x1, y1, x2, y2 = coords
+            width = x2 - x1
+            height = y2 - y1
+
+            bbox_tensor = crop(img=image, top=y1, left=x1, height=height, width=width)
+            bboxes.append(bbox_tensor)
+
+        return bboxes
