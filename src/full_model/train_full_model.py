@@ -291,6 +291,21 @@ def train_model(
     return None
 
 
+def get_model(checkpoint=None):
+    # if there is a key error when loading checkpoint, try uncommenting down below
+    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+
+    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
+    model.to(device, non_blocking=True)
+
+    if checkpoint:
+        model.load_state_dict(checkpoint["model"])
+    model.train()
+
+    return model
+
+
 def get_data_loaders(tokenizer, train_dataset, val_dataset):
     def seed_worker(worker_id):
         """To preserve reproducibility for the randomly shuffled train loader."""
@@ -552,18 +567,12 @@ def main():
     train_loader, val_loader = get_data_loaders(tokenizer, train_dataset_complete, val_dataset_complete)
 
     # resume_training = False
+    # checkpoint = None
     checkpoint = torch.load(
         "/u/home/tanida/runs/full_model/run_45/checkpoints/checkpoint_val_loss_106.395_overall_steps_56835.pt", map_location=device
     )
 
-    # if there is a key error when loading checkpoint, try uncommenting down below
-    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
-
-    model = ReportGenerationModel(pretrain_without_lm_model=PRETRAIN_WITHOUT_LM_MODEL)
-    model.to(device, non_blocking=True)
-    model.load_state_dict(checkpoint["model"])
-    model.train()
+    model = get_model(checkpoint)
 
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
@@ -583,7 +592,8 @@ def main():
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
-    del checkpoint
+    if checkpoint:
+        del checkpoint
 
     log.info("Starting training!")
 
