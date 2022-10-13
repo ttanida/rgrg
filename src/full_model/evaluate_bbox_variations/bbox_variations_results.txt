@@ -1,0 +1,7 @@
+position variation, std 0.1, meteor score: 0.29170
+position variation, std 0.2, meteor score: 0.27516
+position variation, std 0.3, meteor score: 0.25488
+position variation, std 0.4, meteor score: 0.23040
+position variation, std 0.5, meteor score: 0.22232
+
+scale variation, std 0.1, meteor score: 0.30288

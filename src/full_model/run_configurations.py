@@ -46,6 +46,8 @@ THRESHOLD_LR_SCHEDULER = 1e-3  # threshold for measuring the new optimum, to onl
 FACTOR_LR_SCHEDULER = 0.5
 COOLDOWN_LR_SCHEDULER = 5
 NUM_BEAMS = 4
+# MAX_NUM_TOKENS_GENERATE is set arbitrarily to 300. Most generated sentences have at most 60 tokens,
+# so this is just an arbitrary threshold that will never be reached if the language model is not completely untrained (i.e. produces gibberish)
 MAX_NUM_TOKENS_GENERATE = 300
 NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated sentences with their gt reference phrases to a txt file
 NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE = 10  # save num_batches_of_... worth of generated reports with their gt reference reports to a txt file

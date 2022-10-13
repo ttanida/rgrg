@@ -24,7 +24,9 @@ CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
 NUM_BEAMS = 4
-MAX_NUM_TOKENS_GENERATE = 300
+# cap MAX_NUM_TOKENS_GENERATE at 100, since high stds will create noisy bboxes, which in turn will lead to noisy language model outputs (i.e. gibberish that may become > 100 tokens)
+# most generated sentences for non-noisy bboxes will have at most 60 tokens, so 100 is a good threshold
+MAX_NUM_TOKENS_GENERATE = 100
 
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
 path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial/test-200.csv"
@@ -82,12 +84,14 @@ def get_bbox_features(model, images, bbox_coordinates):
     return bbox_features
 
 
-def iterate_over_data_loader(bbox_generated_sentences_list, bbox_reference_sentences_list, test_loader, model, tokenizer):
+def iterate_over_data_loader(test_loader, model, tokenizer):
     # to store all the generated and reference sentences when iterating over test_loader
     bbox_generated_sentences_list = []
     bbox_reference_sentences_list = []
 
-    for batch in tqdm(test_loader):
+    oom = False
+
+    for num_batch, batch in tqdm(enumerate(test_loader)):
         images = batch["images"]  # torch.tensor of shape batch_size x 1 x 512 x 512
         bbox_coordinates = batch["bbox_coordinates"]  # List[torch.tensor], with len(list)=batch_size and each torch.tensor of shape 29 x 4
         bbox_reference_sentences = batch["bbox_reference_sentences"]  # List[str] of length (batch_size * 29)
@@ -98,18 +102,35 @@ def iterate_over_data_loader(bbox_generated_sentences_list, bbox_reference_sente
         # bbox_features is a tensor of shape (batch_size * 29) x 1024 (i.e. 1 feature vector for every bbox)
         bbox_features = get_bbox_features(model, images, bbox_coordinates)
 
-        output_ids = model.language_model.generate(
-            bbox_features,
-            max_length=MAX_NUM_TOKENS_GENERATE,
-            num_beams=NUM_BEAMS,
-            early_stopping=True,
-        )
+        try:
+            output_ids = model.language_model.generate(
+                bbox_features,
+                max_length=MAX_NUM_TOKENS_GENERATE,
+                num_beams=NUM_BEAMS,
+                early_stopping=True,
+            )
 
-        # bbox_generated_sentences is a List[str] of length (batch_size * 29) (i.e. 1 generated sentence for each bbox)
-        bbox_generated_sentences = tokenizer.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            # bbox_generated_sentences is a List[str] of length (batch_size * 29) (i.e. 1 generated sentence for each bbox)
+            bbox_generated_sentences = tokenizer.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-        bbox_generated_sentences_list.extend(bbox_generated_sentences)
-        bbox_reference_sentences_list.extend(bbox_reference_sentences)
+            bbox_generated_sentences_list.extend(bbox_generated_sentences)
+            bbox_reference_sentences_list.extend(bbox_reference_sentences)
+
+        except RuntimeError as e:  # out of memory error
+            if "out of memory" in str(e):
+                oom = True
+
+                with open(path_results_txt_file, "a") as f:
+                    f.write(f"OOM at batch number {num_batch}.\n")
+                    f.write(f"Error message: {str(e)}\n\n")
+            else:
+                raise e
+
+        if oom:
+            # free up memory
+            torch.cuda.empty_cache()
+            oom = False
+            continue
 
     return bbox_generated_sentences_list, bbox_reference_sentences_list
 
@@ -196,6 +217,10 @@ def vary_bbox_coords_by_scale(row):
 
 def vary_bbox_coords_by_position(row):
     def move_coordinate_from_border(coord_1, coord_2, dimension):
+        """
+        If the standard deviation is set high, it can happen that x1 == x2 == 0 or x1 == x2 == image_width (vice-versa for y).
+        To prevent these cases from throwing errors, we slightly increase x2 in the first case and slightly decrease x1 in the second case (vice-versa for y).
+        """
         num_pixels_to_move = 10
 
         if coord_2 == 0:
@@ -266,7 +291,6 @@ def vary_bbox_coords(variation_type, num_images, mean, std, test_set_as_df):
         pass
 
     # create (or more likely overwrite) column bbox_coordinates_varied that will hold the varied bbox coordinates created by the corresponding variation_func
-    # (variation_func can be vary_bbox_coords_by_position/scale/aspect_ratio)
     test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: variation_func(row), axis=1)
 
 
@@ -301,6 +325,7 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
     for std in stds_to_evaluate:
         log.info(f"Evaluating {variation_type} variation, std: {std}")
 
+        # create (or more likely overwrite) column bbox_coordinates_varied in test_set_as_df that will hold the varied bbox coordinates generated by the corresponding variation_type and std
         vary_bbox_coords(variation_type, num_images, mean, std, test_set_as_df)
 
         test_dataset = CustomDatasetBboxVariations(dataset_as_df=test_set_as_df, transforms=transforms, log=log)
