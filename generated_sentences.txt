@@ -1,0 +1,1200 @@
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: There is no focal consolidation, pleural effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: Bilateral nodular opacities that most likely represent nipple shadows.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no focal consolidation, pleural effusion or pneumothorax.
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: There is no focal consolidation, pleural effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no focal consolidation, pleural effusion or pneumothorax.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiac and mediastinal silhouettes are unremarkable. No acute cardiopulmonary process.
+Reference sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: The cardiac and mediastinal silhouettes are unremarkable. No acute cardiopulmonary process.
+Reference sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: The imaged upper abdomen is unremarkable.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Pulmonary vasculature is normal. Lungs are clear. No pleural effusion or pneumothorax is present. No acute cardiopulmonary abnormality.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is mild bibasilar atelectasis. Mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: The cardiac, mediastinal and hilar contours are normal. Pulmonary vasculature is normal.
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No pleural effusion or pneumothorax is present.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Pulmonary vasculature is normal. Lungs are clear. No pleural effusion or pneumothorax is present. No acute cardiopulmonary abnormality.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: The cardiac, mediastinal and hilar contours are normal. Pulmonary vasculature is normal.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The cardiac, mediastinal and hilar contours are normal. No acute cardiopulmonary abnormality.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiac, mediastinal and hilar contours are normal.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiac, mediastinal and hilar contours are normal. No acute cardiopulmonary abnormality.
+
+Generated sentence: There is no pneumothorax or pleural effusion.
+Reference sentence: No acute intrathoracic process. There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: No acute intrathoracic process. There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: In comparison with the study of ___, there is increased opacity in the left lower lobe, likely reflecting atelectasis.
+Reference sentence: 
+
+Generated sentence: There is no pulmonary edema or pneumothorax.
+Reference sentence: 
+
+Generated sentence: No acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiomediastinal silhouette is normal. No acute intrathoracic process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: Right subclavian line ends in the mid SVC.
+Reference sentence: 
+
+Generated sentence: Heart size is normal.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No acute intrathoracic process. There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: No acute intrathoracic process. There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: The left lower lobe opacity is unchanged.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: No acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette is normal. No acute intrathoracic process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: There is no evidence of pneumoperitoneum.
+Reference sentence: No free air below the right hemidiaphragm is seen.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax.
+Reference sentence: The lungs are clear of focal consolidation, pleural effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: The lungs are clear of focal consolidation, pleural effusion or pneumothorax.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear of focal consolidation, pleural effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: The lungs are clear of focal consolidation, pleural effusion or pneumothorax.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The mediastinal contours are normal. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The mediastinal contours are normal.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The heart size is normal. The mediastinal contours are normal. No acute cardiopulmonary process.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: There is bilateral apical pleural thickening. There is mild vascular engorgement. Central vascular engorgement.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: There is mild vascular engorgement. Central vascular engorgement.
+
+Generated sentence: There is no pneumothorax or pneumomediastinum.
+Reference sentence: There is bilateral apical pleural thickening.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pneumothorax or pleural effusion.
+Reference sentence: There is a focal consolidation at the left lung base adjacent to the lateral hemidiaphragm. There is bilateral apical pleural thickening. Focal consolidation at the left lung base, possibly representing aspiration or pneumonia. There is mild vascular engorgement. Central vascular engorgement.
+
+Generated sentence: There is bibasilar atelectasis. Bibasilar atelectasis.
+Reference sentence: There is a focal consolidation at the left lung base adjacent to the lateral hemidiaphragm. Focal consolidation at the left lung base, possibly representing aspiration or pneumonia.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: There is mild vascular engorgement. Central vascular engorgement.
+
+Generated sentence: There is no pneumothorax or pneumomediastinum.
+Reference sentence: There is bilateral apical pleural thickening.
+
+Generated sentence: No acute osseous abnormality is seen.
+Reference sentence: 
+
+Generated sentence: The aorta is tortuous.
+Reference sentence: The cardiomediastinal silhouette is remarkable for aortic arch calcifications.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiomediastinal silhouette is remarkable for aortic arch calcifications.
+
+Generated sentence: Moderate cardiomegaly is unchanged.
+Reference sentence: The cardiomediastinal silhouette is remarkable for aortic arch calcifications. The heart is top normal in size.
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: No acute intrathoracic process. There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: The cardiomediastinal and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: No acute intrathoracic process. There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no focal consolidation, effusion, or pneumothorax.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiac and mediastinal silhouettes are unremarkable. No acute cardiopulmonary process.
+Reference sentence: The cardiomediastinal silhouette is normal. No acute intrathoracic process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: Heart size is normal. No acute cardiopulmonary abnormality.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: There is no evidence of focal consolidation, pleural effusion, pneumothorax, or frank pulmonary edema. No evidence of acute cardiopulmonary process.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: There is no evidence of focal consolidation, pleural effusion, pneumothorax, or frank pulmonary edema.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no evidence of focal consolidation, pleural effusion, pneumothorax, or frank pulmonary edema.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: There is no evidence of focal consolidation, pleural effusion, pneumothorax, or frank pulmonary edema. No evidence of acute cardiopulmonary process.
+
+Generated sentence: The mediastinal and hilar contours are normal.
+Reference sentence: There is no evidence of focal consolidation, pleural effusion, pneumothorax, or frank pulmonary edema.
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: There is persistent thoracic kyphosis with mild wedging of a mid thoracic vertebral body.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The cardiomediastinal silhouette is within normal limits. No evidence of acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette is within normal limits.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiomediastinal silhouette is within normal limits. No evidence of acute cardiopulmonary process.
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: Each hilum is mildly prominent, probably suggesting mild prominence of central pulmonary vessels, but there is no frank congestive heart failure. There is no pleural effusion or pneumothorax. Mild perihilar prominence, suspected to represent mildly prominent pulmonary vessels without definite pneumonia.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: The mediastinal and hilar contours appear within normal limits. Each hilum is mildly prominent, probably suggesting mild prominence of central pulmonary vessels, but there is no frank congestive heart failure. Mild perihilar prominence, suspected to represent mildly prominent pulmonary vessels without definite pneumonia.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no pleural effusion or pneumothorax.
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Each hilum is mildly prominent, probably suggesting mild prominence of central pulmonary vessels, but there is no frank congestive heart failure. No focal opacification is seen aside from streaky left lower lung opacity suggesting minor atelectasis. There is no pleural effusion or pneumothorax. Mild perihilar prominence, suspected to represent mildly prominent pulmonary vessels without definite pneumonia. Streaky left basilar opacification seen only on the frontal view is probably due to minor atelectasis or scarring.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: The mediastinal and hilar contours appear within normal limits. Each hilum is mildly prominent, probably suggesting mild prominence of central pulmonary vessels, but there is no frank congestive heart failure. Mild perihilar prominence, suspected to represent mildly prominent pulmonary vessels without definite pneumonia.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no pleural effusion or pneumothorax.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: Bony structures are unremarkable.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: Bony structures are unremarkable.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: Bony structures are unremarkable.
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The mediastinal and hilar contours appear within normal limits.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The mediastinal and hilar contours appear within normal limits.
+
+Generated sentence: The cardiac silhouette is top-normal.
+Reference sentence: The heart is normal in size. Each hilum is mildly prominent, probably suggesting mild prominence of central pulmonary vessels, but there is no frank congestive heart failure.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. No convincing signs of pneumonia or edema. No large effusion or pneumothorax is seen. Mild bibasilar atelectasis.
+
+Generated sentence: Right lower lobe atelectasis is unchanged.
+Reference sentence: 
+
+Generated sentence: There is bibasilar atelectasis. Bibasilar atelectasis.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. Mild bibasilar atelectasis. No large effusion or pneumothorax is seen.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: No convincing signs of pneumonia or edema.
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: No large effusion or pneumothorax is seen.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. No convincing signs of pneumonia or edema. No large effusion or pneumothorax is seen. Mild bibasilar atelectasis.
+
+Generated sentence: Left lower lobe atelectasis is unchanged.
+Reference sentence: 
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. Mild bibasilar atelectasis. No large effusion or pneumothorax is seen.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: No convincing signs of pneumonia or edema.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette appears normal.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette appears normal.
+
+Generated sentence: Heart size is top normal.
+Reference sentence: The cardiomediastinal silhouette appears normal.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: There is no free air below the right hemidiaphragm. No signs of free air below the right hemidiaphragm.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. No convincing signs of pneumonia or edema. No large effusion or pneumothorax is seen. Mild bibasilar atelectasis.
+
+Generated sentence: Bibasilar atelectasis is unchanged.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. Mild bibasilar atelectasis. No large effusion or pneumothorax is seen.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: No convincing signs of pneumonia or edema.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. No convincing signs of pneumonia or edema. No large effusion or pneumothorax is seen. Mild bibasilar atelectasis.
+
+Generated sentence: There is mild bibasilar atelectasis. Mild bibasilar atelectasis.
+Reference sentence: Lung volumes are low with mild bibasilar atelectasis. Mild bibasilar atelectasis. No large effusion or pneumothorax is seen.
+
+Generated sentence: The mediastinal and hilar contours are normal.
+Reference sentence: No convincing signs of pneumonia or edema.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette appears normal.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiomediastinal silhouette appears normal.
+
+Generated sentence: Heart size is normal.
+Reference sentence: The cardiomediastinal silhouette appears normal.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: There is no free air below the right hemidiaphragm. No signs of free air below the right hemidiaphragm.
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen.
+Reference sentence: Otherwise, the lungs are clear. There is no pneumothorax.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Otherwise, the lungs are clear. There is no pneumothorax.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: An enteric tube courses below the level of the diaphragm. Enteric tube courses below the level of the diaphragm.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The heart size is upper limits of normal.
+
+Generated sentence: No free air below the right hemidiaphragm.
+Reference sentence: An enteric tube courses below the level of the diaphragm. Enteric tube courses below the level of the diaphragm.
+
+Generated sentence: There is no pneumothorax or pleural effusion.
+Reference sentence: There is no pneumothorax or pleural effusion. Mild bibasilar opacities consistent with atelectasis, unchanged compared to chest radiograph performed earlier in the same day.
+
+Generated sentence: There is mild bibasilar atelectasis. Mild bibasilar atelectasis.
+Reference sentence: Mild bibasilar opacities consistent with atelectasis, unchanged compared to chest radiograph performed earlier in the same day.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: 
+
+Generated sentence: There is no pneumothorax or pleural effusion.
+Reference sentence: There is no pneumothorax or pleural effusion. Mild bibasilar opacities consistent with atelectasis, unchanged compared to chest radiograph performed earlier in the same day.
+
+Generated sentence: There is no large effusion or pneumothorax.
+Reference sentence: Mild bibasilar opacities consistent with atelectasis, unchanged compared to chest radiograph performed earlier in the same day.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no pneumothorax or pleural effusion.
+
+Generated sentence: Right internal jugular central venous catheter tip is at the level of cavoatrial junction.
+Reference sentence: EXAMINATION: DX CHEST PORT LINE/TUBE PLCMT 1 EXAM NG tube is coiled in the stomach. Right PICC in lower SVC is unchanged in position. NG tube in expected position with tip coiled in the stomach.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: 
+
+Generated sentence: Right subclavian line ends in the mid SVC.
+Reference sentence: Right PICC in lower SVC is unchanged in position.
+
+Generated sentence: Heart size is normal.
+Reference sentence: Cardiac size is normal.
+
+Generated sentence: No free air below the right hemidiaphragm.
+Reference sentence: NG tube is coiled in the stomach. NG tube in expected position with tip coiled in the stomach.
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: Mild basal atelectasis noted. Hilar congestion noted without frank edema. No large effusion or pneumothorax. Hilar congestion without frank edema. No convincing signs of pneumonia.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: Hilar congestion noted without frank edema. Hilar congestion without frank edema.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No large effusion or pneumothorax.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Mild basal atelectasis noted. Hilar congestion noted without frank edema. No large effusion or pneumothorax. Hilar congestion without frank edema. No convincing signs of pneumonia.
+
+Generated sentence: There is mild bibasilar atelectasis. Mild bibasilar atelectasis.
+Reference sentence: Mild basal atelectasis noted. No large effusion or pneumothorax.
+
+Generated sentence: There is no pulmonary edema or pneumothorax.
+Reference sentence: Hilar congestion noted without frank edema. Hilar congestion without frank edema.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: Heart size is normal.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: No free air below the right hemidiaphragm.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: No pleural effusion or pneumothorax is seen. There is minimal biapical pleural thickening. No acute cardiopulmonary process. There is mild basilar atelectasis without evidence of focal consolidation.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is mild basilar atelectasis without evidence of focal consolidation.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: No pleural effusion or pneumothorax is seen. There is minimal biapical pleural thickening. No acute cardiopulmonary process. There is mild basilar atelectasis without evidence of focal consolidation.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: There is mild basilar atelectasis without evidence of focal consolidation.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No pleural effusion or pneumothorax is seen.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: Some degenerative changes are seen along the spine.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The aorta is calcified and tortuous. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: 
+
+Generated sentence: Heart size is normal. No acute cardiopulmonary process.
+Reference sentence: Cardiac silhouette is top normal with likely adjacent epicardial fat pad. No acute cardiopulmonary process.
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear without focal consolidation. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No pleural effusion or pneumothorax is seen.
+
+Generated sentence: The lungs are clear. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear without focal consolidation. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No pleural effusion or pneumothorax is seen.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute intrathoracic process.
+Reference sentence: The cardiac and mediastinal silhouettes are unremarkable. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiac and mediastinal silhouettes are unremarkable.
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The cardiac and mediastinal silhouettes are unremarkable. No acute cardiopulmonary process.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: 
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear without infiltrate. There is minimal right CP angle blunting compatible with either a tiny effusion or is small amount of pleural thickening the bony thorax appears normal Blunting of the right CP angle otherwise normal chest.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is minimal right CP angle blunting compatible with either a tiny effusion or is small amount of pleural thickening the bony thorax appears normal Blunting of the right CP angle otherwise normal chest.
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear without infiltrate.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiac and mediastinal silhouettes are unremarkable. No acute cardiopulmonary process.
+Reference sentence: The cardiac and mediastinal silhouettes are normal.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiac and mediastinal silhouettes are normal.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiac and mediastinal silhouettes are normal.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: 
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax.
+Reference sentence: Low lung volumes. No focal consolidation or pleural effusion. Semi-upright portable view of the chest demonstrates small right apical pneumothorax, which has decreased in size since study obtained four hours prior. In comparison to study obtained four hours prior, there is interval decrease in right apical pneumothorax, now small.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: Semi-upright portable view of the chest demonstrates small right apical pneumothorax, which has decreased in size since study obtained four hours prior. In comparison to study obtained four hours prior, there is interval decrease in right apical pneumothorax, now small.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No focal consolidation or pleural effusion.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: Trace amount of free air is seen under the right hemidiaphragm.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Low lung volumes. No focal consolidation or pleural effusion. No appreciable left pneumothorax.
+
+Generated sentence: The mediastinal and hilar contours are normal. The pulmonary vasculature is normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: Heart size is normal.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: Trace amount of free air is seen under the right hemidiaphragm.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax.
+Reference sentence: Right apical pneumothorax with a diameter of approximately mm.
+
+Generated sentence: The mediastinal and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: Right apical pneumothorax with a diameter of approximately mm.
+
+Generated sentence: There is no pneumothorax or pleural effusion.
+Reference sentence: No convincing evidence of a left pneumothorax.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: No pneumothorax or pneumomediastinum.
+Reference sentence: No convincing evidence of a left pneumothorax.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: No evidence of tension.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: 
+
+Generated sentence: Heart size is normal.
+Reference sentence: Normal size of the cardiac silhouette.
+
+Generated sentence: No free air below the right hemidiaphragm.
+Reference sentence: Minimal right subdiaphragmatic air.
+
+Generated sentence: Moderate right pleural effusion is unchanged. There is no pneumothorax or pneumothorax.
+Reference sentence: Compared with the prior study, a right-sided pleural effusion, with right basilar atelectasis is new. However, pulmonary edema has improved. No pneumothorax. Improved pulmonary edema, with improvement of a prior retrocardiac consolidation, suggesting clearing of a prior mucous plug.
+
+Generated sentence: Right upper lobe opacities are unchanged.
+Reference sentence: 
+
+Generated sentence: In comparison with the study of ___, there is increased opacity in the right lower lobe.
+Reference sentence: 
+
+Generated sentence: Moderate right pleural effusion is unchanged.
+Reference sentence: Compared with the prior study, a right-sided pleural effusion, with right basilar atelectasis is new. Improved pulmonary edema, with improvement of a prior retrocardiac consolidation, suggesting clearing of a prior mucous plug.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: However, pulmonary edema has improved. Improved pulmonary edema, with improvement of a prior retrocardiac consolidation, suggesting clearing of a prior mucous plug.
+
+Generated sentence: There is no pneumothorax or large effusion.
+Reference sentence: 
+
+Generated sentence: There is no pneumothorax or pleural effusion.
+Reference sentence: However, pulmonary edema has improved. Improved pulmonary edema, with improvement of a prior retrocardiac consolidation, suggesting clearing of a prior mucous plug. The prior retrocardiac consolidation has also resolved, suggesting clearing of a mucous plug. No pneumothorax.
+
+Generated sentence: Upper lungs are clear.
+Reference sentence: 
+
+Generated sentence: In comparison with the study of ___, there is increased opacity in the right upper lobe and left lower lobe consistent with pulmonary edema.
+Reference sentence: 
+
+Generated sentence: Bibasilar atelectasis is unchanged.
+Reference sentence: The prior retrocardiac consolidation has also resolved, suggesting clearing of a mucous plug. Improved pulmonary edema, with improvement of a prior retrocardiac consolidation, suggesting clearing of a prior mucous plug.
+
+Generated sentence: There is no pulmonary edema.
+Reference sentence: However, pulmonary edema has improved. Improved pulmonary edema, with improvement of a prior retrocardiac consolidation, suggesting clearing of a prior mucous plug.
+
+Generated sentence: There is no pneumothorax or pneumomediastinum.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is unremarkable.
+Reference sentence: Interval removal of the NG tube.
+
+Generated sentence: Heart size is normal.
+Reference sentence: Mild cardiomegaly is unchanged.
+
+Generated sentence: There is no pneumothorax. There is no pneumothorax.
+Reference sentence: There is mild upper zone vascular redistribution, which suggests mild pulmonary vascular congestion. Additionally, there is a persistent small right pleural effusion with adjacent right basilar opacity, which may reflect atelectasis. Persistent small right pleural effusion with patchy right basilar opacity, potentially atelectasis. Mild pulmonary vascular congestion. No large pneumothorax is seen. No large pneumothorax identified on this supine limited exam.
+
+Generated sentence: Bilateral pleural effusions and bibasilar atelectasis are unchanged.
+Reference sentence: Additionally, there is a persistent small right pleural effusion with adjacent right basilar opacity, which may reflect atelectasis. Persistent small right pleural effusion with patchy right basilar opacity, potentially atelectasis.
+
+Generated sentence: There is mild pulmonary edema.
+Reference sentence: There is mild upper zone vascular redistribution, which suggests mild pulmonary vascular congestion. Mild pulmonary vascular congestion.
+
+Generated sentence: There is no pneumothorax.
+Reference sentence: There is mild upper zone vascular redistribution, which suggests mild pulmonary vascular congestion. Left lung is grossly clear, however, the left costophrenic angle is excluded from the field of view. Mild pulmonary vascular congestion. No large pneumothorax is seen. No large pneumothorax identified on this supine limited exam.
+
+Generated sentence: There is no pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is mild pulmonary edema.
+Reference sentence: There is mild upper zone vascular redistribution, which suggests mild pulmonary vascular congestion. Mild pulmonary vascular congestion.
+
+Generated sentence: The endotracheal tube is in standard position.
+Reference sentence: Endotracheal tube tip is slightly low lying, terminating approximately 2.3 cm from the carina. Endotracheal tube tip slightly low lying, terminating approximately 2.3 cm from the carina.
+
+Generated sentence: In comparison with the study of ___, there has been interval placement of a nasogastric tube.
+Reference sentence: Two enteric tube tips terminate within the stomach. 2 enteric tube tips within the stomach.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: 
+
+Generated sentence: Moderate cardiomegaly.
+Reference sentence: Heart size is borderline enlarged.
+
+Generated sentence: NG tube tip is in the stomach.
+Reference sentence: Two enteric tube tips terminate within the stomach. 2 enteric tube tips within the stomach.
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: PA and lateral radiographs of the chest demonstrate clear lungs without focal consolidation concerning for pneumonia, pleural effusion or pneumothorax. The pulmonary vasculature is not engorged. No acute cardiopulmonary pathology, specifically no evidence of pneumomediastinum.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: The mediastinal and hilar contours are within normal limits. The pulmonary vasculature is not engorged. There is no evidence of pneumomediastinum. No acute cardiopulmonary pathology, specifically no evidence of pneumomediastinum.
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: PA and lateral radiographs of the chest demonstrate clear lungs without focal consolidation concerning for pneumonia, pleural effusion or pneumothorax. The pulmonary vasculature is not engorged. No acute cardiopulmonary pathology, specifically no evidence of pneumomediastinum.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: The mediastinal and hilar contours are within normal limits. The pulmonary vasculature is not engorged. There is no evidence of pneumomediastinum. No acute cardiopulmonary pathology, specifically no evidence of pneumomediastinum.
+
+Generated sentence: There is no focal consolidation, effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute intrathoracic process.
+Reference sentence: The mediastinal and hilar contours are within normal limits. No acute cardiopulmonary pathology, specifically no evidence of pneumomediastinum. There is no evidence of pneumomediastinum.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The mediastinal and hilar contours are within normal limits.
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The cardiac silhouette is normal in size. No acute cardiopulmonary pathology, specifically no evidence of pneumomediastinum.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: The visualized upper abdomen is unremarkable.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Low lung volumes again seen. The lungs, however, remain clear and there is no effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: The lungs, however, remain clear and there is no effusion or pneumothorax.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Low lung volumes again seen. The lungs, however, remain clear and there is no effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: There is mild bibasilar atelectasis. Mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: The lungs, however, remain clear and there is no effusion or pneumothorax.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The aorta is tortuous.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: Cardiomediastinal silhouette is within normal limits. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: Cardiomediastinal silhouette is within normal limits.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: Cardiomediastinal silhouette is within normal limits. No acute cardiopulmonary process.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: As on prior, there are low lung volumes. There are calcified pulmonary nodules seen in the right upper lung stable dating back to ___. The lungs are clear of consolidation, effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: There is mild bibasilar atelectasis. Mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: The mediastinal and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: The lungs are clear of consolidation, effusion or pneumothorax.
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: As on prior, there are low lung volumes. The lungs are clear of consolidation, effusion or pneumothorax. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: The lungs are clear of consolidation, effusion or pneumothorax.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: No acute cardiopulmonary process.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear. Punctate granulomas in the right upper lobe are unchanged. There is no evidence of pneumonia, pneumothorax, or pleural effusion. No evidence of acute cardiopulmonary process.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no evidence of pneumonia, pneumothorax, or pleural effusion.
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear. There is no evidence of pneumonia, pneumothorax, or pleural effusion. No evidence of acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no evidence of pneumonia, pneumothorax, or pleural effusion.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The cardiac, mediastinal and hilar contours are unchanged with similar aortic tortuosity. No evidence of acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: The cardiac, mediastinal and hilar contours are unchanged with similar aortic tortuosity.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: No evidence of acute cardiopulmonary process.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear. There is no pulmonary vascular congestion. No acute cardiopulmonary process.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: There is no pulmonary vascular congestion.
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: The lungs are clear without focal consolidation, effusion, or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The lungs are clear. There is no pulmonary vascular congestion. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: There is no pulmonary vascular congestion.
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute intrathoracic process.
+Reference sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The cardiomediastinal silhouette is normal.
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: 
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax.
+Reference sentence: No focal consolidation, pleural effusion, pneumothorax, or pulmonary edema is detected. No radiographic evidence for acute cardiopulmonary process.
+
+Generated sentence: The mediastinal and hilar contours appear within normal limits.
+Reference sentence: No focal consolidation, pleural effusion, pneumothorax, or pulmonary edema is detected.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No focal consolidation, pleural effusion, pneumothorax, or pulmonary edema is detected.
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: No focal consolidation, pleural effusion, pneumothorax, or pulmonary edema is detected. No radiographic evidence for acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette and hilar contours are normal.
+Reference sentence: No focal consolidation, pleural effusion, pneumothorax, or pulmonary edema is detected.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No focal consolidation, pleural effusion, pneumothorax, or pulmonary edema is detected.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: Heart and mediastinal contours are within normal limits. Aortic arch calcifications are seen. No radiographic evidence for acute cardiopulmonary process.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: Aortic arch calcifications are seen. Heart and mediastinal contours are within normal limits.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: Heart and mediastinal contours are within normal limits. No radiographic evidence for acute cardiopulmonary process.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Lung volumes are slightly low. Pulmonary vasculature is normal. No focal consolidation, pleural effusion or pneumothorax is present. No acute cardiopulmonary abnormality.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: Mediastinal and hilar contours are unremarkable. Pulmonary vasculature is normal.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No focal consolidation, pleural effusion or pneumothorax is present.
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: Lung volumes are slightly low. Pulmonary vasculature is normal. No focal consolidation, pleural effusion or pneumothorax is present. No acute cardiopulmonary abnormality.
+
+Generated sentence: There is mild bibasilar atelectasis. Mild bibasilar atelectasis.
+Reference sentence: 
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: Mediastinal and hilar contours are unremarkable. Pulmonary vasculature is normal.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: No focal consolidation, pleural effusion or pneumothorax is present.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: There are mild degenerative changes in the thoracic spine.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: Mediastinal and hilar contours are unremarkable. No acute cardiopulmonary abnormality.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: Mediastinal and hilar contours are unremarkable.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: This accentuates the size of the cardiac silhouette which is likely top normal. No acute cardiopulmonary abnormality.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: Pulmonary markings are likely accentuated by lower lung volumes. There is no consolidation or pleural effusion. No pneumothorax. No evidence of pneumonia.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: Pulmonary markings are likely accentuated by lower lung volumes.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no consolidation or pleural effusion.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: 
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: Pulmonary markings are likely accentuated by lower lung volumes. There is no consolidation or pleural effusion. No pneumothorax. No evidence of pneumonia.
+
+Generated sentence: There is mild bibasilar atelectasis.
+Reference sentence: Pulmonary markings are likely accentuated by lower lung volumes.
+
+Generated sentence: The mediastinal and hilar contours are unremarkable.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: There is no consolidation or pleural effusion.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: There are bilateral healed rib fractures and left clavicular healed rib fracture.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: There are bilateral healed rib fractures and left clavicular healed rib fracture.
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: There is mild cardiomegaly.
+
+Generated sentence: No free air below the right hemidiaphragm is seen.
+Reference sentence: 
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax.
+Reference sentence: The pulmonary vasculature is not congested and no signs of acute or chronic pulmonary infiltrates can be seen. No evidence of cardiac enlargement, pulmonary congestion, or acute or chronic pulmonary parenchymal infiltrates. No evidence of pneumothorax in the apical area.
+
+Generated sentence: The cardiomediastinal and hilar contours are normal.
+Reference sentence: The pulmonary vasculature is not congested and no signs of acute or chronic pulmonary infiltrates can be seen. No evidence of cardiac enlargement, pulmonary congestion, or acute or chronic pulmonary parenchymal infiltrates.
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax. No acute cardiopulmonary process.
+Reference sentence: The pulmonary vasculature is not congested and no signs of acute or chronic pulmonary infiltrates can be seen. No evidence of cardiac enlargement, pulmonary congestion, or acute or chronic pulmonary parenchymal infiltrates. No evidence of pneumothorax in the apical area.
+
+Generated sentence: The cardiomediastinal and hilar contours are normal.
+Reference sentence: The pulmonary vasculature is not congested and no signs of acute or chronic pulmonary infiltrates can be seen. No evidence of cardiac enlargement, pulmonary congestion, or acute or chronic pulmonary parenchymal infiltrates.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: There is also evidence of an old fracture in mid portion of the left clavicle again with bridging callus. Appearance of bilateral old multiple rib fractures and left-sided clavicle fracture apparently of older date.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: Unremarkable appearance of thoracic aorta. No mediastinal abnormalities are present.
+
+Generated sentence: The cardiomediastinal silhouette is within normal limits.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: The heart size is within normal limits. No evidence of cardiac enlargement, pulmonary congestion, or acute or chronic pulmonary parenchymal infiltrates.
+
+Generated sentence: The lungs are clear. There is no pleural effusion or pneumothorax.
+Reference sentence: Lungs are clear without focal consolidation, pleural effusion, or pneumothorax. No focal consolidation.
+
+Generated sentence: The mediastinal and hilar contours are normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: Lungs are clear without focal consolidation, pleural effusion, or pneumothorax.
+
+Generated sentence: The lungs are clear. No pleural effusion or pneumothorax is seen. No acute cardiopulmonary process.
+Reference sentence: Lungs are clear without focal consolidation, pleural effusion, or pneumothorax. No focal consolidation.
+
+Generated sentence: The mediastinal and hilar contours are normal. The pulmonary vasculature is normal.
+Reference sentence: 
+
+Generated sentence: There is no focal consolidation, effusion, or pneumothorax.
+Reference sentence: 
+
+Generated sentence: There is no pleural effusion or pneumothorax.
+Reference sentence: Lungs are clear without focal consolidation, pleural effusion, or pneumothorax.
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: There are no acute osseous abnormalities.
+Reference sentence: 
+
+Generated sentence: The cardiomediastinal silhouette is normal. No acute cardiopulmonary process.
+Reference sentence: Heart size and cardiomediastinal contours are normal.
+
+Generated sentence: The cardiomediastinal silhouette is normal.
+Reference sentence: Heart size and cardiomediastinal contours are normal.
+
