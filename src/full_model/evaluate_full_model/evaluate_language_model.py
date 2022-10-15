@@ -27,6 +27,11 @@ import evaluate
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+from pycocoevalcap.bleu.bleu import Bleu
+from pycocoevalcap.meteor.meteor import Meteor
+from pycocoevalcap.rouge.rouge import Rouge
+from pycocoevalcap.cider.cider import Cider
+from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 import spacy
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
@@ -53,10 +58,67 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
+    def compute_NLG_scores(metrics: list[str], gen_sents_or_reports: list[str], ref_sents_or_reports: list[str]) -> dict[str, float]:
+        def convert_for_tokenizer(sents_or_reports: list[str]):
+            """See comments where this function is used for explanation on why this function is needed."""
+            sents_or_reports_converted = {}
+            for num, text in enumerate(sents_or_reports):
+                sents_or_reports_converted[str(num)] = [{"caption": text}]
+
+            return sents_or_reports_converted
+        """
+        Computes NLG metrics that are specified in metrics list (1st input argument):
+            - Bleu 1-4
+            - Meteor
+            - Rouge-L
+            - Cider-D
+
+        Computation is based on MS COCO evaluation using Python 3 (see evaluate function):
+        (https://github.com/salaniz/pycocoevalcap/blob/ad63453cfab57a81a02b2949b17a91fab1c3df77/eval.py#L19)
+
+        Returns a dict that maps from the metrics specified to the corresponding scores.
+        """
+        scorers = {}
+        if "bleu" in metrics:
+            scorers["bleu"] = Bleu(4)
+        if "meteor" in metrics:
+            scorers["meteor"] = Meteor()
+        if "rouge" in metrics:
+            scorers["rouge"] = Rouge()  # this is actually the Rouge-L score, even if the class name only says Rouge
+        if "cider" in metrics:
+            scorers["cider"] = Cider()  # this is actually the Cider-D score, even if the class name only says Cider
+
+        # we first apply the PTBTokenizer, which mainly strips the generated and reference sentences/reports of punctuation and lowercases them
+        # the tokenizer excepts the sentences/reports not to be a list[str], but of the form:
+        # gen_sents = {
+        #   "0": [{"caption": "this is the 1st generated sentence"}],
+        #   "1": [{"caption": "this is the 2nd generated sentence"}],
+        #   ...
+        # }
+        # hence use function convert_for_tokenizer
+        gen_sents_or_reports = convert_for_tokenizer(gen_sents_or_reports)
+        ref_sents_or_reports = convert_for_tokenizer(ref_sents_or_reports)
+
+        tokenizer = PTBTokenizer()
+        gen_sents_or_reports = tokenizer.tokenize(gen_sents_or_reports)
+        ref_sents_or_reports = tokenizer.tokenize(ref_sents_or_reports)
+
+        nlg_scores = {}
+
+        for metric_name, scorer in scorers.items():
+            score, _ = scorer.compute_score(ref_sents_or_reports, gen_sents_or_reports)
+            if metric_name == "bleu":
+                nlg_scores["bleu_1"] = score[0]
+                nlg_scores["bleu_2"] = score[1]
+                nlg_scores["bleu_3"] = score[2]
+                nlg_scores["bleu_4"] = score[3]
+            else:
+                nlg_scores[metric_name] = score
+
+        return nlg_scores
+
     def compute_clinical_efficacy_scores(gen_reports: list[str], ref_reports: list[str]):
         """
-        Note that this function is also used to compute the CE scores for generated and reference sentences (as opposed to reports).
-
         To get the CE scores, we first need the disease labels extracted by CheXbert
 
         The function label from module CheXbert/src/label.py that extracts these labels requires 2 input arguments:
@@ -110,9 +172,6 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             model.eval()
 
             return model
-
-        # note that this function works just as well for generated and reference sentences
-        # I just didn't want to make the variable names more complicated
 
         chexbert = get_chexbert()
 
@@ -184,14 +243,16 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             return filtered_gen_sents, filtered_ref_sents
 
         def compute_sent_level_scores_for_subset(subset, gen_sents, ref_sents):
-            for metric, score in language_model_scores[subset].items():
-                meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
-                language_model_scores[subset][metric] = float(meteor_result)
+            nlg_metrics = ["meteor"]
+            nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
+            meteor_score = nlg_scores["meteor"]
+            language_model_scores[subset]["meteor"] = meteor_score
 
         def compute_sent_level_scores_for_region(region_name, gen_sents, ref_sents):
-            for metric, score in language_model_scores["region"][region_name].items():
-                meteor_result = score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
-                language_model_scores["region"][region_name][metric] = float(meteor_result)
+            nlg_metrics = ["meteor"]
+            nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
+            meteor_score = nlg_scores["meteor"]
+            language_model_scores["region"][region_name]["meteor"] = meteor_score
 
         generated_sents = gen_and_ref_sentences["generated_sentences"]
         generated_sents_normal = gen_and_ref_sentences["generated_sentences_normal_selected_regions"]
@@ -218,26 +279,19 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             if len(region_generated_sentences) != 0:
                 compute_sent_level_scores_for_region(region_name, region_generated_sentences, region_reference_sentences)
             else:
-                for metric, _ in language_model_scores["region"][region_name].items():
-                    language_model_scores["region"][region_name][metric] = -1
+                language_model_scores["region"][region_name]["meteor"] = -1
 
     def compute_report_level_scores():
         gen_reports = gen_and_ref_reports["generated_reports"]
         ref_reports = gen_and_ref_reports["reference_reports"]
 
-        for metric, score in language_model_scores["report"].items():
-            if metric.startswith("bleu"):
-                bleu_score_type = int(metric[-1])
-                bleu_result = score.compute(predictions=gen_reports, references=ref_reports, max_order=bleu_score_type)["bleu"]
-                language_model_scores["report"][metric] = float(bleu_result)
-            elif metric == "meteor":
-                meteor_result = score.compute(predictions=gen_reports, references=ref_reports)["meteor"]
-                language_model_scores["report"][metric] = float(meteor_result)
-            elif metric == "rouge":
-                rouge_result = score.compute(predictions=gen_reports, references=ref_reports)["rougeL"]
-                language_model_scores["report"][metric] = float(rouge_result)
-            elif metric == "CE":
-                compute_clinical_efficacy_scores(gen_reports, ref_reports)
+        nlg_metrics = ["bleu", "meteor", "rouge", "cider"]
+        nlg_scores = compute_NLG_scores(nlg_metrics, gen_reports, ref_reports)
+
+        for nlg_metric_name, score in nlg_scores:
+            language_model_scores["report"][nlg_metric_name] = score
+
+        compute_clinical_efficacy_scores(gen_reports, ref_reports)
 
     def create_language_model_scores_dict():
         language_model_scores = {}
@@ -246,14 +300,15 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         # BLEU 1-4
         # METEOR
         # ROUGE-L
+        # Cider-D
         # CE scores (P, R, F1, acc)
-        language_model_scores["report"] = {f"bleu_{i}": evaluate.load("bleu") for i in range(1, 5)}
-        language_model_scores["report"]["meteor"] = evaluate.load("meteor")
-        language_model_scores["report"]["rouge"] = evaluate.load("rouge")
+        language_model_scores["report"] = {f"bleu_{i}": None for i in range(1, 5)}
+        language_model_scores["report"]["meteor"] = None
+        language_model_scores["report"]["rouge"] = None
+        language_model_scores["report"]["cider"] = None
         language_model_scores["report"]["CE"] = {
             # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases:
             # Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
-            # the averages will be calculated with sklearn precision_recall_fscore_support and accuracy_score later
             "precision": None,
             "recall": None,
             "f1": None,
@@ -268,15 +323,15 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                 "acc": None
             }
 
-        # on sentence-level, we evaluate on METEOR, since this gives meaningful scores on sentence-level
+        # on sentence-level, we only evaluate on METEOR, since this metric gives meaningful scores on sentence-level (as opposed to e.g. BLEU)
         # we distinguish between generated sentences for all, normal, and abnormal regions
         for subset in ["all", "normal", "abnormal"]:
-            language_model_scores[subset] = {"meteor": evaluate.load("meteor")}
+            language_model_scores[subset] = {"meteor": None}
 
         # we also compute these scores for each region individually
         language_model_scores["region"] = {}
         for region_name in ANATOMICAL_REGIONS:
-            language_model_scores["region"][region_name] = {"meteor": evaluate.load("meteor")}
+            language_model_scores["region"][region_name] = {"meteor": None}
 
         return language_model_scores
 

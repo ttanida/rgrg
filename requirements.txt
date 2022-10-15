@@ -10,6 +10,8 @@ numpy==1.22.3
 opencv_python==4.5.5.64
 pandas==1.4.2
 Pillow==9.2.0
+pycocoevalcap==1.2
+pycocotools==2.0.5
 rouge-score==0.1.2
 scikit_learn==1.1.2
 setuptools==61.2.0
