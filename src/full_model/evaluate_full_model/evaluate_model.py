@@ -96,10 +96,18 @@ def write_all_losses_and_scores_to_tensorboard(
         ce_score_dict is of the structure:
 
         {
-            precision: ...,
-            recall: ...,
-            f1: ...,
-            acc: ...,
+            precision_micro_5: ...,
+            precision_micro_all: ...,
+            precision_example_all: ...,
+            recall_micro_5: ...,
+            recall_micro_all: ...,
+            recall_example_all: ...,
+            f1_micro_5: ...,
+            f1_micro_all: ...,
+            f1_example_all: ...,
+            acc_micro_5: ...,
+            acc_micro_all: ...,
+            acc_example_all: ...,
             condition_1 : {
                 precision: ...,
                 recall: ...,
@@ -124,10 +132,8 @@ def write_all_losses_and_scores_to_tensorboard(
         where the "..." after the 4 metrics are the corresponding scores,
         and condition_* are from the 14 conditions in src/CheXbert/src/constants.py
         """
-        metrics = {"precision", "recall", "f1", "acc"}
-
         for k, v in ce_score_dict.items():
-            if k in metrics:
+            if k.startswith("precision") or k.startswith("recall") or k.startswith("f1") or k.startswith("acc"):
                 writer.add_scalar(f"language_model/report/CE/{k}", v, overall_steps_taken)
             else:
                 # k is a condition
