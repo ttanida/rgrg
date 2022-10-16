@@ -4,7 +4,6 @@ import pathlib
 import pickle
 
 import numpy as np
-# from pycocoevalcap.cider.cider_scorer import precook, cook_refs, cook_test
 from pycocoevalcap.cider.cider_scorer import CiderScorer
 
 from src.full_model.evaluate_full_model.cider.compute_cider_document_frequencies import compute_cider_df

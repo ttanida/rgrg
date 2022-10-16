@@ -19,7 +19,7 @@ import pathlib
 from nltk.tokenize import wordpunct_tokenize
 from pycocoevalcap.cider.cider_scorer import CiderScorer
 
-# from src.path_datasets_and_weights import path_full_dataset
+from src.path_datasets_and_weights import path_full_dataset
 
 
 def get_reference_reports_val_set():
@@ -27,7 +27,7 @@ def get_reference_reports_val_set():
 
     # Miura computes the document frequency on the "findings" section of the reference reports of the train set,
     # but since my train set does not have the reference reports, I calculate it on the val set
-    path_val_set_csv_file = os.path.join("/u/home/tanida/datasets/dataset-with-reference-reports", "valid.csv")
+    path_val_set_csv_file = os.path.join(path_full_dataset, "valid.csv")
 
     with open(path_val_set_csv_file) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")

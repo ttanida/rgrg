@@ -9,7 +9,7 @@
 
 """
 Almost same code as original implementation by salaniz (https://github.com/salaniz/pycocoevalcap/blob/master/cider/cider.py),
-but I use a custom cider scorer in line 45 that uses document frequencies calculated on my validation set.
+but I use a custom cider scorer in line 41 that uses document frequencies calculated on my validation set.
 
 Inspired by Miura's implementation: (https://github.com/ysmiura/ifcc/blob/0c5c24ca8a5bba673ae32840e27a33481ae17d18/clinicgen/external/cider/cider.py).
 """
