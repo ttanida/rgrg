@@ -371,7 +371,10 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
 
     num_images = len(test_set_as_df)
     mean = 0
-    stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]  # [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    if variation_type == "position":
+        stds_to_evaluate = np.arange(start=0, stop=1, step=0.1).tolist()
+    else:
+        stds_to_evaluate = np.arange(start=0, stop=2, step=0.1).tolist()
 
     transforms = get_transforms()
 
