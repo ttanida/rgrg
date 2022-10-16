@@ -62,7 +62,7 @@ def compute_cider_df():
     df = scorer.document_frequency
 
     parent_path_of_this_file = pathlib.Path(__file__).parent.resolve()
-    output_path = os.path.join(parent_path_of_this_file, "mimic-cxr-document-frequency-processed.bin.gz")
+    output_path = os.path.join(parent_path_of_this_file, "mimic-cxr-document-frequency.bin.gz")
     with gzip.open(output_path, 'w') as f:
         pickle.dump(df, f)
 

@@ -1,12 +1,9 @@
-position variation, std 0.1, meteor score: 0.09654
-position variation, std 0.2, meteor score: 0.08812
-position variation, std 0.3, meteor score: 0.08051
-position variation, std 0.4, meteor score: 0.07040
-position variation, std 0.5, meteor score: 0.06580
+aspect_ratio variation, std 0.1, meteor score: 0.10905
+aspect_ratio variation, std 0.2, meteor score: 0.10920
+aspect_ratio variation, std 0.3, meteor score: 0.10819
+aspect_ratio variation, std 0.4, meteor score: 0.10676
+aspect_ratio variation, std 0.5, meteor score: 0.10502
 
-scale variation, std 0.1, meteor score: 0.10135
-scale variation, std 0.2, meteor score: 0.10020
-scale variation, std 0.3, meteor score: 0.09691
-scale variation, std 0.4, meteor score: 0.09283
-scale variation, std 0.5, meteor score: 0.09137
-
+position variation, std 0.1, meteor score: 0.10429
+position variation, std 0.2, meteor score: 0.09627
+position variation, std 0.3, meteor score: 0.08781

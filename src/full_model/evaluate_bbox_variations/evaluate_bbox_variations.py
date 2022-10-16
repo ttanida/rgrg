@@ -30,7 +30,7 @@ NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 100
 
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
-path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial/test-200.csv"  # "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
+path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
 
 # path where "bbox_variations_results.txt" will be saved that will contain the meteor scores for the different variations
 path_results_txt_file = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/bbox_variations_results.txt"
@@ -466,7 +466,7 @@ def main():
 
     tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated output ids by the language model
 
-    for variation_type in ["position", "scale"]:  # "aspect_ratio"
+    for variation_type in ["position", "scale", "aspect_ratio"]:
         evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tokenizer)
 
 

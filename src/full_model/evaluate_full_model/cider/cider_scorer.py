@@ -21,7 +21,7 @@ class CustomCiderScorer(CiderScorer):
 
     def _get_document_frequency(self):
         parent_path_of_this_file = pathlib.Path(__file__).parent.resolve()
-        df_file = os.path.join(parent_path_of_this_file, "mimic-cxr-document-frequency-processed.bin.gz")
+        df_file = os.path.join(parent_path_of_this_file, "mimic-cxr-document-frequency.bin.gz")
 
         if not os.path.exists(df_file):
             compute_cider_df()

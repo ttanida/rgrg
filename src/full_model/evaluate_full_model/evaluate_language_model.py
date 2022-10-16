@@ -21,7 +21,7 @@ from collections import defaultdict
 import csv
 import io
 import os
-# import re
+import re
 import tempfile
 
 import evaluate
@@ -31,7 +31,6 @@ from PIL import Image
 from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.meteor.meteor import Meteor
 from pycocoevalcap.rouge.rouge import Rouge
-from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 import spacy
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
@@ -59,11 +58,23 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], ref_sents_or_reports: list[str]) -> dict[str, float]:
-    def convert_for_tokenizer(sents_or_reports: list[str]):
-        """See comments where this function is used for explanation on why this function is needed."""
+    def convert_for_pycoco_scorer(sents_or_reports: list[str]):
+        """
+        The compute_score methods of the scorer objects require the input not to be list[str],
+        but of the form:
+        generated_reports =
+        {
+            "image_id_0" = ["1st generated report"],
+            "image_id_1" = ["2nd generated report"],
+            ...
+        }
+
+        Hence we convert the generated/reference sentences/reports into the appropriate format and also tokenize them
+        by lowercasing and separating punctuations from words.
+        """
         sents_or_reports_converted = {}
         for num, text in enumerate(sents_or_reports):
-            sents_or_reports_converted[str(num)] = [{"caption": text}]  # [re.sub(' +', ' ', text.replace(".", " .")).lower()]
+            sents_or_reports_converted[str(num)] = [re.sub(' +', ' ', text.replace(".", " .")).lower()]
 
         return sents_or_reports_converted
     """
@@ -72,9 +83,6 @@ def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], 
         - Meteor
         - Rouge-L
         - Cider-D
-
-    Computation is based on MS COCO evaluation using Python 3 (see evaluate function):
-    (https://github.com/salaniz/pycocoevalcap/blob/ad63453cfab57a81a02b2949b17a91fab1c3df77/eval.py#L19)
 
     Returns a dict that maps from the metrics specified to the corresponding scores.
     """
@@ -88,21 +96,8 @@ def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], 
     if "cider" in nlg_metrics:
         scorers["cider"] = Cider()  # this is actually the Cider-D score, even if the class name only says Cider
 
-    # we first apply the PTBTokenizer, which mainly lowercases the generated and reference sentences/reports
-    # and separates punctuations from words
-    # the tokenizer excepts the sentences/reports not to be a list[str], but to be of the form:
-    # gen_sents = {
-    #   "0": [{"caption": "this is the 1st generated sentence"}],
-    #   "1": [{"caption": "this is the 2nd generated sentence"}],
-    #   ...
-    # }
-    # -> hence use function convert_for_tokenizer
-    gen_sents_or_reports = convert_for_tokenizer(gen_sents_or_reports)
-    ref_sents_or_reports = convert_for_tokenizer(ref_sents_or_reports)
-
-    tokenizer = PTBTokenizer()
-    gen_sents_or_reports = tokenizer.tokenize(gen_sents_or_reports)
-    ref_sents_or_reports = tokenizer.tokenize(ref_sents_or_reports)
+    gen_sents_or_reports = convert_for_pycoco_scorer(gen_sents_or_reports)
+    ref_sents_or_reports = convert_for_pycoco_scorer(ref_sents_or_reports)
 
     nlg_scores = {}
 
