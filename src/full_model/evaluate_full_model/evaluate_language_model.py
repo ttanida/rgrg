@@ -114,65 +114,58 @@ def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], 
     return nlg_scores
 
 
-def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
-    def compute_clinical_efficacy_scores(gen_reports: list[str], ref_reports: list[str]):
-        """
-        To get the CE scores, we first need the disease labels extracted by CheXbert
+def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: list[str], ref_reports: list[str]):
+    """
+    This function computes:
+        - micro average CE scores over all 14 conditions
+        - micro average CE scores over 5 conditions ("Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion")
+        -> this is done following Miura (https://arxiv.org/pdf/2010.10042.pdf)
+        - (micro) average CE scores of each condition
+        - example-based CE scores over all 14 conditions
+        -> this is done following Nicolson (https://arxiv.org/pdf/2201.09405.pdf)
 
-        The function label from module CheXbert/src/label.py that extracts these labels requires 2 input arguments:
-            1. chexbert (nn.Module): instantiated chexbert model
-            2. csv_path (str): path to the csv file with the reports. The csv file has to have 1 column titled "Report Impression"
-            under which the reports can be found
+    To compute these scores, we first need to get the disease labels extracted by CheXbert for both the generated and reference reports.
+    This is done by the (nested) function "get_chexbert_labels_for_gen_and_ref_reports". Inside this function, there is another function
+    called "label" from the module src/CheXbert/src/label.py that extracts these labels requiring 2 input arguments:
+        1. chexbert (nn.Module): instantiated chexbert model
+        2. csv_path (str): path to the csv file with the reports. The csv file has to have 1 column titled "Report Impression"
+        under which the reports can be found
 
-        We use a temporary directory to create the csv files for the generated and reference reports.
+    We use a temporary directory to create the csv files for the generated and reference reports.
 
-        The function label returns preds_gen_reports and preds_ref_reports respectively, which are List[List[int]],
-        with the outer list always having len=14 (for 14 conditions, specified in CheXbert/src/constants.py),
-        and the inner list of len=num_reports.
+    The function label returns preds_gen_reports and preds_ref_reports respectively, which are List[List[int]],
+    with the outer list always having len=14 (for 14 conditions, specified in CheXbert/src/constants.py),
+    and the inner list has len=num_reports.
 
-        E.g. the 1st inner list could be [2, 1, 0, 3], which means the 1st report has label 2 for the 1st condition (which is 'Enlarged Cardiomediastinum'),
-        the 2nd report has label 1 for the 1st condition, the 3rd report has label 0 for the 1st condition, the 4th and final report label 3 for the 1st condition.
+    E.g. the 1st inner list could be [2, 1, 0, 3], which means the 1st report has label 2 for the 1st condition (which is 'Enlarged Cardiomediastinum'),
+    the 2nd report has label 1 for the 1st condition, the 3rd report has label 0 for the 1st condition, the 4th and final report label 3 for the 1st condition.
 
-        There are 4 possible labels:
-            0: blank/NaN (i.e. no prediction could be made about a condition, because it was no mentioned in a report)
-            1: positive (condition was mentioned as present in a report)
-            2: negative (condition was mentioned as not present in a report)
-            3: uncertain (condition was mentioned as possibly present in a report)
+    There are 4 possible labels:
+        0: blank/NaN (i.e. no prediction could be made about a condition, because it was no mentioned in a report)
+        1: positive (condition was mentioned as present in a report)
+        2: negative (condition was mentioned as not present in a report)
+        3: uncertain (condition was mentioned as possibly present in a report)
 
-        Following the implementation of the paper "Improving Factual Completeness and Consistency of Image-to-text Radiology Report Generation"
-        by Miura et. al., we merge negative and blank/NaN into one whole negative class, and positive and uncertain into one whole positive class.
-        For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py#L141,
-        where label 3 is converted to label 1, and label 2 is converted to label 0.
-        """
-        def convert_labels(preds_reports: list[list[int]]):
-            """
-            See doc string of update_clinical_efficacy_scores function for more details.
-            Converts label 2 -> label 0 and label 3 -> label 1.
-            """
-            def convert_label(label: int):
-                if label == 2:
-                    return 0
-                elif label == 3:
-                    return 1
-                else:
-                    return label
+    To compute the micro average scores (i.e. all the scores except of the example-based scores), we follow the implementation of the paper
+    by Miura et. al., who considered the negative and blank/NaN to be one whole negative class, and positive and uncertain to be one whole positive class.
+    For reference, see lines 141 and 143 of Miura's implementation: https://github.com/ysmiura/ifcc/blob/master/eval_prf.py#L141,
+    where label 3 is converted to label 1, and label 2 is converted to label 0.
 
-            preds_reports = [[convert_label(label) for label in condition_list] for condition_list in preds_reports]
+    To compute the example-based scores, we follow Nicolson's implementation, who considered blank/NaN, negative and uncertain to be the negative class,
+    and only positive to be the positive class. Meaning labels 2 and 3 are converted to label 0.
+    """
 
-            return preds_reports
+    def get_chexbert():
+        model = bert_labeler()
+        model = nn.DataParallel(model)  # needed since weights were saved with nn.DataParallel
+        checkpoint = torch.load(path_chexbert_weights, map_location=torch.device("cpu"))
+        model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        model = model.to(device)
+        model.eval()
 
-        def get_chexbert():
-            model = bert_labeler()
-            model = nn.DataParallel(model)  # needed since weights were saved with nn.DataParallel
-            checkpoint = torch.load(path_chexbert_weights, map_location=torch.device("cpu"))
-            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-            model = model.to(device)
-            model.eval()
+        return model
 
-            return model
-
-        chexbert = get_chexbert()
-
+    def get_chexbert_labels_for_gen_and_ref_reports():
         with tempfile.TemporaryDirectory() as temp_dir:
             csv_gen_reports_file_path = os.path.join(temp_dir, "gen_reports.csv")
             csv_ref_reports_file_path = os.path.join(temp_dir, "ref_reports.csv")
@@ -193,21 +186,52 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             preds_gen_reports = label(chexbert, csv_gen_reports_file_path)
             preds_ref_reports = label(chexbert, csv_ref_reports_file_path)
 
-        preds_gen_reports = convert_labels(preds_gen_reports)
-        preds_ref_reports = convert_labels(preds_ref_reports)
+        return preds_gen_reports, preds_ref_reports
 
-        # for the CE scores, we follow Miura (https://arxiv.org/pdf/2010.10042.pdf) in averaging them over these 5 conditions:
+    def compute_micro_average_CE_scores(preds_gen_reports, preds_ref_reports):
+        def convert_labels_like_miura(preds_reports: list[list[int]]):
+            """
+            See doc string of update_clinical_efficacy_scores function for more details.
+            Miura (https://arxiv.org/pdf/2010.10042.pdf) considers blank/NaN (label 0) and negative (label 2) to be the negative class,
+            and positive (label 1) and uncertain (label 3) to be the positive class.
+
+            Thus we convert label 2 -> label 0 and label 3 -> label 1.
+            """
+            def convert_label(label: int):
+                if label == 2:
+                    return 0
+                elif label == 3:
+                    return 1
+                else:
+                    return label
+
+            preds_reports_converted = [[convert_label(label) for label in condition_list] for condition_list in preds_reports]
+
+            return preds_reports_converted
+
+        preds_gen_reports_converted = convert_labels_like_miura(preds_gen_reports)
+        preds_ref_reports_converted = convert_labels_like_miura(preds_ref_reports)
+
+        # for the CE scores, we follow Miura (https://arxiv.org/pdf/2010.10042.pdf) in micro averaging them over these 5 conditions:
         five_conditions_to_evaluate = {"Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"}
 
         total_preds_gen_reports_5_conditions = []
         total_preds_ref_reports_5_conditions = []
 
+        # we also compute the micro average over all 14 conditions:
+        total_preds_gen_reports_14_conditions = []
+        total_preds_ref_reports_14_conditions = []
+
         # iterate over the 14 conditions
-        for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports, preds_ref_reports, CONDITIONS):
+        for preds_gen_reports_condition, preds_ref_reports_condition, condition in zip(preds_gen_reports_converted, preds_ref_reports_converted, CONDITIONS):
             if condition in five_conditions_to_evaluate:
                 total_preds_gen_reports_5_conditions.extend(preds_gen_reports_condition)
                 total_preds_ref_reports_5_conditions.extend(preds_ref_reports_condition)
 
+            total_preds_gen_reports_14_conditions.extend(preds_gen_reports_condition)
+            total_preds_ref_reports_14_conditions.extend(preds_ref_reports_condition)
+
+            # compute and save scores for the given condition
             precision, recall, f1, _ = precision_recall_fscore_support(preds_ref_reports_condition, preds_gen_reports_condition, average="binary")
             acc = accuracy_score(preds_ref_reports_condition, preds_gen_reports_condition)
 
@@ -216,13 +240,78 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             language_model_scores["report"]["CE"][condition]["f1"] = f1
             language_model_scores["report"]["CE"][condition]["acc"] = acc
 
+        # compute and save scores for all 14 conditions
+        precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_14_conditions, total_preds_gen_reports_14_conditions, average="binary")
+        acc = accuracy_score(total_preds_ref_reports_14_conditions, total_preds_gen_reports_14_conditions)
+
+        language_model_scores["report"]["CE"]["precision_micro_all"] = precision
+        language_model_scores["report"]["CE"]["recall_micro_all"] = recall
+        language_model_scores["report"]["CE"]["f1_micro_all"] = f1
+        language_model_scores["report"]["CE"]["acc_all"] = acc
+
+        # compute and save scores for the 5 conditions
         precision, recall, f1, _ = precision_recall_fscore_support(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions, average="binary")
         acc = accuracy_score(total_preds_ref_reports_5_conditions, total_preds_gen_reports_5_conditions)
 
-        language_model_scores["report"]["CE"]["precision"] = precision
-        language_model_scores["report"]["CE"]["recall"] = recall
-        language_model_scores["report"]["CE"]["f1"] = f1
-        language_model_scores["report"]["CE"]["acc"] = acc
+        language_model_scores["report"]["CE"]["precision_micro_5"] = precision
+        language_model_scores["report"]["CE"]["recall_micro_5"] = recall
+        language_model_scores["report"]["CE"]["f1_micro_5"] = f1
+        language_model_scores["report"]["CE"]["acc_5"] = acc
+
+    def compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports):
+        """
+        example-based means precision/recall/F1/acc are computed for each report, and then these scores are averaged over all reports
+        """
+        preds_gen_reports_np = np.array(preds_gen_reports)  # array of shape (14 x num_reports)
+        preds_ref_reports_np = np.array(preds_ref_reports)  # array of shape (14 x num_reports)
+
+        # convert label 1 to True and everything else to False
+        # (effectively doing the label conversion as done by Nicolson, see doc string of compute_clinical_efficacy_scores for more details)
+        preds_gen_reports_np = preds_gen_reports_np == 1
+        preds_ref_reports_np = preds_ref_reports_np == 1
+
+        tp = np.logical_and(preds_gen_reports_np, preds_ref_reports_np)  # bool array of shape (14 x num_reports)
+        fp = np.logical_and(preds_gen_reports_np, ~preds_ref_reports_np)  # bool array of shape (14 x num_reports)
+        fn = np.logical_and(~preds_gen_reports_np, preds_ref_reports_np)  # bool array of shape (14 x num_reports)
+        tn = np.logical_and(~preds_gen_reports_np, ~preds_ref_reports_np)  # bool array of shape (14 x num_reports)
+
+        # sum up the TP, FP, FN and TN for each report (i.e. for each column)
+        tp_example = tp.sum(axis=0)  # int array of shape (num_reports)
+        fp_example = fp.sum(axis=0)  # int array of shape (num_reports)
+        fn_example = fn.sum(axis=0)  # int array of shape (num_reports)
+        tn_example = tn.sum(axis=0)  # int array of shape (num_reports)
+
+        # compute the scores for each report
+        precision_example = tp_example / (tp_example + fp_example)  # float array of shape (num_reports)
+        recall_example = tp_example / (tp_example + fn_example)  # float array of shape (num_reports)
+        f1_example = tp_example / (tp_example + 0.5 * (fp_example + fn_example))  # float array of shape (num_reports)
+        acc_example = (tp_example + tn_example) / (tp_example + tn_example + fp_example + fn_example)  # float array of shape (num_reports)
+
+        # since there can be cases of zero division, we have to replace the resulting nan values with 0.0
+        precision_example[np.isnan(precision_example)] = 0.0
+        recall_example[np.isnan(recall_example)] = 0.0
+        f1_example[np.isnan(f1_example)] = 0.0
+        acc_example[np.isnan(acc_example)] = 0.0
+
+        # finally, take the mean over the scores for all reports
+        precision_example = float(precision_example.mean())
+        recall_example = float(recall_example.mean())
+        f1_example = float(f1_example.mean())
+        acc_example = float(acc_example.mean())
+
+        language_model_scores["report"]["CE"]["precision_example_all"] = precision_example
+        language_model_scores["report"]["CE"]["recall_example_all"] = recall_example
+        language_model_scores["report"]["CE"]["f1_example_all"] = f1_example
+        language_model_scores["report"]["CE"]["acc_example_all"] = acc_example
+
+    chexbert = get_chexbert()
+    preds_gen_reports, preds_ref_reports = get_chexbert_labels_for_gen_and_ref_reports()
+
+    compute_micro_average_CE_scores(preds_gen_reports, preds_ref_reports)
+    compute_example_based_CE_scores(preds_gen_reports, preds_ref_reports)
+
+
+def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
 
     def compute_sentence_level_scores():
         def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
@@ -289,7 +378,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         for nlg_metric_name, score in nlg_scores.items():
             language_model_scores["report"][nlg_metric_name] = score
 
-        compute_clinical_efficacy_scores(gen_reports, ref_reports)
+        compute_clinical_efficacy_scores(language_model_scores, gen_reports, ref_reports)
 
     def create_language_model_scores_dict():
         language_model_scores = {}
@@ -305,13 +394,22 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         language_model_scores["report"]["rouge"] = None
         language_model_scores["report"]["cider"] = None
         language_model_scores["report"]["CE"] = {
-            # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases:
-            # Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
-            "precision": None,
-            "recall": None,
-            "f1": None,
-            "acc": None
+            # following Miura (https://arxiv.org/pdf/2010.10042.pdf), we evaluate the micro average CE scores over these 5 diseases/conditions:
+            # "Cardiomegaly", "Edema", "Consolidation", "Atelectasis", "Pleural Effusion"
+            "precision_micro_5": None,
+            "recall_micro_5": None,
+            "f1_micro_5": None,
+            "acc_5": None
         }
+
+        # we additionally compute the micro average CE scores over all conditions:
+        language_model_scores["report"]["CE"] = {
+            "precision_micro_all": None,
+            "recall_micro_all": None,
+            "f1_micro_all": None,
+            "acc_all": None
+        }
+
         # we also compute the CE scores for each of the 14 conditions individually
         for condition in CONDITIONS:
             language_model_scores["report"]["CE"][condition] = {
@@ -320,6 +418,15 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                 "f1": None,
                 "acc": None
             }
+
+        language_model_scores["report"]["CE"] = {
+            # following Nicolson (https://arxiv.org/pdf/2201.09405.pdf), we evaluate the example-based CE scores over all conditions
+            # example-based means precision/recall/F1/acc are computed for each report, and then these scores are averaged over all reports
+            "precision_example_all": None,
+            "recall_example_all": None,
+            "f1_example_all": None,
+            "acc_example_all": None
+        }
 
         # on sentence-level, we only evaluate on METEOR, since this metric gives meaningful scores on sentence-level (as opposed to e.g. BLEU)
         # we distinguish between generated sentences for all, normal, and abnormal regions
