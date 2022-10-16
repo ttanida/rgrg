@@ -4,7 +4,7 @@ import pathlib
 import pickle
 
 import numpy as np
-from pycocoevalcap.cider.cider_scorer import precook, cook_refs, cook_test
+# from pycocoevalcap.cider.cider_scorer import precook, cook_refs, cook_test
 from pycocoevalcap.cider.cider_scorer import CiderScorer
 
 from src.full_model.evaluate_full_model.cider.compute_cider_document_frequencies import compute_cider_df
@@ -21,7 +21,7 @@ class CustomCiderScorer(CiderScorer):
 
     def _get_document_frequency(self):
         parent_path_of_this_file = pathlib.Path(__file__).parent.resolve()
-        df_file = os.path.join(parent_path_of_this_file, "mimic-cxr-document-frequency-unprocessed.bin.gz")
+        df_file = os.path.join(parent_path_of_this_file, "mimic-cxr-document-frequency-processed.bin.gz")
 
         if not os.path.exists(df_file):
             compute_cider_df()

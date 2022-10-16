@@ -1,11 +1,11 @@
 from ast import literal_eval
 import logging
+import math
 import os
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
-import evaluate
 import imagesize
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.full_model.evaluate_bbox_variations.custom_dataset_bbox_variations import CustomDatasetBboxVariations
+from src.full_model.evaluate_full_model.evaluate_language_model import compute_NLG_scores
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.train_full_model import get_tokenizer
 from src.path_datasets_and_weights import path_runs_full_model
@@ -29,9 +30,9 @@ NUM_BEAMS = 4
 MAX_NUM_TOKENS_GENERATE = 100
 
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
-path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
+path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial/test-200.csv"  # "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
 
-# path where "bbox_variations_results.txt" will be saved
+# path where "bbox_variations_results.txt" will be saved that will contain the meteor scores for the different variations
 path_results_txt_file = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/bbox_variations_results.txt"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -58,10 +59,11 @@ def compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences):
 
     gen_sents, ref_sents = remove_gen_sents_corresponding_to_empty_ref_sents(bbox_generated_sentences, bbox_reference_sentences)
 
-    meteor_score = evaluate.load("meteor")
-    meteor_result = meteor_score.compute(predictions=gen_sents, references=ref_sents)["meteor"]
+    nlg_metrics = ["meteor"]
+    nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
+    meteor_score = nlg_scores["meteor"]
 
-    return float(meteor_result)
+    return meteor_score
 
 
 def get_bbox_features(model, images, bbox_coordinates):
@@ -178,6 +180,50 @@ def check_coordinate(coord, dimension):
         return coord
 
 
+def vary_bbox_coords_by_aspect_ratio(row):
+    bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
+    bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
+    aspect_ratio_variations_bboxes = row["aspect_ratio_variations"]  # List[float] of len 29
+    image_width, image_height = row["image_width_height"]  # two integers
+
+    # to store the new bbox coordinates after they have been varied
+    varied_bbox_coords_single_image = []
+
+    for bbox_coords, bbox_width_height, ratio_variation in zip(bbox_coords_single_image, bbox_widths_heights_single_image, aspect_ratio_variations_bboxes):
+        x1, y1, x2, y2 = bbox_coords
+        bbox_width, bbox_height = bbox_width_height
+        # gt_bbox_mid_point stays the same for the bbox varied in its aspect ratio, and thus serves as the "anchor point"
+        # to compute the new bbox coordinates (using the new bbox width and height)
+        ground_truth_bbox_mid_point_x = x1 + bbox_width / 2
+        ground_truth_bbox_mid_point_y = y1 + bbox_height / 2
+        bbox_area = bbox_width * bbox_height
+        bbox_aspect_ratio = bbox_width / bbox_height
+
+        # ratio_variation is a single positive float, e.g. 1.232 or 0.845
+        bbox_aspect_ratio_new = ratio_variation * bbox_aspect_ratio
+
+        # the new bbox height and width are computed by solving the 2 equations
+        # 1) bbox_width_new / bbox_height_new = bbox_aspect_ratio_new
+        # 2) bbox_width_new * bbox_height_new = bbox_area
+        bbox_height_new = math.sqrt(bbox_area / bbox_aspect_ratio_new)
+        bbox_width_new = bbox_aspect_ratio_new * bbox_height_new
+
+        x1_new = ground_truth_bbox_mid_point_x - bbox_width_new / 2
+        x2_new = ground_truth_bbox_mid_point_x + bbox_width_new / 2
+
+        y1_new = ground_truth_bbox_mid_point_y - bbox_height_new / 2
+        y2_new = ground_truth_bbox_mid_point_y + bbox_height_new / 2
+
+        x1 = check_coordinate(int(x1_new), image_width)
+        x2 = check_coordinate(int(x2_new), image_width)
+        y1 = check_coordinate(int(y1_new), image_height)
+        y2 = check_coordinate(int(y2_new), image_height)
+
+        varied_bbox_coords_single_image.append([x1, y1, x2, y2])
+
+    return varied_bbox_coords_single_image
+
+
 def vary_bbox_coords_by_scale(row):
     bbox_coords_single_image = row["bbox_coordinates"]  # List[List[int]] of shape 29 x 4
     bbox_widths_heights_single_image = row["bbox_widths_heights"]  # List[List[int]] of shape 29 x 2
@@ -187,15 +233,15 @@ def vary_bbox_coords_by_scale(row):
     # to store the new bbox coordinates after they have been varied
     varied_bbox_coords_single_image = []
 
-    for bbox_coords, bbox_width_height, scale_variations in zip(bbox_coords_single_image, bbox_widths_heights_single_image, scale_variations_bboxes):
+    for bbox_coords, bbox_width_height, scale_factor in zip(bbox_coords_single_image, bbox_widths_heights_single_image, scale_variations_bboxes):
         x1, y1, x2, y2 = bbox_coords
         bbox_width, bbox_height = bbox_width_height
-        scale_factor = scale_variations  # single positive float, e.g. 1.232 or 0.845
 
         # gt_bbox_mid_point stays the same for the scaled bbox, so it serves as the "anchor point" to compute the new bbox coordinates (using the new bbox width and height)
         ground_truth_bbox_mid_point_x = x1 + bbox_width / 2
         ground_truth_bbox_mid_point_y = y1 + bbox_height / 2
 
+        # scale_factor is a single positive float, e.g. 1.232 or 0.845
         bbox_width_scaled = bbox_width * scale_factor
         bbox_height_scaled = bbox_height * scale_factor
 
@@ -288,7 +334,14 @@ def vary_bbox_coords(variation_type, num_images, mean, std, test_set_as_df):
         variation_func = vary_bbox_coords_by_scale
 
     elif variation_type == "aspect_ratio":
-        pass
+        # for each of the 29 bboxes in each image, we need 1 float value to adjust the aspect ratio of the bbox (relative to its ground-truth midpoint)
+        # we adjust the aspect ratio under the constraint that the ground-truth area and ground-truth midpoint stay constant
+        # e.g. if we sample 1.875 for a given bbox, and the aspect ratio of the bbox is currently 0.5 (i.e. width is half of height),
+        # then the varied box will have an aspect ratio of 0.5 * 1.875 = 0.9375 (with the same ground-truth area and ground-truth midpoint as before)
+        aspect_ratio_variations = np.exp(np.random.normal(mean, std, size=(num_images, 29)))
+
+        test_set_as_df["aspect_ratio_variations"] = aspect_ratio_variations.tolist()
+        variation_func = vary_bbox_coords_by_aspect_ratio
 
     # create (or more likely overwrite) column bbox_coordinates_varied that will hold the varied bbox coordinates created by the corresponding variation_func
     test_set_as_df["bbox_coordinates_varied"] = test_set_as_df.apply(lambda row: variation_func(row), axis=1)
@@ -318,7 +371,7 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
 
     num_images = len(test_set_as_df)
     mean = 0
-    stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    stds_to_evaluate = [0.1, 0.2, 0.3, 0.4, 0.5]  # [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
     transforms = get_transforms()
 
@@ -333,10 +386,10 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
 
         bbox_generated_sentences, bbox_reference_sentences = iterate_over_data_loader(test_loader, model, tokenizer)
 
-        meteor_result = compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences)
+        meteor_score = compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences)
 
         with open(path_results_txt_file, "a") as f:
-            f.write(f"{variation_type} variation, std {std}, meteor score: {meteor_result:.5f}\n")
+            f.write(f"{variation_type} variation, std {std}, meteor score: {meteor_score:.5f}\n")
 
     with open(path_results_txt_file, "a") as f:
         f.write("\n")

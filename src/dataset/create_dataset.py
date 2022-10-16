@@ -5,10 +5,10 @@ object detector + binary classifiers, and full model.
 Each row in the csv files specifies information about a single image.
 
 The specific information (i.e. columns) of each row are:
-    - subject_id: id of the patient whose image is used
-    - study_id: id of the study of that patient (since a patient can have several studies done to document the progression of a disease etc.)
-    - image_id: id of the single image
-    - mimic_image_file_path: file path to the jpg of the single image on the workstation
+    - subject_id (str): id of the patient whose image is used
+    - study_id (str): id of the study of that patient (since a patient can have several studies done to document the progression of a disease etc.)
+    - image_id (str): id of the single image
+    - mimic_image_file_path (str): file path to the jpg of the single image on the workstation
     - bbox_coordinates (List[List[int]]): a nested list where the outer list (usually) has a length of 29 and the inner list always a length of 4 (for 4 bbox coordinates).
     Contains the bbox coordinates for all (usually 29) regions of a single image. There are some images that don't have bbox coordinates for all 29 regions
     (see log_file_dataset_creation.txt), thus it's possible that the outer list does not have length 29.

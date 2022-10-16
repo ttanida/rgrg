@@ -21,7 +21,7 @@ from collections import defaultdict
 import csv
 import io
 import os
-import re
+# import re
 import tempfile
 
 import evaluate
@@ -31,6 +31,7 @@ from PIL import Image
 from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.meteor.meteor import Meteor
 from pycocoevalcap.rouge.rouge import Rouge
+from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 import spacy
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
@@ -57,66 +58,68 @@ from src.path_datasets_and_weights import path_chexbert_weights
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], ref_sents_or_reports: list[str]) -> dict[str, float]:
+    def convert_for_tokenizer(sents_or_reports: list[str]):
+        """See comments where this function is used for explanation on why this function is needed."""
+        sents_or_reports_converted = {}
+        for num, text in enumerate(sents_or_reports):
+            sents_or_reports_converted[str(num)] = [{"caption": text}]  # [re.sub(' +', ' ', text.replace(".", " .")).lower()]
+
+        return sents_or_reports_converted
+    """
+    Computes NLG metrics that are specified in metrics list (1st input argument):
+        - Bleu 1-4
+        - Meteor
+        - Rouge-L
+        - Cider-D
+
+    Computation is based on MS COCO evaluation using Python 3 (see evaluate function):
+    (https://github.com/salaniz/pycocoevalcap/blob/ad63453cfab57a81a02b2949b17a91fab1c3df77/eval.py#L19)
+
+    Returns a dict that maps from the metrics specified to the corresponding scores.
+    """
+    scorers = {}
+    if "bleu" in nlg_metrics:
+        scorers["bleu"] = Bleu(4)
+    if "meteor" in nlg_metrics:
+        scorers["meteor"] = Meteor()
+    if "rouge" in nlg_metrics:
+        scorers["rouge"] = Rouge()  # this is actually the Rouge-L score, even if the class name only says Rouge
+    if "cider" in nlg_metrics:
+        scorers["cider"] = Cider()  # this is actually the Cider-D score, even if the class name only says Cider
+
+    # we first apply the PTBTokenizer, which mainly lowercases the generated and reference sentences/reports
+    # and separates punctuations from words
+    # the tokenizer excepts the sentences/reports not to be a list[str], but to be of the form:
+    # gen_sents = {
+    #   "0": [{"caption": "this is the 1st generated sentence"}],
+    #   "1": [{"caption": "this is the 2nd generated sentence"}],
+    #   ...
+    # }
+    # -> hence use function convert_for_tokenizer
+    gen_sents_or_reports = convert_for_tokenizer(gen_sents_or_reports)
+    ref_sents_or_reports = convert_for_tokenizer(ref_sents_or_reports)
+
+    tokenizer = PTBTokenizer()
+    gen_sents_or_reports = tokenizer.tokenize(gen_sents_or_reports)
+    ref_sents_or_reports = tokenizer.tokenize(ref_sents_or_reports)
+
+    nlg_scores = {}
+
+    for metric_name, scorer in scorers.items():
+        score, _ = scorer.compute_score(ref_sents_or_reports, gen_sents_or_reports)
+        if metric_name == "bleu":
+            nlg_scores["bleu_1"] = score[0]
+            nlg_scores["bleu_2"] = score[1]
+            nlg_scores["bleu_3"] = score[2]
+            nlg_scores["bleu_4"] = score[3]
+        else:
+            nlg_scores[metric_name] = score
+
+    return nlg_scores
+
+
 def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
-    def compute_NLG_scores(metrics: list[str], gen_sents_or_reports: list[str], ref_sents_or_reports: list[str]) -> dict[str, float]:
-        def convert_for_tokenizer(sents_or_reports: list[str]):
-            """See comments where this function is used for explanation on why this function is needed."""
-            sents_or_reports_converted = {}
-            for num, text in enumerate(sents_or_reports):
-                sents_or_reports_converted[str(num)] = [re.sub(' +', ' ', text.replace(".", " ."))]
-
-            return sents_or_reports_converted
-        """
-        Computes NLG metrics that are specified in metrics list (1st input argument):
-            - Bleu 1-4
-            - Meteor
-            - Rouge-L
-            - Cider-D
-
-        Computation is based on MS COCO evaluation using Python 3 (see evaluate function):
-        (https://github.com/salaniz/pycocoevalcap/blob/ad63453cfab57a81a02b2949b17a91fab1c3df77/eval.py#L19)
-
-        Returns a dict that maps from the metrics specified to the corresponding scores.
-        """
-        scorers = {}
-        if "bleu" in metrics:
-            scorers["bleu"] = Bleu(4)
-        if "meteor" in metrics:
-            scorers["meteor"] = Meteor()
-        if "rouge" in metrics:
-            scorers["rouge"] = Rouge()  # this is actually the Rouge-L score, even if the class name only says Rouge
-        if "cider" in metrics:
-            scorers["cider"] = Cider()  # this is actually the Cider-D score, even if the class name only says Cider
-
-        # we first apply the PTBTokenizer, which mainly strips the generated and reference sentences/reports of punctuation and lowercases them
-        # the tokenizer excepts the sentences/reports not to be a list[str], but of the form:
-        # gen_sents = {
-        #   "0": [{"caption": "this is the 1st generated sentence"}],
-        #   "1": [{"caption": "this is the 2nd generated sentence"}],
-        #   ...
-        # }
-        # hence use function convert_for_tokenizer
-        gen_sents_or_reports = convert_for_tokenizer(gen_sents_or_reports)
-        ref_sents_or_reports = convert_for_tokenizer(ref_sents_or_reports)
-
-        # tokenizer = PTBTokenizer()
-        # gen_sents_or_reports = tokenizer.tokenize(gen_sents_or_reports)
-        # ref_sents_or_reports = tokenizer.tokenize(ref_sents_or_reports)
-
-        nlg_scores = {}
-
-        for metric_name, scorer in scorers.items():
-            score, _ = scorer.compute_score(ref_sents_or_reports, gen_sents_or_reports)
-            if metric_name == "bleu":
-                nlg_scores["bleu_1"] = score[0]
-                nlg_scores["bleu_2"] = score[1]
-                nlg_scores["bleu_3"] = score[2]
-                nlg_scores["bleu_4"] = score[3]
-            else:
-                nlg_scores[metric_name] = score
-
-        return nlg_scores
-
     def compute_clinical_efficacy_scores(gen_reports: list[str], ref_reports: list[str]):
         """
         To get the CE scores, we first need the disease labels extracted by CheXbert

@@ -1,16 +1,85 @@
-# import evaluate
-# from nltk.translate.meteor_score import single_meteor_score
-# from nltk import word_tokenize
-# import numpy as np
+import evaluate
+from nltk.translate.meteor_score import single_meteor_score
+from nltk import word_tokenize
+import numpy as np
 
-# from pycocoevalcap.bleu.bleu import Bleu
-# from pycocoevalcap.cider.cider import Cider
-# from pycocoevalcap.meteor.meteor import Meteor
-# from pycocoevalcap.rouge.rouge import Rouge
-# from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
+from pycocoevalcap.bleu.bleu import Bleu
+from pycocoevalcap.cider.cider import Cider
+from pycocoevalcap.meteor.meteor import Meteor
+from pycocoevalcap.rouge.rouge import Rouge
+from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 
-# import re
-# import tokenizers
+import re
+import tokenizers
+
+
+gen_reports = ["Hello there. This is a report. Some sample text.", "This is another report. It differs from the first report."]
+ref_reports = ["This is the reference report. It has some sample text.", "This is another reference report. Differs slightly from the First report."]
+
+
+def convert_with_regex(sents_or_reports: list[str]):
+    """See comments where this function is used for explanation on why this function is needed."""
+    sents_or_reports_converted = {}
+    for num, text in enumerate(sents_or_reports):
+        sents_or_reports_converted[str(num)] = [re.sub(' +', ' ', text.replace(".", " .")).lower()]
+
+    return sents_or_reports_converted
+
+
+def convert_with_tokenizer(sents_or_reports: list[str]):
+    """See comments where this function is used for explanation on why this function is needed."""
+    sents_or_reports_converted = {}
+    for num, text in enumerate(sents_or_reports):
+        sents_or_reports_converted[str(num)] = [{"caption": text}]
+
+    tokenizer = PTBTokenizer()
+
+    sents_or_reports_converted = tokenizer.tokenize(sents_or_reports_converted)
+
+    return sents_or_reports_converted
+
+
+gen_reports_regex = convert_with_regex(gen_reports)
+ref_reports_regex = convert_with_regex(ref_reports)
+
+print(gen_reports_regex)
+print(ref_reports_regex)
+print("=======")
+
+gen_reports_tokenized = convert_with_regex(gen_reports)
+ref_reports_tokenized = convert_with_regex(ref_reports)
+
+print(gen_reports_tokenized)
+print(ref_reports_tokenized)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # gts = {
 #     "5": ["this is a test hello world"],
