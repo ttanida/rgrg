@@ -21,6 +21,7 @@ from collections import defaultdict
 import csv
 import io
 import os
+import re
 import tempfile
 
 import evaluate
@@ -30,8 +31,6 @@ from PIL import Image
 from pycocoevalcap.bleu.bleu import Bleu
 from pycocoevalcap.meteor.meteor import Meteor
 from pycocoevalcap.rouge.rouge import Rouge
-from pycocoevalcap.cider.cider import Cider
-from pycocoevalcap.tokenizer.ptbtokenizer import PTBTokenizer
 import spacy
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
@@ -42,6 +41,7 @@ from src.CheXbert.src.constants import CONDITIONS
 from src.CheXbert.src.label import label
 from src.CheXbert.src.models.bert_labeler import bert_labeler
 from src.dataset.constants import ANATOMICAL_REGIONS
+from src.full_model.evaluate_full_model.cider.cider import Cider
 from src.full_model.run_configurations import (
     BATCH_SIZE,
     NUM_BEAMS,
@@ -63,7 +63,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             """See comments where this function is used for explanation on why this function is needed."""
             sents_or_reports_converted = {}
             for num, text in enumerate(sents_or_reports):
-                sents_or_reports_converted[str(num)] = [{"caption": text}]
+                sents_or_reports_converted[str(num)] = [re.sub(' +', ' ', text.replace(".", " ."))]
 
             return sents_or_reports_converted
         """
@@ -99,9 +99,9 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         gen_sents_or_reports = convert_for_tokenizer(gen_sents_or_reports)
         ref_sents_or_reports = convert_for_tokenizer(ref_sents_or_reports)
 
-        tokenizer = PTBTokenizer()
-        gen_sents_or_reports = tokenizer.tokenize(gen_sents_or_reports)
-        ref_sents_or_reports = tokenizer.tokenize(ref_sents_or_reports)
+        # tokenizer = PTBTokenizer()
+        # gen_sents_or_reports = tokenizer.tokenize(gen_sents_or_reports)
+        # ref_sents_or_reports = tokenizer.tokenize(ref_sents_or_reports)
 
         nlg_scores = {}
 
@@ -288,7 +288,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         nlg_metrics = ["bleu", "meteor", "rouge", "cider"]
         nlg_scores = compute_NLG_scores(nlg_metrics, gen_reports, ref_reports)
 
-        for nlg_metric_name, score in nlg_scores:
+        for nlg_metric_name, score in nlg_scores.items():
             language_model_scores["report"][nlg_metric_name] = score
 
         compute_clinical_efficacy_scores(gen_reports, ref_reports)
