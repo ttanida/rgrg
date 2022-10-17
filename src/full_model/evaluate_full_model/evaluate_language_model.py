@@ -399,14 +399,11 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             "precision_micro_5": None,
             "recall_micro_5": None,
             "f1_micro_5": None,
-            "acc_5": None
-        }
+            "acc_5": None,
 
-        # we additionally compute the micro average CE scores over all conditions:
-        language_model_scores["report"]["CE"] = {
+            # we additionally compute the micro average CE scores over all conditions
             "precision_micro_all": None,
             "recall_micro_all": None,
-            "f1_micro_all": None,
             "acc_all": None
         }
 
@@ -419,14 +416,12 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
                 "acc": None
             }
 
-        language_model_scores["report"]["CE"] = {
-            # following Nicolson (https://arxiv.org/pdf/2201.09405.pdf), we evaluate the example-based CE scores over all conditions
-            # example-based means precision/recall/F1/acc are computed for each report, and then these scores are averaged over all reports
-            "precision_example_all": None,
-            "recall_example_all": None,
-            "f1_example_all": None,
-            "acc_example_all": None
-        }
+        # following Nicolson (https://arxiv.org/pdf/2201.09405.pdf), we evaluate the example-based CE scores over all conditions
+        # example-based means precision/recall/F1/acc are computed for each report, and then these scores are averaged over all reports
+        language_model_scores["report"]["CE"]["precision_example_all"] = None
+        language_model_scores["report"]["CE"]["recall_example_all"] = None
+        language_model_scores["report"]["CE"]["f1_example_all"] = None
+        language_model_scores["report"]["CE"]["acc_example_all"] = None
 
         # on sentence-level, we only evaluate on METEOR, since this metric gives meaningful scores on sentence-level (as opposed to e.g. BLEU)
         # we distinguish between generated sentences for all, normal, and abnormal regions
