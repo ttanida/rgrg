@@ -262,7 +262,7 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         """
         example-based means precision/recall/F1/acc are computed for each report, and then these scores are averaged over all reports
         """
-        preds_gen_reports_np = np.array(preds_gen_reports)  # array of shape (14 x num_reports)
+        preds_gen_reports_np = np.array(preds_gen_reports)  # array of shape (14 x num_reports), 14 for 14 conditions
         preds_ref_reports_np = np.array(preds_ref_reports)  # array of shape (14 x num_reports)
 
         # convert label 1 to True and everything else to False
