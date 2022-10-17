@@ -1,0 +1,15 @@
+Num bbox_generated_sentences: 5800
+Num bbox_reference_sentences: 5800
+Num gen sents: 1932
+Num ref sents: 1932
+position variation, std 0.5, meteor score: 0.07471
+Num bbox_generated_sentences: 5800
+Num bbox_reference_sentences: 5800
+Num gen sents: 1932
+Num ref sents: 1932
+position variation, std 0.6, meteor score: 0.06830
+Num bbox_generated_sentences: 29000
+Num bbox_reference_sentences: 29000
+Num gen sents: 9551
+Num ref sents: 9551
+Error: could not convert string to float: b'8.0 14.0 5.0 6.0 3.0 3.0 2.0 2.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 1.0 5.0 5.0'

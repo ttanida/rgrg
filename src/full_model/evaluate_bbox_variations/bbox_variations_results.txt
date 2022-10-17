@@ -1,4 +1,52 @@
-position variation, std 0.0, meteor score: 0.11200
-position variation, std 0.1, meteor score: 0.10688
-position variation, std 0.2, meteor score: 0.09715
-position variation, std 0.3, meteor score: 0.08760
+scale variation, std 0.0, meteor score: 0.11658 (-> scale factor: [1.0, 1.0])
+scale variation, std 0.1, meteor score: 0.11516
+scale variation, std 0.2, meteor score: 0.11244
+scale variation, std 0.3, meteor score: 0.10857 (-> scale factor: [0.74, 1.35])
+scale variation, std 0.4, meteor score: 0.10431
+scale variation, std 0.5, meteor score: 0.10138 ( -> scale factor: [0.60, 1.65])
+scale variation, std 0.6, meteor score: 0.09958
+scale variation, std 0.7, meteor score: 0.09838 ( -> scale factor: [0.50, 2.00])
+scale variation, std 0.8, meteor score: 0.09574
+scale variation, std 0.9, meteor score: 0.09365
+scale variation, std 1.0, meteor score: 0.09240 ( -> scale factor: [0.37, 2.71])
+scale variation, std 1.1, meteor score: 0.09267
+scale variation, std 1.2, meteor score: 0.09003
+scale variation, std 1.3, meteor score: 0.09022
+scale variation, std 1.4, meteor score: 0.08938
+scale variation, std 1.5, meteor score: 0.08625
+scale variation, std 1.6, meteor score: 0.08566
+scale variation, std 1.7, meteor score: 0.08491
+scale variation, std 1.8, meteor score: 0.08458
+scale variation, std 1.9, meteor score: 0.08520
+
+aspect_ratio variation, std 0.0, meteor score: 0.11658
+aspect_ratio variation, std 0.1, meteor score: 0.11629
+aspect_ratio variation, std 0.2, meteor score: 0.11676
+aspect_ratio variation, std 0.3, meteor score: 0.11601
+aspect_ratio variation, std 0.4, meteor score: 0.11413
+aspect_ratio variation, std 0.5, meteor score: 0.11225
+aspect_ratio variation, std 0.6, meteor score: 0.11180
+aspect_ratio variation, std 0.7, meteor score: 0.11162
+aspect_ratio variation, std 0.8, meteor score: 0.10933
+aspect_ratio variation, std 0.9, meteor score: 0.10835
+aspect_ratio variation, std 1.0, meteor score: 0.10585
+aspect_ratio variation, std 1.1, meteor score: 0.10449
+aspect_ratio variation, std 1.2, meteor score: 0.10485
+aspect_ratio variation, std 1.3, meteor score: 0.10206
+aspect_ratio variation, std 1.4, meteor score: 0.10148
+aspect_ratio variation, std 1.5, meteor score: 0.09989
+aspect_ratio variation, std 1.6, meteor score: 0.09829
+aspect_ratio variation, std 1.7, meteor score: 0.09709
+aspect_ratio variation, std 1.8, meteor score: 0.09835
+aspect_ratio variation, std 1.9, meteor score: 0.09538
+
+position variation, std 0.0, meteor score: 0.11658
+position variation, std 0.1, meteor score: 0.11176
+position variation, std 0.2, meteor score: 0.10063
+position variation, std 0.3, meteor score: 0.09230
+Num bbox_generated_sentences: 14500
+Num bbox_reference_sentences: 14500
+Num gen sents: 4798
+Num ref sents: 4798
+Error: could not convert string to float: b'8.0 9.0 4.0 3.0 1.0 1.0 2.0 2.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 3.0 3.0 3.0'
+position variation, std 0.4, meteor score: -1.00000

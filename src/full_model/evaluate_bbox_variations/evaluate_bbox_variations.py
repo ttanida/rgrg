@@ -25,10 +25,9 @@ CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
 NUM_BEAMS = 4
-# cap MAX_NUM_TOKENS_GENERATE at 100, since high stds will create noisy bboxes, which in turn will lead to noisy language model outputs (i.e. gibberish that may become > 100 tokens)
-# most generated sentences for non-noisy bboxes will have at most 60 tokens, so 100 is a good threshold
-MAX_NUM_TOKENS_GENERATE = 100
-
+# cap MAX_NUM_TOKENS_GENERATE at 80, since high stds will create noisy bboxes, which in turn will lead to noisy language model outputs (i.e. gibberish that may become > 80 tokens)
+# most generated sentences for non-noisy bboxes will have at most 60 tokens, so 80 is a good threshold
+MAX_NUM_TOKENS_GENERATE = 80
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
 path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
 
@@ -57,10 +56,34 @@ def compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences):
 
         return filtered_gen_sents, filtered_ref_sents
 
+    with open(path_results_txt_file, "a") as f:
+        f.write(f"Num bbox_generated_sentences: {len(bbox_generated_sentences)}\n")
+        f.write(f"Num bbox_reference_sentences: {len(bbox_reference_sentences)}\n")
+
     gen_sents, ref_sents = remove_gen_sents_corresponding_to_empty_ref_sents(bbox_generated_sentences, bbox_reference_sentences)
 
+    with open(path_results_txt_file, "a") as f:
+        f.write(f"Num gen sents: {len(gen_sents)}\n")
+        f.write(f"Num ref sents: {len(ref_sents)}\n")
+
     nlg_metrics = ["meteor"]
-    nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
+    try:
+        nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
+    except Exception as e:
+        with open(path_results_txt_file, "a") as f:
+            f.write(f"Error: {str(e)}\n")
+
+        with open("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/gen_sents.txt", "a") as f:
+            for sent in gen_sents:
+                f.write(f"{sent}\n")
+
+        with open("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/ref_sents.txt", "a") as f:
+            for sent in ref_sents:
+                f.write(f"{sent}\n")
+
+        nlg_scores = {}
+        nlg_scores["meteor"] = -1
+
     meteor_score = nlg_scores["meteor"]
 
     return meteor_score
@@ -437,6 +460,9 @@ def get_test_set_as_df():
     test_set_as_df["bbox_widths_heights"] = test_set_as_df.apply(lambda row: compute_bbox_widths_heights(row), axis=1)
     test_set_as_df["image_width_height"] = test_set_as_df.apply(lambda row: retrieve_image_widths_heights(row), axis=1)
 
+    # TODO: delete this
+    test_set_as_df = test_set_as_df[:500]
+
     return test_set_as_df
 
 
@@ -469,7 +495,7 @@ def main():
 
     tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated output ids by the language model
 
-    for variation_type in ["position", "scale", "aspect_ratio"]:
+    for variation_type in ["scale", "aspect_ratio", "position"]:
         evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tokenizer)
 
 

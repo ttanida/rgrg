@@ -37,7 +37,7 @@ from src.path_datasets_and_weights import path_full_dataset, path_runs_full_mode
 
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
 RUN = 46
-CHECKPOINT = "checkpoint_val_loss_19.793_overall_steps_155252.pt"
+CHECKPOINT = None
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
@@ -112,10 +112,18 @@ def write_all_scores_to_file(
         ce_score_dict is of the structure:
 
         {
-            precision: ...,
-            recall: ...,
-            f1: ...,
-            acc: ...,
+            precision_micro_5: ...,
+            precision_micro_all: ...,
+            precision_example_all: ...,
+            recall_micro_5: ...,
+            recall_micro_all: ...,
+            recall_example_all: ...,
+            f1_micro_5: ...,
+            f1_micro_all: ...,
+            f1_example_all: ...,
+            acc_micro_5: ...,
+            acc_micro_all: ...,
+            acc_example_all: ...,
             condition_1 : {
                 precision: ...,
                 recall: ...,
@@ -140,10 +148,8 @@ def write_all_scores_to_file(
         where the "..." after the 4 metrics are the corresponding scores,
         and condition_* are from the 14 conditions in src/CheXbert/src/constants.py
         """
-        metrics = {"precision", "recall", "f1", "acc"}
-
         for k, v in ce_score_dict.items():
-            if k in metrics:
+            if k.startswith("precision") or k.startswith("recall") or k.startswith("f1") or k.startswith("acc"):
                 with open(final_scores_txt_file, "a") as f:
                     f.write(f"report_CE_{k}: {v:.5f}\n")
             else:
@@ -836,8 +842,8 @@ def get_dataset():
     }
 
     datasets_as_dfs = {}
-    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test.csv"), usecols=usecols, converters=converters)
-    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-2.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000-2.csv"), usecols=usecols, converters=converters)
 
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
     raw_test_2_dataset = Dataset.from_pandas(datasets_as_dfs["test-2"])
