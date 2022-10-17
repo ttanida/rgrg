@@ -265,7 +265,7 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         preds_gen_reports_np = np.array(preds_gen_reports)  # array of shape (14 x num_reports), 14 for 14 conditions
         preds_ref_reports_np = np.array(preds_ref_reports)  # array of shape (14 x num_reports)
 
-        # convert label 1 to True and everything else to False
+        # convert label 1 to True and everything else (i.e. labels 0, 2, 3) to False
         # (effectively doing the label conversion as done by Nicolson, see doc string of compute_clinical_efficacy_scores for more details)
         preds_gen_reports_np = preds_gen_reports_np == 1
         preds_ref_reports_np = preds_ref_reports_np == 1
@@ -284,50 +284,14 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         # compute the scores for each report
         precision_example = tp_example / (tp_example + fp_example)  # float array of shape (num_reports)
         recall_example = tp_example / (tp_example + fn_example)  # float array of shape (num_reports)
+        f1_example = (2 * tp_example) / (2 * tp_example + fp_example + fn_example)  # float array of shape (num_reports)
         acc_example = (tp_example + tn_example) / (tp_example + tn_example + fp_example + fn_example)  # float array of shape (num_reports)
-
-        #####
-        with open("debug_example_metric.txt", "a") as f:
-            f.write(f"Precision: {precision_example}\n")
-            f.write(f"Recall: {precision_example}\n")
-            f.write("#######\n")
-            f.write("#######\n")
-            f.write("\n")
-        #####
 
         # since there can be cases of zero division, we have to replace the resulting nan values with 0.0
         precision_example[np.isnan(precision_example)] = 0.0
         recall_example[np.isnan(recall_example)] = 0.0
-        acc_example[np.isnan(acc_example)] = 0.0
-
-        #####
-        with open("debug_example_metric.txt", "a") as f:
-            f.write(f"Precision: {precision_example}\n")
-            f.write(f"Recall: {precision_example}\n")
-            f.write("#######\n")
-            f.write("#######\n")
-            f.write("\n")
-        #####
-
-        f1_example = 2 * (precision_example * recall_example) / (precision_example + recall_example)  # float array of shape (num_reports)
-
-        #####
-        with open("debug_example_metric.txt", "a") as f:
-            f.write(f"F1: {f1_example}\n")
-            f.write("#######\n")
-            f.write("#######\n")
-            f.write("\n")
-        #####
-
         f1_example[np.isnan(f1_example)] = 0.0
-
-        #####
-        with open("debug_example_metric.txt", "a") as f:
-            f.write(f"F1: {f1_example}\n")
-            f.write("#######\n")
-            f.write("#######\n")
-            f.write("\n")
-        #####
+        acc_example[np.isnan(acc_example)] = 0.0
 
         # finally, take the mean over the scores for all reports
         precision_example = float(precision_example.mean())
@@ -523,7 +487,7 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         #   - a generated sentence is paired with all other non-corresponding reference sentences of a given image (value for the denominator)
         #
         # the numerator value is already computed by language_model_scores["all"]["meteor"], since this is exactly the meteor score for when the generated sentences
-        # are paried with their corresponding reference sentences. Hence only the denominator value has to be calculated separately
+        # are paired with their corresponding reference sentences. Hence only the denominator value has to be calculated separately
         language_model_scores["all"]["meteor_ratio"] = None
 
         return language_model_scores
