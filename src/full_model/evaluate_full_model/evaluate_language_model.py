@@ -284,7 +284,7 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         # compute the scores for each report
         precision_example = tp_example / (tp_example + fp_example)  # float array of shape (num_reports)
         recall_example = tp_example / (tp_example + fn_example)  # float array of shape (num_reports)
-        f1_example = tp_example / (tp_example + 0.5 * (fp_example + fn_example))  # float array of shape (num_reports)
+        f1_example = 2 * (precision_example * recall_example) / (precision_example + recall_example)  # float array of shape (num_reports)
         acc_example = (tp_example + tn_example) / (tp_example + tn_example + fp_example + fn_example)  # float array of shape (num_reports)
 
         # since there can be cases of zero division, we have to replace the resulting nan values with 0.0
