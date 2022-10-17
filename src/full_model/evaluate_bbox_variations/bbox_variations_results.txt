@@ -50,3 +50,27 @@ Num gen sents: 4798
 Num ref sents: 4798
 Error: could not convert string to float: b'8.0 9.0 4.0 3.0 1.0 1.0 2.0 2.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 3.0 3.0 3.0'
 position variation, std 0.4, meteor score: -1.00000
+
+
+
+
+Num bbox_generated_sentences: 13862
+Num bbox_reference_sentences: 13862
+Num gen sents: 4568
+Num ref sents: 4568
+scale variation, std 2.0, meteor score: 0.08341
+Num bbox_generated_sentences: 13514
+Num bbox_reference_sentences: 13514
+Num gen sents: 4493
+Num ref sents: 4493
+scale variation, std 2.2, meteor score: 0.08560
+Num bbox_generated_sentences: 13195
+Num bbox_reference_sentences: 13195
+Num gen sents: 4401
+Num ref sents: 4401
+scale variation, std 2.4000000000000004, meteor score: 0.08159
+Num bbox_generated_sentences: 12093
+Num bbox_reference_sentences: 12093
+Num gen sents: 3979
+Num ref sents: 3979
+scale variation, std 2.6000000000000005, meteor score: 0.08417

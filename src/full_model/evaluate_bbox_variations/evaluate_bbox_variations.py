@@ -397,7 +397,8 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
     if variation_type == "position":
         stds_to_evaluate = np.arange(start=0, stop=1, step=0.1).tolist()
     else:
-        stds_to_evaluate = np.arange(start=0, stop=2, step=0.1).tolist()
+        # stds_to_evaluate = np.arange(start=0, stop=2, step=0.1).tolist()
+        stds_to_evaluate = np.arange(start=2.0, stop=5, step=0.2).tolist()
 
     transforms = get_transforms()
 
@@ -495,7 +496,7 @@ def main():
 
     tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated output ids by the language model
 
-    for variation_type in ["scale", "aspect_ratio", "position"]:
+    for variation_type in ["scale", "aspect_ratio"]:  # "position"
         evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tokenizer)
 
 
