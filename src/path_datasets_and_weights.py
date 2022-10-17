@@ -18,7 +18,7 @@ when training the object detector and full model (with and without the language 
 path_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr"
 path_mimic_cxr_jpg = "/u/home/tanida/datasets/mimic-cxr-jpg"
-path_full_dataset = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000"
+path_full_dataset = "/u/home/tanida/datasets/dataset-with-reference-reports-partial"
 path_chexbert_weights = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/CheXbert/src/models/chexbert.pth"
 path_runs_object_detector = "/u/home/tanida/runs/object_detector"
 path_runs_full_model = "/u/home/tanida/runs/full_model"

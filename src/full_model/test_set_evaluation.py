@@ -28,6 +28,7 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
     get_sents_for_normal_abnormal_selected_regions,
     get_generated_reports,
     update_gen_and_ref_sentences_for_regions,
+    update_num_generated_sentences_per_image,
     update_gen_sentences_with_corresponding_regions,
     compute_language_model_scores
 )
@@ -36,8 +37,8 @@ from src.full_model.train_full_model import get_tokenizer
 from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
 
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
-RUN = 46
-CHECKPOINT = None
+RUN = 47
+CHECKPOINT = "checkpoint_val_loss_20.000_overall_steps_699489.pt"
 BERTSCORE_SIMILARITY_THRESHOLD = 0.9
 IMAGE_INPUT_SIZE = 512
 BATCH_SIZE = 4
@@ -355,10 +356,15 @@ def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, token
                 gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
 
                 update_gen_and_ref_sentences_for_regions(gen_and_ref_sentences, generated_sents_for_selected_regions, reference_sents_for_selected_regions, selected_regions)
+                update_num_generated_sentences_per_image(gen_and_ref_sentences, selected_regions)
 
                 if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
                     update_gen_sentences_with_corresponding_regions(gen_sentences_with_corresponding_regions, generated_sents_for_selected_regions, selected_regions)
 
+    # whilst iterating over the validation loader, save the (all, normal, abnormal) generated and reference sentences in the respective lists
+    # the list under the key "num_generated_sentences_per_image" will hold integers that represent how many sentences were generated for each image
+    # this is useful to be able to get all generated and reference sentences that correspond to the same image
+    # (since we append all generated and reference sentences to the "generated_sentences" and "reference_sentences" lists indiscriminately, this information would be lost otherwise)
     gen_and_ref_sentences = {
         "generated_sentences": [],
         "generated_sentences_normal_selected_regions": [],
@@ -366,15 +372,18 @@ def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, token
         "reference_sentences": [],
         "reference_sentences_normal_selected_regions": [],
         "reference_sentences_abnormal_selected_regions": [],
+        "num_generated_sentences_per_image": []
     }
 
-    # also examine the generated and reference sentences on per region basis
+    # also save the generated and reference sentences on a per region basis
     for region_index, _ in enumerate(ANATOMICAL_REGIONS):
         gen_and_ref_sentences[region_index] = {
             "generated_sentences": [],
             "reference_sentences": []
         }
 
+    # and of course the generated and reference reports, and additionally keep track of the generated sentences
+    # that were removed because they were too similar to other generated sentences (only as a sanity-check/for writing to file)
     gen_and_ref_reports = {
         "generated_reports": [],
         "removed_similar_generated_sentences": [],
@@ -842,8 +851,8 @@ def get_dataset():
     }
 
     datasets_as_dfs = {}
-    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000.csv"), usecols=usecols, converters=converters)
-    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-1000-2.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test"] = pd.read_csv(os.path.join(path_full_dataset, "test-200.csv"), usecols=usecols, converters=converters)
+    datasets_as_dfs["test-2"] = pd.read_csv(os.path.join(path_full_dataset, "test-200-2.csv"), usecols=usecols, converters=converters)
 
     raw_test_dataset = Dataset.from_pandas(datasets_as_dfs["test"])
     raw_test_2_dataset = Dataset.from_pandas(datasets_as_dfs["test-2"])

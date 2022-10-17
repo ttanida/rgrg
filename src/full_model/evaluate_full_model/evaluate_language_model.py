@@ -286,13 +286,48 @@ def compute_clinical_efficacy_scores(language_model_scores: dict, gen_reports: l
         recall_example = tp_example / (tp_example + fn_example)  # float array of shape (num_reports)
         acc_example = (tp_example + tn_example) / (tp_example + tn_example + fp_example + fn_example)  # float array of shape (num_reports)
 
+        #####
+        with open("debug_example_metric.txt", "a") as f:
+            f.write(f"Precision: {precision_example}\n")
+            f.write(f"Recall: {precision_example}\n")
+            f.write("#######\n")
+            f.write("#######\n")
+            f.write("\n")
+        #####
+
         # since there can be cases of zero division, we have to replace the resulting nan values with 0.0
         precision_example[np.isnan(precision_example)] = 0.0
         recall_example[np.isnan(recall_example)] = 0.0
         acc_example[np.isnan(acc_example)] = 0.0
 
+        #####
+        with open("debug_example_metric.txt", "a") as f:
+            f.write(f"Precision: {precision_example}\n")
+            f.write(f"Recall: {precision_example}\n")
+            f.write("#######\n")
+            f.write("#######\n")
+            f.write("\n")
+        #####
+
         f1_example = 2 * (precision_example * recall_example) / (precision_example + recall_example)  # float array of shape (num_reports)
+
+        #####
+        with open("debug_example_metric.txt", "a") as f:
+            f.write(f"F1: {f1_example}\n")
+            f.write("#######\n")
+            f.write("#######\n")
+            f.write("\n")
+        #####
+
         f1_example[np.isnan(f1_example)] = 0.0
+
+        #####
+        with open("debug_example_metric.txt", "a") as f:
+            f.write(f"F1: {f1_example}\n")
+            f.write("#######\n")
+            f.write("#######\n")
+            f.write("\n")
+        #####
 
         # finally, take the mean over the scores for all reports
         precision_example = float(precision_example.mean())
@@ -342,6 +377,52 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
             meteor_score = nlg_scores["meteor"]
             language_model_scores["region"][region_name]["meteor"] = meteor_score
 
+        def compute_sent_level_meteor_ratio_score(gen_sents, ref_sents):
+            """
+            We want to compute the ratio of the meteor scores for when:
+            - a generated sentence is paired with its corresponding reference sentence of a given image (value for the numerator)
+            vs
+            - a generated sentence is paired with all other non-corresponding reference sentences of a given image (value for the denominator)
+
+            the numerator value is already computed by language_model_scores["all"]["meteor"], since this is exactly the meteor score for when the generated sentences
+            are paried with their corresponding reference sentences. Hence only the denominator value has to be calculated separately
+            """
+            gen_sents_for_computing_meteor_ratio_score = []
+            ref_sents_for_computing_meteor_ratio_score = []
+
+            # List[int] that can be used to get all generated and reference sentences that correspond to the same image
+            num_generated_sentences_per_image = gen_and_ref_sentences["num_generated_sentences_per_image"]
+
+            curr_index = 0
+            for num_gen_sents in num_generated_sentences_per_image:
+                gen_sents_single_image = gen_sents[curr_index:curr_index + num_gen_sents]
+                ref_sents_single_image = ref_sents[curr_index:curr_index + num_gen_sents]
+                # the number of generated sentences per image is exactly the same as the number of "retrieved" reference sentences per image
+                # (see function get_ref_sentences_for_selected_regions)
+
+                curr_index += num_gen_sents
+
+                gen_sents_single_image_filtered, ref_sents_single_image_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents_single_image, ref_sents_single_image)
+
+                # now that we have the generated and (non-empty) reference sentences for a single image,
+                # we have to pair-wise match them except for the "correct" match between the corresponding gen and ref sents (see doc string of this function)
+                for i, gen_sent in enumerate(gen_sents_single_image_filtered):
+                    for j, ref_sent in enumerate(ref_sents_single_image_filtered):
+                        if i == j:
+                            continue  # skip "correct" match
+                        else:
+                            gen_sents_for_computing_meteor_ratio_score.append(gen_sent)
+                            ref_sents_for_computing_meteor_ratio_score.append(ref_sent)
+
+            # compute the "denominator" meteor score
+            nlg_metrics = ["meteor"]
+            nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents_for_computing_meteor_ratio_score, ref_sents_for_computing_meteor_ratio_score)
+            denominator_meteor_score = nlg_scores["meteor"]
+
+            numerator_meteor_score = language_model_scores["all"]["meteor"]
+
+            language_model_scores["all"]["meteor_ratio"] = numerator_meteor_score / denominator_meteor_score
+
         generated_sents = gen_and_ref_sentences["generated_sentences"]
         generated_sents_normal = gen_and_ref_sentences["generated_sentences_normal_selected_regions"]
         generated_sents_abnormal = gen_and_ref_sentences["generated_sentences_abnormal_selected_regions"]
@@ -350,22 +431,24 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         reference_sents_normal = gen_and_ref_sentences["reference_sentences_normal_selected_regions"]
         reference_sents_abnormal = gen_and_ref_sentences["reference_sentences_abnormal_selected_regions"]
 
-        generated_sents, reference_sents = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents, reference_sents)
-        generated_sents_normal, reference_sents_normal = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents_normal, reference_sents_normal)
-        generated_sents_abnormal, reference_sents_abnormal = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents_abnormal, reference_sents_abnormal)
+        gen_sents_filtered, ref_sents_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents, reference_sents)
+        gen_sents_normal_filtered, ref_sents_normal_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents_normal, reference_sents_normal)
+        gen_sents_abnormal_filtered, ref_sents_abnormal_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(generated_sents_abnormal, reference_sents_abnormal)
 
-        compute_sent_level_scores_for_subset("all", generated_sents, reference_sents)
-        compute_sent_level_scores_for_subset("normal", generated_sents_normal, reference_sents_normal)
-        compute_sent_level_scores_for_subset("abnormal", generated_sents_abnormal, reference_sents_abnormal)
+        compute_sent_level_scores_for_subset("all", gen_sents_filtered, ref_sents_filtered)
+        compute_sent_level_scores_for_subset("normal", gen_sents_normal_filtered, ref_sents_normal_filtered)
+        compute_sent_level_scores_for_subset("abnormal", gen_sents_abnormal_filtered, ref_sents_abnormal_filtered)
+
+        compute_sent_level_meteor_ratio_score(generated_sents, reference_sents)
 
         for region_index, region_name in enumerate(ANATOMICAL_REGIONS):
             region_generated_sentences = gen_and_ref_sentences[region_index]["generated_sentences"]
             region_reference_sentences = gen_and_ref_sentences[region_index]["reference_sentences"]
 
-            region_generated_sentences, region_reference_sentences = remove_gen_sents_corresponding_to_empty_ref_sents(region_generated_sentences, region_reference_sentences)
+            region_gen_sents_filtered, region_ref_sents_filtered = remove_gen_sents_corresponding_to_empty_ref_sents(region_generated_sentences, region_reference_sentences)
 
-            if len(region_generated_sentences) != 0:
-                compute_sent_level_scores_for_region(region_name, region_generated_sentences, region_reference_sentences)
+            if len(region_gen_sents_filtered) != 0:
+                compute_sent_level_scores_for_region(region_name, region_gen_sents_filtered, region_ref_sents_filtered)
             else:
                 language_model_scores["region"][region_name]["meteor"] = -1
 
@@ -433,6 +516,15 @@ def compute_language_model_scores(gen_and_ref_sentences, gen_and_ref_reports):
         language_model_scores["region"] = {}
         for region_name in ANATOMICAL_REGIONS:
             language_model_scores["region"][region_name] = {"meteor": None}
+
+        # and finally, on sentence-level we also compute the ratio of the meteor scores for when:
+        #   - a generated sentence is paired with its corresponding reference sentence of a given image (value for the numerator)
+        #   vs
+        #   - a generated sentence is paired with all other non-corresponding reference sentences of a given image (value for the denominator)
+        #
+        # the numerator value is already computed by language_model_scores["all"]["meteor"], since this is exactly the meteor score for when the generated sentences
+        # are paried with their corresponding reference sentences. Hence only the denominator value has to be calculated separately
+        language_model_scores["all"]["meteor_ratio"] = None
 
         return language_model_scores
 
@@ -833,6 +925,18 @@ def update_gen_sentences_with_corresponding_regions(
         gen_sentences_with_corresponding_regions.append(gen_sents_with_regions_single_image)
 
 
+def update_num_generated_sentences_per_image(
+    gen_and_ref_sentences: dict,
+    selected_regions: np.array
+):
+    """
+    selected_regions is a boolean array of shape (batch_size x 29) that will have a True value for all regions that were selected and hence for which sentences were generated.
+    Thus to get the number of generated sentences per image, we just have to add up the True value along axis 1 (i.e. along the region dimension)
+    """
+    num_gen_sents_per_image = selected_regions.sum(axis=1).tolist()  # indices is a list[int] of len(batch_size)
+    gen_and_ref_sentences["num_generated_sentences_per_image"].extend(num_gen_sents_per_image)
+
+
 def update_gen_and_ref_sentences_for_regions(
     gen_and_ref_sentences: dict,
     generated_sents_for_selected_regions: list[str],
@@ -1050,6 +1154,10 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
     overall_steps_taken = run_params["overall_steps_taken"]
     log_file = run_params["log_file"]
 
+    # whilst iterating over the validation loader, save the (all, normal, abnormal) generated and reference sentences in the respective lists
+    # the list under the key "num_generated_sentences_per_image" will hold integers that represent how many sentences were generated for each image
+    # this is useful to be able to get all generated and reference sentences that correspond to the same image
+    # (since we append all generated and reference sentences to the "generated_sentences" and "reference_sentences" lists indiscriminately, this information would be lost otherwise)
     gen_and_ref_sentences = {
         "generated_sentences": [],
         "generated_sentences_normal_selected_regions": [],
@@ -1057,15 +1165,18 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
         "reference_sentences": [],
         "reference_sentences_normal_selected_regions": [],
         "reference_sentences_abnormal_selected_regions": [],
+        "num_generated_sentences_per_image": []
     }
 
-    # also examine the generated and reference sentences on per region basis
+    # also save the generated and reference sentences on a per region basis
     for region_index, _ in enumerate(ANATOMICAL_REGIONS):
         gen_and_ref_sentences[region_index] = {
             "generated_sentences": [],
             "reference_sentences": []
         }
 
+    # and of course the generated and reference reports, and additionally keep track of the generated sentences
+    # that were removed because they were too similar to other generated sentences (only as a sanity-check/for writing to file)
     gen_and_ref_reports = {
         "generated_reports": [],
         "removed_similar_generated_sentences": [],
@@ -1181,6 +1292,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
             gen_and_ref_reports["removed_similar_generated_sentences"].extend(removed_similar_generated_sentences)
 
             update_gen_and_ref_sentences_for_regions(gen_and_ref_sentences, generated_sents_for_selected_regions, reference_sents_for_selected_regions, selected_regions)
+            update_num_generated_sentences_per_image(gen_and_ref_sentences, selected_regions)
 
             if num_batch < NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE:
                 update_gen_sentences_with_corresponding_regions(gen_sentences_with_corresponding_regions, generated_sents_for_selected_regions, selected_regions)
