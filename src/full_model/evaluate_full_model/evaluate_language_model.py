@@ -70,11 +70,11 @@ def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], 
         }
 
         Hence we convert the generated/reference sentences/reports into the appropriate format and also tokenize them
-        by lowercasing and separating punctuations from words.
+        by separating punctuations from words (this gives the same result as huggingface's bleu implementation).
         """
         sents_or_reports_converted = {}
         for num, text in enumerate(sents_or_reports):
-            sents_or_reports_converted[str(num)] = [re.sub(' +', ' ', text.replace(".", " .")).lower()]
+            sents_or_reports_converted[str(num)] = [re.sub(' +', ' ', text.replace(".", " ."))]
 
         return sents_or_reports_converted
     """
