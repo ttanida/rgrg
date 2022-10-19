@@ -90,7 +90,7 @@ class CustomRoIHeads(RoIHeads):
         (2) object detector is used with full model + train mode:
             -> output dict contains the keys "top_region_features" and "class_detected":
 
-            - "top_region_features" maps to a tensor of shape [batch_size, 29, (2048 * 8 * 8)] of the region features with the highest score (i.e. top-1 score) per class
+            - "top_region_features" maps to a tensor of shape [batch_size, 29, 2048] of the region features with the highest score (i.e. top-1 score) per class
             - "class_detected" same as above. Needed to mask out the region features for classes that were not detected later on in the full model
 
         (3) object detector is used with full model + eval mode:
@@ -129,7 +129,7 @@ class CustomRoIHeads(RoIHeads):
 
         output = {}
         output["class_detected"] = []  # list collects the bool arrays of shape [29] that specify if a class was detected (True) for each image
-        output["top_region_features"] = []  # list collects the tensors of shape [29 x (2048 * 8 * 8)] of the top region features for each image
+        output["top_region_features"] = []  # list collects the tensors of shape [29 x 2048] of the top region features for each image
 
         # list top_region_boxes collects the tensors of shape [29 x 4] of the top region boxes for each image
         # list top_scores collects the tensors of shape [29] of the corresponding top scores for each image
@@ -199,7 +199,7 @@ class CustomRoIHeads(RoIHeads):
         output["class_detected"] = torch.stack(output["class_detected"], dim=0)  # of shape [batch_size x 29]
 
         if self.return_feature_vectors:
-            output["top_region_features"] = torch.stack(output["top_region_features"], dim=0)  # of shape [batch_size x 29 x (2048 * 8 * 8)]
+            output["top_region_features"] = torch.stack(output["top_region_features"], dim=0)  # of shape [batch_size x 29 x 2048]
 
         if not self.training:
             output["detections"]["top_region_boxes"] = torch.stack(output["detections"]["top_region_boxes"], dim=0)  # of shape [batch_size x 29 x 4]
@@ -260,7 +260,7 @@ class CustomRoIHeads(RoIHeads):
             roi_heads_output["class_detected"] = output["class_detected"]
 
             if self.return_feature_vectors:
-                # transform top_region_features from [batch_size x 36 x 2048] to [batch_size x 36 x 1024]
+                # transform top_region_features from [batch_size x 29 x 2048] to [batch_size x 29 x 1024]
                 roi_heads_output["top_region_features"] = self.dim_reduction(output["top_region_features"])
 
             if not self.training:

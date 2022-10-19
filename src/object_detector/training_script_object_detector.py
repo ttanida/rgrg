@@ -30,10 +30,10 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
 # define configurations for training run
-RUN = 13
+RUN = 14
 # comment can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train object detector with seed 44."""
-SEED = 44
+RUN_COMMENT = """Train object detector with seed 41."""
+SEED = 41
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
 PERCENTAGE_OF_VAL_SET_TO_USE = 0.2
