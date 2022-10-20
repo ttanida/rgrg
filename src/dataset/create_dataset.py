@@ -288,15 +288,6 @@ def get_attributes_dict(image_scene_graph: dict, sentence_tokenizer) -> dict[tup
 
 
 def get_reference_report(subject_id: str, study_id: str, missing_reports: list[str]):
-    def process_report(report: str):
-        # remove unnecessary whitespaces
-        report = " ".join(report.split())
-
-        if report[-1] != ".":
-            report + "."
-
-        return report
-
     # custom_section_names and custom_indices specify reports that don't have "findings" sections
     custom_section_names, custom_indices = sp.custom_mimic_cxr_rules()
 
@@ -325,7 +316,8 @@ def get_reference_report(subject_id: str, study_id: str, missing_reports: list[s
     else:
         return -1  # skip all reports without "findings" sections
 
-    report = process_report(report)
+    # remove unnecessary whitespaces
+    report = " ".join(report.split())
 
     return report
 
