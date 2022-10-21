@@ -70,7 +70,8 @@ def compute_NLG_scores(nlg_metrics: list[str], gen_sents_or_reports: list[str], 
         }
 
         Hence we convert the generated/reference sentences/reports into the appropriate format and also tokenize them
-        by separating punctuations from words (this gives the same result as huggingface's implementation).
+        following Nicolson's (https://arxiv.org/pdf/2201.09405.pdf) implementation (https://github.com/aehrc/cvt2distilgpt2/blob/main/transmodal/metrics/chen.py):
+        see lines 132 and 133
         """
         sents_or_reports_converted = {}
         for num, text in enumerate(sents_or_reports):

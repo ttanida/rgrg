@@ -568,11 +568,11 @@ def main():
 
     # resume_training = False
     # checkpoint = None
-    checkpoint = torch.load(
-        "/u/home/tanida/runs/full_model/run_45/checkpoints/checkpoint_val_loss_106.395_overall_steps_56835.pt", map_location=device
-    )
+    # checkpoint = torch.load(
+    #     "/u/home/tanida/runs/full_model/run_45/checkpoints/checkpoint_val_loss_106.395_overall_steps_56835.pt", map_location=device
+    # )
 
-    model = get_model(checkpoint)
+    model = get_model()
 
     opt = AdamW(model.parameters(), lr=LR)
     scaler = torch.cuda.amp.GradScaler()
@@ -592,8 +592,8 @@ def main():
     lr_scheduler = ReduceLROnPlateau(opt, mode="min", factor=FACTOR_LR_SCHEDULER, patience=PATIENCE_LR_SCHEDULER, threshold=THRESHOLD_LR_SCHEDULER, cooldown=COOLDOWN_LR_SCHEDULER)
     writer = SummaryWriter(log_dir=tensorboard_folder_path)
 
-    if checkpoint:
-        del checkpoint
+    # if checkpoint:
+    #     del checkpoint
 
     log.info("Starting training!")
 
