@@ -603,7 +603,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         # save model every time report level BLEU-4 is better than a certain threshold
         # or if F1 score of CE is better than certain threshold
         bleu_4_report_level = language_model_scores["report"]["bleu_4"]
-        f1_CE = language_model_scores["report"]["CE"]["f1"]
+        f1_CE = language_model_scores["report"]["CE"]["f1_micro_5"]
         if bleu_4_report_level > 0.14 or f1_CE > 0.42:
             save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
 

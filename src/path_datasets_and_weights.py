@@ -21,7 +21,7 @@ That means the directories specified by path_runs_* should already exist before 
 path_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
 path_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr"
 path_mimic_cxr_jpg = "/u/home/tanida/datasets/mimic-cxr-jpg"
-path_full_dataset = "/data1/dataset-with-reference-reports"  # "/u/home/tanida/datasets/dataset-with-reference-reports"
+path_full_dataset = "/u/home/tanida/datasets/dataset-with-reference-reports"
 path_chexbert_weights = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/CheXbert/src/models/chexbert.pth"
 path_runs_object_detector = "/u/home/tanida/runs/object_detector"
 path_runs_full_model = "/u/home/tanida/runs/full_model"
