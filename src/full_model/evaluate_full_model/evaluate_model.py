@@ -37,7 +37,7 @@ from tqdm import tqdm
 
 from src.dataset.constants import ANATOMICAL_REGIONS
 from src.full_model.evaluate_full_model.evaluate_language_model import evaluate_language_model
-from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL, WEIGHT_OBJECT_DETECTOR_LOSS, WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS, WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS, WEIGHT_LANGUAGE_MODEL_LOSS
+from src.full_model.run_configurations import PRETRAIN_WITHOUT_LM_MODEL, WEIGHT_OBJECT_DETECTOR_LOSS, WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS, WEIGHT_LANGUAGE_MODEL_LOSS
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -49,7 +49,6 @@ def write_all_losses_and_scores_to_tensorboard(
     val_losses_dict,
     obj_detector_scores,
     region_selection_scores,
-    region_abnormal_scores,
     language_model_scores,
     current_lr,
     bool_evaluate_language_model
@@ -86,10 +85,6 @@ def write_all_losses_and_scores_to_tensorboard(
         for subset in region_selection_scores:
             for metric, score in region_selection_scores[subset].items():
                 writer.add_scalar(f"region_select/{subset}/{metric}", score, overall_steps_taken)
-
-    def write_region_abnormal_scores():
-        for metric, score in region_abnormal_scores.items():
-            writer.add_scalar(f"region_abnormal/{metric}", score, overall_steps_taken)
 
     def write_clinical_efficacy_scores(ce_score_dict):
         """
@@ -168,31 +163,12 @@ def write_all_losses_and_scores_to_tensorboard(
     write_losses()
     write_obj_detector_scores()
     write_region_selection_scores()
-    write_region_abnormal_scores()
 
     # TODO: delete 2nd condition (since it's only there to save time)
     if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000 and bool_evaluate_language_model:
         write_language_model_scores()
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
-
-
-def update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected):
-    """
-    Args:
-        region_abnormal_scores (Dict)
-        predicted_abnormal_regions (Tensor[bool]): shape [batch_size x 29]
-        region_is_abnormal (Tensor[bool]): shape [batch_size x 29]
-        class_detected (Tensor[bool]): shape [batch_size x 29]
-
-    We only update/compute the scores for regions that were actually detected by the object detector (specified by class_detected).
-    """
-    detected_predicted_abnormal_regions = predicted_abnormal_regions[class_detected]
-    detected_region_is_abnormal = region_is_abnormal[class_detected]
-
-    region_abnormal_scores["precision"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
-    region_abnormal_scores["recall"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
-    region_abnormal_scores["f1"](detected_predicted_abnormal_regions, detected_region_is_abnormal)
 
 
 def update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal):
@@ -308,7 +284,6 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
         "total_loss": 0.0,
         "obj_detector_loss": 0.0,
         "region_selection_loss": 0.0,
-        "region_abnormal_loss": 0.0,
     }
 
     if not PRETRAIN_WITHOUT_LM_MODEL:
@@ -364,25 +339,6 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
             "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
             "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
         }
-
-    """
-    For the binary classifier for region normal/abnormal detection, we want to compute the precision, recall and f1 for:
-      - all regions
-
-    Evaluation according to:
-      TP: region is abnormal (gt), and is predicted as abnormal by classifier (pred)
-      FP: region is normal (gt), but is predicted as abnormal by classifier (pred)
-      TN: region is normal (gt), and is predicted as normal by classifier (pred)
-      FN: region is abnormal (gt), but is predicted as normal by classifier (pred)
-    """
-    region_abnormal_scores = {
-        # specifying average=None computes the metric for each class (i.e. negative and positive) separately
-        # we then report the score of the positive class by indexing [1] once we've computed the final scores
-        # this is equivalent to using average="binary" in sklearn.metric (with pos_label=1)
-        "precision": torchmetrics.Precision(num_classes=2, average=None).to(device),
-        "recall": torchmetrics.Recall(num_classes=2, average=None).to(device),
-        "f1": torchmetrics.F1Score(num_classes=2, average=None).to(device),
-    }
 
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
@@ -454,22 +410,18 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
                 (
                     obj_detector_loss_dict,
                     classifier_loss_region_selection,
-                    classifier_loss_region_abnormal,
                     detections,
                     class_detected,
                     selected_regions,
-                    predicted_abnormal_regions,
                 ) = output
             else:
                 (
                     obj_detector_loss_dict,
                     classifier_loss_region_selection,
-                    classifier_loss_region_abnormal,
                     language_model_loss,
                     detections,
                     class_detected,  # bool tensor of shape [batch_size x 29]
                     selected_regions,  # bool tensor of shape [batch_size x 29]
-                    predicted_abnormal_regions,  # bool tensor of shape [batch_size x 29]
                 ) = output
 
             # detections is a dict with keys "top_region_boxes" and "top_scores"
@@ -480,7 +432,7 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
             obj_detector_losses = sum(loss for loss in obj_detector_loss_dict.values())
 
             # sum up the rest of the losses
-            total_loss = WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
+            total_loss = WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection
 
             if not PRETRAIN_WITHOUT_LM_MODEL:
                 total_loss += WEIGHT_LANGUAGE_MODEL_LOSS * language_model_loss
@@ -488,8 +440,7 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
             list_of_losses = [
                 total_loss,
                 obj_detector_losses,
-                classifier_loss_region_selection,
-                classifier_loss_region_abnormal,
+                classifier_loss_region_selection
             ]
 
             if not PRETRAIN_WITHOUT_LM_MODEL:
@@ -506,9 +457,6 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
 
             # update scores for region selection metrics
             update_region_selection_metrics(region_selection_scores, selected_regions, region_has_sentence, region_is_abnormal)
-
-            # update scores for region abnormal detection metrics
-            update_region_abnormal_metrics(region_abnormal_scores, predicted_abnormal_regions, region_is_abnormal, class_detected)
 
     # normalize the val losses by steps_taken
     for loss_type in val_losses_dict:
@@ -529,11 +477,7 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
         for metric, score in region_selection_scores[subset].items():
             region_selection_scores[subset][metric] = score.compute()[1].item()  # only report results for the positive class (hence [1])
 
-    # compute the "micro" average scores for region_abnormal_scores
-    for metric, score in region_abnormal_scores.items():
-        region_abnormal_scores[metric] = score.compute()[1].item()
-
-    return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
+    return val_losses_dict, obj_detector_scores, region_selection_scores
 
 
 def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path, bool_evaluate_language_model):
@@ -551,8 +495,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
     (
         val_losses_dict,
         obj_detector_scores,
-        region_selection_scores,
-        region_abnormal_scores,
+        region_selection_scores
     ) = get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_dl, log_file, epoch)
 
     # TODO: delete 2nd and 3rd condition (since they are only there to save time)
@@ -570,7 +513,6 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         val_losses_dict,
         obj_detector_scores,
         region_selection_scores,
-        region_abnormal_scores,
         language_model_scores,
         current_lr,
         bool_evaluate_language_model
