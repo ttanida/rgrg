@@ -2,6 +2,7 @@ from ast import literal_eval
 import logging
 import math
 import os
+import random
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -39,6 +40,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]: %(message)s")
 log = logging.getLogger(__name__)
 
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+
 
 def compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences):
     def remove_gen_sents_corresponding_to_empty_ref_sents(gen_sents, ref_sents):
@@ -56,33 +63,20 @@ def compute_meteor_score(bbox_generated_sentences, bbox_reference_sentences):
 
         return filtered_gen_sents, filtered_ref_sents
 
-    with open(path_results_txt_file, "a") as f:
-        f.write(f"Num bbox_generated_sentences: {len(bbox_generated_sentences)}\n")
-        f.write(f"Num bbox_reference_sentences: {len(bbox_reference_sentences)}\n")
+    def remove_line_breaks(sents):
+        """
+        As bboxes further deviate from ground-truth, they may generate line break characters (i.e. "\n"),
+        which would throw an error in the compute_NLG_scores function.
+        """
+        return [" ".join(sent.split()) for sent in sents]
 
     gen_sents, ref_sents = remove_gen_sents_corresponding_to_empty_ref_sents(bbox_generated_sentences, bbox_reference_sentences)
 
-    with open(path_results_txt_file, "a") as f:
-        f.write(f"Num gen sents: {len(gen_sents)}\n")
-        f.write(f"Num ref sents: {len(ref_sents)}\n")
+    gen_sents = remove_line_breaks(gen_sents)
+    ref_sents = remove_line_breaks(ref_sents)
 
     nlg_metrics = ["meteor"]
-    try:
-        nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
-    except Exception as e:
-        with open(path_results_txt_file, "a") as f:
-            f.write(f"Error: {str(e)}\n")
-
-        with open("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/gen_sents.txt", "a") as f:
-            for sent in gen_sents:
-                f.write(f"{sent}\n")
-
-        with open("/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/ref_sents.txt", "a") as f:
-            for sent in ref_sents:
-                f.write(f"{sent}\n")
-
-        nlg_scores = {}
-        nlg_scores["meteor"] = -1
+    nlg_scores = compute_NLG_scores(nlg_metrics, gen_sents, ref_sents)
 
     meteor_score = nlg_scores["meteor"]
 
@@ -164,10 +158,6 @@ def get_data_loader(test_dataset):
     def collate_fn(batch: list[dict[str]]):
         # each dict in batch (which is a list) is for a single image and has the keys "image", "bbox_coordinates", "bbox_reference_sentences"
 
-        # discard images from batch where __getitem__ from custom_image_dataset failed (i.e. returned None)
-        # otherwise, whole training loop will stop (even if only 1 image fails to open)
-        batch = list(filter(lambda x: x is not None, batch))
-
         image_shape = batch[0]["image"].size()
         # allocate an empty images_batch tensor that will store all images of the batch
         images_batch = torch.empty(size=(len(batch), *image_shape))
@@ -193,7 +183,24 @@ def get_data_loader(test_dataset):
     return test_loader
 
 
-def check_coordinate(coord, dimension):
+def check_coordinates_not_too_close(coord_1, coord_2, dimension):
+    """
+    Bboxes may become very small in a certain dimension when varied by scale and aspect ratio.
+    This can lead to exceptions in the image transform pipeline, thus we have to separate coordinates
+    that are too close to each other.
+    """
+    pixel_threshold = 10
+
+    if abs(coord_1 - coord_2) < pixel_threshold:
+        if coord_2 == dimension:
+            coord_1 -= pixel_threshold
+        else:
+            coord_2 += pixel_threshold
+
+    return coord_1, coord_2
+
+
+def check_coordinate_inside_image(coord, dimension):
     """Make sure that new (varied) coordinate is still within the image."""
     if coord < 0:
         return 0
@@ -237,10 +244,10 @@ def vary_bbox_coords_by_aspect_ratio(row):
         y1_new = ground_truth_bbox_mid_point_y - bbox_height_new / 2
         y2_new = ground_truth_bbox_mid_point_y + bbox_height_new / 2
 
-        x1 = check_coordinate(int(x1_new), image_width)
-        x2 = check_coordinate(int(x2_new), image_width)
-        y1 = check_coordinate(int(y1_new), image_height)
-        y2 = check_coordinate(int(y2_new), image_height)
+        x1 = check_coordinate_inside_image(int(x1_new), image_width)
+        x2 = check_coordinate_inside_image(int(x2_new), image_width)
+        y1 = check_coordinate_inside_image(int(y1_new), image_height)
+        y2 = check_coordinate_inside_image(int(y2_new), image_height)
 
         varied_bbox_coords_single_image.append([x1, y1, x2, y2])
 
@@ -274,10 +281,13 @@ def vary_bbox_coords_by_scale(row):
         y1_new = ground_truth_bbox_mid_point_y - bbox_height_scaled / 2
         y2_new = ground_truth_bbox_mid_point_y + bbox_height_scaled / 2
 
-        x1 = check_coordinate(int(x1_new), image_width)
-        x2 = check_coordinate(int(x2_new), image_width)
-        y1 = check_coordinate(int(y1_new), image_height)
-        y2 = check_coordinate(int(y2_new), image_height)
+        x1 = check_coordinate_inside_image(int(x1_new), image_width)
+        x2 = check_coordinate_inside_image(int(x2_new), image_width)
+        y1 = check_coordinate_inside_image(int(y1_new), image_height)
+        y2 = check_coordinate_inside_image(int(y2_new), image_height)
+
+        x1, x2 = check_coordinates_not_too_close(x1, x2)
+        y1, y2 = check_coordinates_not_too_close(y1, y2)
 
         varied_bbox_coords_single_image.append([x1, y1, x2, y2])
 
@@ -321,10 +331,10 @@ def vary_bbox_coords_by_position(row):
         y1 += y_var
         y2 += y_var
 
-        x1 = check_coordinate(x1, image_width)
-        x2 = check_coordinate(x2, image_width)
-        y1 = check_coordinate(y1, image_height)
-        y2 = check_coordinate(y2, image_height)
+        x1 = check_coordinate_inside_image(x1, image_width)
+        x2 = check_coordinate_inside_image(x2, image_width)
+        y1 = check_coordinate_inside_image(y1, image_height)
+        y2 = check_coordinate_inside_image(y2, image_height)
 
         # if the standard deviation is set high, it can happen that x1 == x2 == 0 or x1 == x2 == image_width (vice-versa for y)
         # to prevent these cases from throwing errors, we slightly increase x2 in the first case and slightly decrease x1 in the second case (vice-versa for y)
@@ -332,6 +342,9 @@ def vary_bbox_coords_by_position(row):
             x1, x2 = move_coordinate_from_border(x1, x2, image_width)
         if y1 == y2:
             y1, y2 = move_coordinate_from_border(y1, y2, image_height)
+
+        x1, x2 = check_coordinates_not_too_close(x1, x2, image_width)
+        y1, y2 = check_coordinates_not_too_close(y1, y2, image_height)
 
         varied_bbox_coords_single_image.append([x1, y1, x2, y2])
 
@@ -394,11 +407,7 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
 
     num_images = len(test_set_as_df)
     mean = 0
-    if variation_type == "position":
-        stds_to_evaluate = np.arange(start=0, stop=1, step=0.1).tolist()
-    else:
-        # stds_to_evaluate = np.arange(start=0, stop=2, step=0.1).tolist()
-        stds_to_evaluate = np.arange(start=2.0, stop=5, step=0.2).tolist()
+    stds_to_evaluate = np.arange(start=0, stop=2, step=0.1).tolist()
 
     transforms = get_transforms()
 
@@ -408,7 +417,7 @@ def evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tok
         # create (or more likely overwrite) column bbox_coordinates_varied in test_set_as_df that will hold the varied bbox coordinates generated by the corresponding variation_type and std
         vary_bbox_coords(variation_type, num_images, mean, std, test_set_as_df)
 
-        test_dataset = CustomDatasetBboxVariations(dataset_as_df=test_set_as_df, transforms=transforms, log=log)
+        test_dataset = CustomDatasetBboxVariations(dataset_as_df=test_set_as_df, transforms=transforms)
         test_loader = get_data_loader(test_dataset)
 
         bbox_generated_sentences, bbox_reference_sentences = iterate_over_data_loader(test_loader, model, tokenizer)
@@ -461,9 +470,6 @@ def get_test_set_as_df():
     test_set_as_df["bbox_widths_heights"] = test_set_as_df.apply(lambda row: compute_bbox_widths_heights(row), axis=1)
     test_set_as_df["image_width_height"] = test_set_as_df.apply(lambda row: retrieve_image_widths_heights(row), axis=1)
 
-    # TODO: delete this
-    test_set_as_df = test_set_as_df[:500]
-
     return test_set_as_df
 
 
@@ -496,7 +502,7 @@ def main():
 
     tokenizer = get_tokenizer()  # to decode (i.e. turn into human-readable text) the generated output ids by the language model
 
-    for variation_type in ["scale", "aspect_ratio"]:  # "position"
+    for variation_type in ["scale", "aspect_ratio", "position"]:
         evaluate_model_on_bbox_variations(variation_type, model, test_set_as_df, tokenizer)
 
 
