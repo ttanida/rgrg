@@ -183,7 +183,7 @@ def get_data_loader(test_dataset):
     return test_loader
 
 
-def check_coordinates_not_too_close(coord_1, coord_2, dimension):
+def check_coordinates_distance(coord_1, coord_2, dimension):
     """
     Bboxes may become very small in a certain dimension when varied by scale and aspect ratio.
     This can lead to exceptions in the image transform pipeline, thus we have to separate coordinates
@@ -286,8 +286,8 @@ def vary_bbox_coords_by_scale(row):
         y1 = check_coordinate_inside_image(int(y1_new), image_height)
         y2 = check_coordinate_inside_image(int(y2_new), image_height)
 
-        x1, x2 = check_coordinates_not_too_close(x1, x2)
-        y1, y2 = check_coordinates_not_too_close(y1, y2)
+        x1, x2 = check_coordinates_distance(x1, x2, image_width)
+        y1, y2 = check_coordinates_distance(y1, y2, image_height)
 
         varied_bbox_coords_single_image.append([x1, y1, x2, y2])
 
@@ -343,8 +343,8 @@ def vary_bbox_coords_by_position(row):
         if y1 == y2:
             y1, y2 = move_coordinate_from_border(y1, y2, image_height)
 
-        x1, x2 = check_coordinates_not_too_close(x1, x2, image_width)
-        y1, y2 = check_coordinates_not_too_close(y1, y2, image_height)
+        x1, x2 = check_coordinates_distance(x1, x2, image_width)
+        y1, y2 = check_coordinates_distance(y1, y2, image_height)
 
         varied_bbox_coords_single_image.append([x1, y1, x2, y2])
 
@@ -480,8 +480,8 @@ def get_model():
     )
 
     # if there is a key error when loading checkpoint, try uncommenting down below
-    # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
-    # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
+    checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
+    checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 
     model = ReportGenerationModel()
     model.load_state_dict(checkpoint["model"])
