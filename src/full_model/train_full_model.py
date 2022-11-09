@@ -139,6 +139,7 @@ def train_model(
             "total_loss": 0.0,
             "obj_detector_loss": 0.0,
             "region_selection_loss": 0.0,
+            "region_abnormal_loss": 0.0,
         }
 
         if not PRETRAIN_WITHOUT_LM_MODEL:
@@ -187,13 +188,15 @@ def train_model(
                     if PRETRAIN_WITHOUT_LM_MODEL:
                         (
                             obj_detector_loss_dict,
-                            classifier_loss_region_selection
+                            classifier_loss_region_selection,
+                            classifier_loss_region_abnormal,
                         ) = output
                     else:
                         (
                             obj_detector_loss_dict,
                             classifier_loss_region_selection,
-                            language_model_loss
+                            classifier_loss_region_abnormal,
+                            language_model_loss,
                         ) = output
 
                     # sum up all 4 losses from the object detector
@@ -201,7 +204,7 @@ def train_model(
 
                     # sum up the rest of the losses
                     total_loss = (
-                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection
+                        WEIGHT_OBJECT_DETECTOR_LOSS * obj_detector_losses + WEIGHT_BINARY_CLASSIFIER_REGION_SELECTION_LOSS * classifier_loss_region_selection + WEIGHT_BINARY_CLASSIFIER_REGION_ABNORMAL_LOSS * classifier_loss_region_abnormal
                     )
 
                     if not PRETRAIN_WITHOUT_LM_MODEL:
@@ -239,7 +242,8 @@ def train_model(
             list_of_losses = [
                 total_loss,
                 obj_detector_losses,
-                classifier_loss_region_selection
+                classifier_loss_region_selection,
+                classifier_loss_region_abnormal,
             ]
 
             if not PRETRAIN_WITHOUT_LM_MODEL:

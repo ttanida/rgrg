@@ -26,9 +26,9 @@ Ideally, the training should go like this:
     checkpoint = torch.load(...) in line 559 and (possible uncommenting) model.load_state_dict(checkpoint["model"]) in line 565
     - train full model with src/full_model/train_full_model.py
 """
-RUN = 50
-RUN_COMMENT = """Ablation study: pre-train full model only with region selection module (i.e. without abnormality classifier)"""
-SEED = 43
+RUN = 48
+RUN_COMMENT = """Seed 41: redo run 37"""
+SEED = 41
 PRETRAIN_WITHOUT_LM_MODEL = True
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
