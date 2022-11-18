@@ -1,5 +1,7 @@
 # Human-in-the-Loop: Region-guided Radiology Report Generation
 
+The automatic generation of radiology reports has the potential to assist radiologists in the time-consuming task of report writing. Existing methods generate the full report from image-level features, failing to explicitly focus on anatomical regions in the image. We propose a simple yet effective region-guided report generation model that detects anatomical regions and then describes individual, salient regions to form the final report. While previous methods generate reports without the possibility of human intervention and with limited explainability, our method opens up novel clinical use cases through additional human-in-the-loop capabilities and introduces a high degree of transparency and explainability. Comprehensive experiments demonstrate the effectiveness of our method in both the report generation task and the human-in-the-loop capabilities, outperforming previous state-of-the-art models.
+
 ## Setup
 
 1. Create virtual environment (Python 3.10.4)
@@ -39,7 +41,7 @@ During each training stage, the validation metrics and other useful information 
 
 ## Testing
 
-Specify the run and checkpoint to be tested in lines 40 - 41 of src/full_model/test_set_evaluation.py, then run "**python test_set_evaluation.py**". Txt files with the test set scores (and generated reports/sentences) will be saved in src/.
+Specify the run and checkpoint of the best trained full model to be tested in lines 40 - 41 of src/full_model/test_set_evaluation.py, then run "**python test_set_evaluation.py**". Txt files with the test set scores (and generated reports/sentences) will be saved in src/.
 
 [^1]: Recommended: first install torch via https://pytorch.org/get-started/locally/ (since your local setup is likely different to mine), then comment out torch and torchvision in the requirements file before running the pip install command.
 
