@@ -288,6 +288,7 @@ def train_model(
 
 def get_model(checkpoint=None):
     # if there is a key error when loading checkpoint, try uncommenting down below
+    # since depending on the torch version, the state dicts may be different
     # checkpoint["model"]["object_detector.rpn.head.conv.weight"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.weight")
     # checkpoint["model"]["object_detector.rpn.head.conv.bias"] = checkpoint["model"].pop("object_detector.rpn.head.conv.0.0.bias")
 

@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 # define configurations for training run
 RUN = 14
 # comment can be useful to add additional information to run_config.txt file
-RUN_COMMENT = """Train object detector with seed 41."""
+RUN_COMMENT = """Enter comment here."""
 SEED = 41
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0
