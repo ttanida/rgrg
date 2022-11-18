@@ -27,8 +27,8 @@ Ideally, the training should go like this:
     - train full model with src/full_model/train_full_model.py
 """
 RUN = 48
-RUN_COMMENT = """Seed 41: redo run 37"""
-SEED = 41
+RUN_COMMENT = """Enter a comment here."""
+SEED = 42
 PRETRAIN_WITHOUT_LM_MODEL = True
 IMAGE_INPUT_SIZE = 512
 PERCENTAGE_OF_TRAIN_SET_TO_USE = 1.0

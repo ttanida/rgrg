@@ -1,5 +1,4 @@
-# region-guided-chest-x-ray-report-generation
-Repo to store code for my master's thesis on chest x-ray report generation
+# Human-in-the-Loop: Region-guided Radiology Report Generation
 
 Setup:
 
