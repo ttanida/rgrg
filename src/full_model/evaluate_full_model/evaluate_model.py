@@ -51,8 +51,7 @@ def write_all_losses_and_scores_to_tensorboard(
     region_selection_scores,
     region_abnormal_scores,
     language_model_scores,
-    current_lr,
-    bool_evaluate_language_model
+    current_lr
 ):
     def write_losses():
         for loss_type in train_losses_dict:
@@ -170,8 +169,7 @@ def write_all_losses_and_scores_to_tensorboard(
     write_region_selection_scores()
     write_region_abnormal_scores()
 
-    # TODO: delete 2nd condition (since it's only there to save time)
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000 and bool_evaluate_language_model:
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000:
         write_language_model_scores()
 
     writer.add_scalar("lr", current_lr, overall_steps_taken)
@@ -536,7 +534,7 @@ def get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_d
     return val_losses_dict, obj_detector_scores, region_selection_scores, region_abnormal_scores
 
 
-def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path, bool_evaluate_language_model):
+def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, scaler, writer, tokenizer, run_params, generated_sentences_and_reports_folder_path):
     model.eval()
 
     epoch = run_params["epoch"]
@@ -555,8 +553,9 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         region_abnormal_scores,
     ) = get_val_losses_and_evaluate_obj_detector_and_binary_classifiers(model, val_dl, log_file, epoch)
 
-    # TODO: delete 2nd and 3rd condition (since they are only there to save time)
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000 and bool_evaluate_language_model:
+    # the language model will generate gibberish in the beginning, so no need to evaluate it for first 100000 steps
+    # (you may need to change this number based on the batch size you use, we used a small batch size of 2 for resource constraints)
+    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000:
         language_model_scores = evaluate_language_model(model, val_dl, tokenizer, writer, run_params, generated_sentences_and_reports_folder_path)
     else:
         language_model_scores = None
@@ -572,8 +571,7 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         region_selection_scores,
         region_abnormal_scores,
         language_model_scores,
-        current_lr,
-        bool_evaluate_language_model
+        current_lr
     )
 
     total_val_loss = val_losses_dict["total_loss"]
@@ -598,22 +596,3 @@ def evaluate_model(model, train_losses_dict, val_dl, lr_scheduler, optimizer, sc
         }
 
         torch.save(checkpoint, save_path)
-
-    if not PRETRAIN_WITHOUT_LM_MODEL and overall_steps_taken > 100000 and bool_evaluate_language_model:
-        # save model every time report level BLEU-4 is better than a certain threshold
-        # or if F1 score of CE is better than certain threshold
-        bleu_4_report_level = language_model_scores["report"]["bleu_4"]
-        f1_CE = language_model_scores["report"]["CE"]["f1_micro_5"]
-        if bleu_4_report_level > 0.14 or f1_CE > 0.42:
-            save_path = os.path.join(run_params["checkpoints_folder_path"], f"checkpoint_val_loss_{total_val_loss:.3f}_overall_steps_{overall_steps_taken}.pt")
-
-            checkpoint = {
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "scaler": scaler.state_dict(),
-                "current_epoch": epoch,
-                "overall_steps_taken": overall_steps_taken,
-                "lowest_val_loss": total_val_loss,
-            }
-
-            torch.save(checkpoint, save_path)

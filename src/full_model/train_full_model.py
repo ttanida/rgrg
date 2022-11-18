@@ -129,8 +129,6 @@ def train_model(
     # to recover from out of memory error if a batch has a sequence that is too long
     oom = False
 
-    bool_evaluate_language_model = True
-
     for epoch in range(current_epoch, epochs):
         run_params["epoch"] = epoch
         log.info(f"Training epoch {epoch}!\n")
@@ -270,12 +268,9 @@ def train_model(
                     writer,
                     tokenizer,
                     run_params,
-                    generated_sentences_and_reports_folder_path,
-                    bool_evaluate_language_model,
+                    generated_sentences_and_reports_folder_path
                 )
                 log.info(f"Metrics evaluated at step {run_params['overall_steps_taken']}!")
-
-                bool_evaluate_language_model = False if bool_evaluate_language_model else True
 
                 # set the model back to training
                 model.train()
