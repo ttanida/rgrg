@@ -564,7 +564,7 @@ def main():
     # resume_training = False
     checkpoint = None
     # checkpoint = torch.load(
-    #     "/u/home/tanida/runs/full_model/run_45/checkpoints/checkpoint_val_loss_106.395_overall_steps_56835.pt", map_location=device
+    #     "/u/home/my_surname/runs/full_model/run_45/checkpoints/checkpoint_val_loss_106.395_overall_steps_56835.pt", map_location=device
     # )
 
     model = get_model(checkpoint)
