@@ -9,7 +9,7 @@ from src.dataset.constants import ANATOMICAL_REGIONS, IMAGE_IDS_TO_IGNORE
 
 from src.path_datasets_and_weights import path_chest_imagenome
 
-txt_file_to_log_stats = "/u/home/my_surname/datasets/dataset_stats.txt"
+txt_file_to_log_stats = "/u/home/tanida/datasets/dataset_stats.txt"
 
 
 def print_stats_counter_dicts(counter_dict):

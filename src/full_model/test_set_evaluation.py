@@ -69,7 +69,7 @@ folder specified by path_to_folder_to_store_files will have these files after te
     - generated_abnormal_sentences.txt
     - generated_reports.txt
 """
-path_to_folder_to_store_files = "/u/home/my_surname/region-guided-chest-x-ray-report-generation/"
+path_to_folder_to_store_files = "/u/home/tanida/region-guided-chest-x-ray-report-generation/"
 final_scores_txt_file = os.path.join(path_to_folder_to_store_files, "final_scores.txt")
 
 

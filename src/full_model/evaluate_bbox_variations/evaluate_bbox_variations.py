@@ -30,10 +30,10 @@ NUM_BEAMS = 4
 # most generated sentences for non-noisy bboxes will have at most 60 tokens, so 80 is a good threshold
 MAX_NUM_TOKENS_GENERATE = 80
 # test csv file with only 1000 images (you can create it by setting NUM_ROWS_TO_CREATE_IN_NEW_CSV_FILES in line 67 of create_dataset.py to 1000)
-path_to_partial_test_set = "/u/home/my_surname/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
+path_to_partial_test_set = "/u/home/tanida/datasets/dataset-with-reference-reports-partial-1000/test-1000.csv"
 
 # path where "bbox_variations_results.txt" will be saved that will contain the meteor scores for the different variations
-path_results_txt_file = "/u/home/my_surname/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/bbox_variations_results.txt"
+path_results_txt_file = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/full_model/evaluate_bbox_variations/bbox_variations_results.txt"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

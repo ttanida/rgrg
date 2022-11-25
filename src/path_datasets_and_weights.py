@@ -7,7 +7,7 @@ https://physionet.org/content/mimic-cxr/2.0.0/.
 
 path_full_dataset specifies the path where the folder will be created (by module src/dataset/create_dataset.py) that will hold the
 train, valid, test files, which will be used for training, evaluation and testing. See doc string of create_dataset.py for more information.
-That means in my case, "/u/home/my_surname/datasets/" should already exist as a directory, and the folder "dataset-with-reference-reports" would
+That means in my case, "/u/home/tanida/datasets/" should already exist as a directory, and the folder "dataset-with-reference-reports" would
 be created in that directory by the module.
 
 path_chexbert_weights specifies the path to the weights of the CheXbert labeler needed to extract the disease labels from the generated and reference reports.
@@ -18,10 +18,10 @@ when training the object detector and full model (with and without the language 
 That means the directories specified by path_runs_* should already exist before starting the training.
 """
 
-path_chest_imagenome = "/u/home/my_surname/datasets/chest-imagenome-dataset"
-path_mimic_cxr = "/u/home/my_surname/datasets/mimic-cxr"
-path_mimic_cxr_jpg = "/u/home/my_surname/datasets/mimic-cxr-jpg"
-path_full_dataset = "/u/home/my_surname/datasets/dataset-with-reference-reports"
-path_chexbert_weights = "/u/home/my_surname/region-guided-chest-x-ray-report-generation/src/CheXbert/src/models/chexbert.pth"
-path_runs_object_detector = "/u/home/my_surname/runs/object_detector"
-path_runs_full_model = "/u/home/my_surname/runs/full_model"
+path_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
+path_mimic_cxr = "/u/home/tanida/datasets/mimic-cxr"
+path_mimic_cxr_jpg = "/u/home/tanida/datasets/mimic-cxr-jpg"
+path_full_dataset = "/u/home/tanida/datasets/dataset-with-reference-reports"
+path_chexbert_weights = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/CheXbert/src/models/chexbert.pth"
+path_runs_object_detector = "/u/home/tanida/runs/object_detector"
+path_runs_full_model = "/u/home/tanida/runs/full_model"
