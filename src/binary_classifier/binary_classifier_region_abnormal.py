@@ -49,8 +49,8 @@ class BinaryClassifierRegionAbnormal(nn.Module):
             # for evaluation, we also need the regions that were predicted to be abnormal/normal to compare with the ground truth (region_is_abnormal)
             # and compute recall, precision etc.
 
-            # use a threshold of 0 in logit-space (i.e. 0.5 in probability-space)
-            # if a logit > 0, then it means that class/region has boolean value True and is considered abnormal
+            # use a threshold of -1 in logit-space (i.e. 0.269 in probability-space)
+            # if a logit > -1, then it means that class/region has boolean value True and is considered abnormal
             predicted_abnormal_regions = logits > -1
 
             # regions that were not detected will be filtered out later (via class_detected) when computing recall, precision etc.

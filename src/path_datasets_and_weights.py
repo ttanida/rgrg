@@ -16,6 +16,8 @@ The weights can be downloaded here: https://github.com/stanfordmlgroup/CheXbert#
 path_runs_* specify the directories where all the run folders (containing checkpoints, tensorboard files etc.) will be created
 when training the object detector and full model (with and without the language model), respectively.
 That means the directories specified by path_runs_* should already exist before starting the training.
+
+path_test_set_evaluation_scores_txt_files will be the path where the txt files will be stored which contain the test set scores.
 """
 
 path_chest_imagenome = "/u/home/tanida/datasets/chest-imagenome-dataset"
@@ -25,3 +27,4 @@ path_full_dataset = "/u/home/tanida/datasets/dataset-with-reference-reports"
 path_chexbert_weights = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src/CheXbert/src/models/chexbert.pth"
 path_runs_object_detector = "/u/home/tanida/runs/object_detector"
 path_runs_full_model = "/u/home/tanida/runs/full_model"
+path_test_set_evaluation_scores_txt_files = "/u/home/tanida/region-guided-chest-x-ray-report-generation/src"

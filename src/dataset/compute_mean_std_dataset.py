@@ -73,6 +73,7 @@ def get_image_paths_mimic() -> list:
     """
     Returns a list of all file paths to mimic-cxr images.
     """
+    print("Reading in the file paths to all MIMIC-CXR images")
     image_paths = []
     path_mimic_cxr_files = os.path.join(path_mimic_cxr_jpg, "files")
     for root, _, files in tqdm(os.walk(path_mimic_cxr_files)):

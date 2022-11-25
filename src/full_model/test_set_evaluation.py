@@ -34,7 +34,7 @@ from src.full_model.evaluate_full_model.evaluate_language_model import (
 )
 from src.full_model.report_generation_model import ReportGenerationModel
 from src.full_model.train_full_model import get_tokenizer
-from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model
+from src.path_datasets_and_weights import path_full_dataset, path_runs_full_model, path_test_set_evaluation_scores_txt_files
 
 # specify the checkpoint you want to evaluate by setting "RUN" and "CHECKPOINT"
 RUN = 38
@@ -62,15 +62,14 @@ torch.manual_seed(seed_val)
 torch.cuda.manual_seed_all(seed_val)
 
 """
-folder specified by path_to_folder_to_store_files will have these files after test set evaluation:
+Folder specified by path_test_set_evaluation_scores_txt_files will have these files after test set evaluation:
 
     - final_scores.txt
     - generated_sentences.txt
     - generated_abnormal_sentences.txt
     - generated_reports.txt
 """
-path_to_folder_to_store_files = "/u/home/tanida/region-guided-chest-x-ray-report-generation/"
-final_scores_txt_file = os.path.join(path_to_folder_to_store_files, "final_scores.txt")
+final_scores_txt_file = os.path.join(path_test_set_evaluation_scores_txt_files, "final_scores.txt")
 
 
 def write_all_scores_to_file(
@@ -204,8 +203,8 @@ def write_sentences_and_reports_to_file_for_test_set(
     gen_sentences_with_corresponding_regions
 ):
     def write_sentences():
-        txt_file_name = os.path.join(path_to_folder_to_store_files, "generated_sentences.txt")
-        txt_file_name_abnormal = os.path.join(path_to_folder_to_store_files, "generated_abnormal_sentences.txt")
+        txt_file_name = os.path.join(path_test_set_evaluation_scores_txt_files, "generated_sentences.txt")
+        txt_file_name_abnormal = os.path.join(path_test_set_evaluation_scores_txt_files, "generated_abnormal_sentences.txt")
 
         with open(txt_file_name, "a") as f:
             for gen_sent, ref_sent in zip(generated_sentences, reference_sentences):
@@ -218,7 +217,7 @@ def write_sentences_and_reports_to_file_for_test_set(
                 f.write(f"Reference sentence: {ref_sent}\n\n")
 
     def write_reports():
-        txt_file_name = os.path.join(path_to_folder_to_store_files, "generated_reports.txt")
+        txt_file_name = os.path.join(path_test_set_evaluation_scores_txt_files, "generated_reports.txt")
 
         with open(txt_file_name, "a") as f:
             for gen_report, ref_report, removed_similar_gen_sents, gen_sents_with_regions_single_report in zip(

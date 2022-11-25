@@ -48,8 +48,8 @@ class BinaryClassifierRegionSelection(nn.Module):
             # to evaluate the classifier during eval mode (comparing selected_regions to ground-truth region_has_sentence to compute recall, precision etc.)
             # and to generally know which regions were selected for generation (which is needed for mapping each selected_region_feature to its corresponding class)
             #
-            # use a threshold of 0 in logit-space (i.e. 0.5 in probability-space)
-            # if a logit > 0, then it means that class/region has boolean value True and a sentence should be generated for it
+            # use a threshold of -1 in logit-space (i.e. 0.269 in probability-space)
+            # if a logit > -1, then it means that class/region has boolean value True and a sentence should be generated for it
             selected_regions = logits > -1
 
             # set to False all regions that were not detected by object detector

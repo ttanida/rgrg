@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 import torchvision
-import torchvision.models as models
+from torchvision.models import resnet50, ResNet50_Weights
 from torchvision.models.detection.faster_rcnn import TwoMLPHead, FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator, RPNHead
 # from torchinfo import summary
@@ -48,7 +48,7 @@ class ObjectDetector(nn.Module):
         # 29 classes for 29 anatomical regions + background (defined as class 0)
         self.num_classes = 30
 
-        resnet = models.resnet50(pretrained=True)
+        resnet = resnet50(weights=ResNet50_Weights.DEFAULT)
 
         # since we have grayscale images, we need to change the first conv layer to accept 1 in_channel (instead of 3)
         resnet.conv1 = torch.nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
