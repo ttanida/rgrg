@@ -1,0 +1,51 @@
+name: rgrg_env
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+  - pkgs/main
+dependencies:
+  - spacy-model-en_core_web_trf
+  - pillow=9.2.0
+  - pip=22.2.2=pyhd8ed1ab_0
+  - python=3.9.13=h9a8a25e_0_cpython
+  - python_abi=3.9=2_cp39
+  - pytorch=1.12.1=py3.9_cuda11.6_cudnn8.3.2_0
+  - pytorch-mutex=1.0=cuda
+  - torchaudio=0.12.1=py39_cu116
+  - torchvision=0.13.1=py39_cu116
+  - pip:
+    - -e .
+    - albumentations==1.1.0
+    - bert-score==0.3.11
+    - datasets==2.3.2
+    - evaluate==0.2.2
+    - imagesize==1.3.0
+    - matplotlib==3.5.2
+    - nltk==3.7
+    - numpy==1.22.3
+    - opencv-python==4.5.5.64
+    - opencv-python-headless==4.6.0.66
+    - pandas==1.4.2
+    - pycocoevalcap==1.2
+    - pycocotools==2.0.5
+    - rouge-score==0.1.2
+    - scikit-image==0.19.3
+    - scikit-learn==1.1.2
+    - scipy==1.9.1
+    - setuptools==61.2.0
+    - spacy==3.4.1
+    - spacy-alignments==0.8.5
+    - spacy-legacy==3.0.10
+    - spacy-loggers==1.0.3
+    - spacy-transformers==1.1.8
+    - statsmodels==0.13.2
+    - tensorboard==2.9.0
+    - tensorboard-data-server==0.6.1
+    - tensorboard-plugin-wit==1.8.1
+    - tensorboardx==2.5.1
+    - tokenizers==0.12.1
+    - torchinfo==1.7.0
+    - torchmetrics==0.9.3
+    - tqdm==4.64.0
+    - transformers==4.19.2

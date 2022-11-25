@@ -2,7 +2,6 @@ albumentations==1.1.0
 bert_score==0.3.11
 datasets==2.3.2
 evaluate==0.2.2
-GPUtil==1.4.0
 imagesize==1.3.0
 matplotlib==3.5.2
 nltk==3.7
