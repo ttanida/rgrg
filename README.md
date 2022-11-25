@@ -9,14 +9,12 @@ The automatic generation of radiology reports has the potential to assist radiol
 
 ## Setup
 
-1. Create virtual environment (Python 3.10.4)
-2. Run "**pip install -e .**" in the root directory (i.e. region-guided-chest-x-ray-report-generation) to install src as a standalone package. This allows imports from sibling directories.
-3. Run "**pip install -r requirements.txt**"[^1]
-4. In src/path_datasets_and_weights.py, specify the paths to the various datasets (Chest ImaGenome, MIMIC-CXR, MIMIC-CXR-JPG), CheXbert weights, and folders in which the runs are saved. Follow the instructions of the doc string of path_datasets_and_weights.py.
+1. Create conda environment with "**conda env create -f environment.yml**"
+2. In src/path_datasets_and_weights.py, specify the paths to the various datasets (Chest ImaGenome, MIMIC-CXR, MIMIC-CXR-JPG), CheXbert weights, and folders in which the runs are saved. Follow the instructions of the doc string of path_datasets_and_weights.py.
 
-## Create train, validation and test csv files
+## Create train, val and test csv files
 
-After following the 4 setup steps, run "**python create_dataset.py**" in src/dataset/ to create training, validation and test csv files, in which each row contains specific information about a single image. See doc string of create_dataset.py for more details.
+After the setup, run "**python create_dataset.py**" in src/dataset/ to create training, val and test csv files, in which each row contains specific information about a single image. See doc string of create_dataset.py for more details.
 
 ## Training
 
@@ -47,6 +45,3 @@ During each training stage, the validation metrics and other useful information 
 ## Testing
 
 Specify the run and checkpoint of the best trained full model to be tested in lines 40 - 41 of src/full_model/test_set_evaluation.py, then run "**python test_set_evaluation.py**". Txt files with the test set scores (and generated reports/sentences) will be saved in src/.
-
-[^1]: Recommended: first install torch via https://pytorch.org/get-started/locally/ (since your local setup is likely different to mine), then comment out torch and torchvision in the requirements file before running the pip install command.
-
