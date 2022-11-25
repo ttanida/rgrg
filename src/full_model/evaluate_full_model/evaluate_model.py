@@ -19,14 +19,7 @@ evaluate_model and its sub-functions evaluate among other things:
     - binary classifier region abnormal detection:
         - precision, recall, f1 for all regions
     - language model (is evaluated in separate evaluate_language_model.py module):
-        - BLEU 1-4 for all generated sentences, generated sentences with gt = normal, generated sentences with gt = abnormal
-        - BLEU 1-4, meteor, rouge-L for all generated reports
-        - NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated sentences
-        are saved as a txt file (for manual verification what the model generates)
-        - NUM_BATCHES_OF_GENERATED_REPORTS_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated reports
-        are saved as a txt file (for manual verification what the model generates)
-        - NUM_IMAGES_TO_PLOT images are saved to tensorboard where gt and predicted bboxes for every region
-        are depicted, as well as the generated sentences (if they exist) and reference sentences for every region
+        - see doc string of evaluate_language_model.py for information on metrics
 """
 
 import os

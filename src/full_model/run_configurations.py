@@ -22,8 +22,8 @@ Ideally, the training should go like this:
 (3) Full model training:
     - uncomment lines that load object detector weights in the __init__ method (since those weights will be overwritten anyway)
     - set PRETRAIN_WITHOUT_LM_MODEL = False in this file
-    - load best pre-trained full model weights from step (2) in src/full_model/train_full_model.py by specifying them in
-    checkpoint = torch.load(...) in line 559 and (possible uncommenting) model.load_state_dict(checkpoint["model"]) in line 565
+    - load best pre-trained full model weights from step (2) in src/full_model/train_full_model.py
+    by specifying them in checkpoint = torch.load(...) in line 567
     - train full model with src/full_model/train_full_model.py
 """
 RUN = 48

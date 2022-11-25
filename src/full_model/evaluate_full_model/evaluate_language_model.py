@@ -4,10 +4,17 @@ This module contains all functions used to evaluate the language model.
 The (main) function evaluate_language_model of this module is called by the function evaluate_model in evaluate_model.py.
 
 evaluate_language_model returns language_model_scores which include:
-    - BLEU 1-4 for all generated sentences
-    - BLEU 1-4 for all generated sentences with gt = normal (i.e. the region was considered normal by the radiologist)
-    - BLEU 1-4 for all generated sentences with gt = abnormal (i.e. the region was considered abnormal by the radiologist).
-    - BLEU 1-4, meteor, rouge-L for all generated reports
+    - METEOR for:
+        - all generated sentences
+        - generated sentences for each region
+        - generated sentences with gt = normal region (i.e. the region was considered normal by the radiologist)
+        - generated sentences with gt = abnormal region (i.e. the region was considered abnormal by the radiologist)
+
+    - BLEU 1-4, METEOR, ROUGE-L, CIDEr-D for all generated reports
+    - Clinical efficacy metrics for all generated reports:
+        - micro-averaged over 5 observations
+        - exampled-based averaged over all 14 observations
+        - computed for each observation individually
 
 It also calls subfunctions which:
     - save NUM_BATCHES_OF_GENERATED_SENTENCES_TO_SAVE_TO_FILE (see run_configurations.py) batches of generated sentences as a txt file
