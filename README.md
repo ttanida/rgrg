@@ -21,3 +21,6 @@ After the setup, run "**python create_dataset.py**" in src/dataset/ to create tr
 ## Training and Testing
 
 Please read the README_TRAIN_TEST.md for specific information on trainig and testing the model.
+
+---
+If you have any questions, please don't hesitate to contact me via linkedIn: https://www.linkedin.com/in/tim-tanida/
