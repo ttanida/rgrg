@@ -1,3 +1,9 @@
+"""
+This script evaluates the robustness of the selection-based sentence generation capability of the model.
+See section 5.3 of main paper for more details.
+"""
+
+
 from ast import literal_eval
 import logging
 import math
