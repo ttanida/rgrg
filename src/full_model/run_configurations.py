@@ -16,7 +16,8 @@ Ideally, the training should go like this:
 (2) Object detector + binary classifiers training:
     - load best object detector weights from step (1) into the object detector in the __init__ method in src/full_model/report_generation_model.py
     - set PRETRAIN_WITHOUT_LM_MODEL = True in this file
-    - make sure that in the main function of src/full_model/train_full_model.py, no other weights are loaded into the instantiated ReportGenerationModel
+    - make sure that in the main function of src/full_model/train_full_model.py,
+    no other weights are loaded into the instantiated ReportGenerationModel (i.e. make sure that line 567 is commented out)
     - pre-train full model without language model with src/full_model/train_full_model.py
 
 (3) Full model training:
