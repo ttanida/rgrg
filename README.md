@@ -6,8 +6,9 @@ The automatic generation of radiology reports has the potential to assist radiol
 
 ## Results
 
-![image info](./figures_repo/nlg_metrics_table.png)
-![image info](./figures_repo/clinical_efficacy_metrics_table.png)
+![image info](./figures_repo/nlg_metrics_table.png) *Table 1. Natural language generation (NLG) metrics for the full report generation task. Our model is competitive with or outperforms previous state-of-the-art models on a variety of metrics.*
+
+![image info](./figures_repo/clinical_efficacy_metrics_table.png) *Table 2. Clinical efficacy (CE) metrics micro-averaged over 5 observations (denoted by mic-5) and example-based averaged over 14 observations (denoted by ex-14). RL represents reinforcement learning. Our model outperforms all non-RL models by large margins and is competitive with the two RL-based models directly optimized on CE metrics. Dashed lines highlight the scores of the best non-RL baseline.*
 
 ## Setup
 
