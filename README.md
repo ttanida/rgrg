@@ -16,9 +16,15 @@ The automatic generation of radiology reports has the potential to assist radiol
 
 ## Qualitative Results
 
-![image info](./figures_repo/full_report_generation.png) *Figure 2. Full report generation for a test set image. Detected anatomical regions (solid boxes), corresponding generated sentences, and semantically matching reference sentences are colored the same. The generated report mostly captures the information contained in the reference report, as reflected by the matching colors.*
+<p align="center">
+  <img src="figures_repo/full_report_generation.png" alt="Full report generation" width="30%">
+</p>
+<p align="center">Figure 2. Full report generation for a test set image. Detected anatomical regions (solid boxes), corresponding generated sentences, and semantically matching reference sentences are colored the same. The generated report mostly captures the information contained in the reference report, as reflected by the matching colors.</p>
 
-![image info](./figures_repo/anatomy_based_sentence_generation.png) *Figure 3. Interactive capability of anatomy-based sentence generation allows for the generation of descriptions of explicitly chosen anatomical regions. We show predicted (dashed boxes) and ground-truth (solid boxes) anatomical regions and color sentences accordingly. We observe that the model generates pertinent, anatomy-related sentences.*
+<p align="center">
+  <img src="figures_repo/anatomy_based_sentence_generation.png" alt="Anatomy-based generation" width="60%">
+</p>
+<p align="center">Figure 3. Interactive capability of anatomy-based sentence generation allows for the generation of descriptions of explicitly chosen anatomical regions. We show predicted (dashed boxes) and ground-truth (solid boxes) anatomical regions and color sentences accordingly. We observe that the model generates pertinent, anatomy-related sentences.</p>
 
 ## Setup
 
