@@ -1,4 +1,8 @@
-# Interactive and Explainable Region-guided Radiology Report Generation
+# Interactive and Explainable Region-guided Radiology Report Generation (accepted to CVPR 2023)
+
+## arXiv
+
+arXiv link coming soon...
 
 ## Abstract
 
