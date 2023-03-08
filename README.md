@@ -37,10 +37,18 @@ The automatic generation of radiology reports has the potential to assist radiol
 
 ## Create train, val and test csv files
 
-After the setup, run "**python create_dataset.py**" in src/dataset/ to create training, val and test csv files, in which each row contains specific information about a single image. See doc string of create_dataset.py for more details.
+After the setup, run "**python create_dataset.py**" in src/dataset/ to create train, val and test csv files, in which each row contains specific information about a single image. See doc string of create_dataset.py for more details.
+
+As a side note - we cannot provide you these files directly (i.e. you have to create these csv files yourself), since they contain patient information from Chest ImaGenome/MIMIC-CXR, to which only credentialed users with training in handling human participant data should have access (for privacy reasons).
 
 ## Training and Testing
 
-Please read the README_TRAIN_TEST.md for specific information on training and testing the model.
+Please read [README_TRAIN_TEST.md](README_TRAIN_TEST.md) for specific information on training and testing the model.
+
+## Model checkpoint
+
+You can download the full model checkpoint from this [google drive link](https://drive.google.com/file/d/1P0ewzWKCAS86-poH4ZSf-xibRGpcUFQR/view?usp=sharing).
+
+---
 
 If you have any questions, please don't hesitate to contact me via linkedIn: https://www.linkedin.com/in/tim-tanida/
