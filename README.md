@@ -33,7 +33,8 @@ The automatic generation of radiology reports has the potential to assist radiol
 ## Setup
 
 1. Create conda environment with "**conda env create -f environment.yml**"
-2. In src/path_datasets_and_weights.py, specify the paths to the various datasets (Chest ImaGenome, MIMIC-CXR, MIMIC-CXR-JPG), CheXbert weights, and folders in which the runs are saved. Follow the instructions of the doc string of path_datasets_and_weights.py.
+2. Install Java 1.8.0 (required for pycocoevalcap library, see https://pypi.org/project/pycocoevalcap/). On Ubuntu, you can install Java 1.8.0 with "**sudo apt install openjdk-8-jdk**".
+3. In src/path_datasets_and_weights.py, specify the paths to the various datasets (Chest ImaGenome, MIMIC-CXR, MIMIC-CXR-JPG), CheXbert weights, and folders in which the runs are saved. Follow the instructions of the doc string of path_datasets_and_weights.py.
 
 ## Create train, val and test csv files
 

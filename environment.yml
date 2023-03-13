@@ -7,13 +7,8 @@ channels:
 dependencies:
   - spacy-model-en_core_web_trf
   - pillow=9.2.0
-  - pip=22.2.2=pyhd8ed1ab_0
-  - python=3.9.13=h9a8a25e_0_cpython
-  - python_abi=3.9=2_cp39
-  - pytorch=1.12.1=py3.9_cuda11.6_cudnn8.3.2_0
-  - pytorch-mutex=1.0=cuda
-  - torchaudio=0.12.1=py39_cu116
-  - torchvision=0.13.1=py39_cu116
+  - pip=22.2.2
+  - python=3.9.13
   - pip:
     - -e .
     - albumentations==1.1.0
@@ -45,7 +40,9 @@ dependencies:
     - tensorboard-plugin-wit==1.8.1
     - tensorboardx==2.5.1
     - tokenizers==0.12.1
+    - torch==1.12.1
     - torchinfo==1.7.0
     - torchmetrics==0.9.3
+    - torchvision==0.13.1
     - tqdm==4.64.0
     - transformers==4.19.2
