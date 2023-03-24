@@ -28,7 +28,12 @@ The automatic generation of radiology reports has the potential to assist radiol
 <p align="center">
   <img src="figures_repo/anatomy_based_sentence_generation.png" alt="Anatomy-based generation" width="60%">
 </p>
-<p align="left">Figure 3. Interactive capability of <b>anatomy-based sentence generation</b> allows for the generation of descriptions for anatomical regions explicitly chosen by the radiologist. We show predicted (dashed boxes) and ground-truth (solid boxes) anatomical regions and color sentences accordingly. We observe that the model generates pertinent, anatomy-related sentences.</p>
+<p align="left">Figure 3. The interactive capability of <b>anatomy-based sentence generation</b> allows for the generation of descriptions for anatomical regions explicitly chosen by the radiologist. We show predicted (dashed boxes) and ground-truth (solid boxes) anatomical regions and color sentences accordingly. We observe that the model generates pertinent, anatomy-related sentences.</p>
+
+<p align="center">
+  <img src="figures_repo/selection_based_sentence_generation_2.png" alt="Section-based sentence generation" width="30%">
+</p>
+<p align="left">Figure 4. The interactive capability of <b>selection-based sentence generation</b> allows for ...</p>
 
 ## Setup
 
