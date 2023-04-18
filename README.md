@@ -2,7 +2,7 @@
 
 ## arXiv
 
-arXiv link coming soon...
+https://arxiv.org/abs/2304.08295
 
 ## Abstract
 
@@ -33,7 +33,7 @@ The automatic generation of radiology reports has the potential to assist radiol
 <p align="center">
   <img src="figures_repo/selection_based_sentence_generation_2.png" alt="Section-based sentence generation" width="30%">
 </p>
-<p align="left">Figure 4. The interactive capability of <b>selection-based sentence generation</b> allows for ...</p>
+<p align="left">Figure 4. The interactive capability of <b>selection-based sentence generation</b> allows for the generation of descriptions for bounding boxes manually drawn by radiologists. The generated sentences demonstrate heightened sensitivity to bounding box position.</p>
 
 ## Setup
 
@@ -54,6 +54,15 @@ Please read [README_TRAIN_TEST.md](README_TRAIN_TEST.md) for specific informatio
 ## Model checkpoint
 
 You can download the full model checkpoint from this [google drive link](https://drive.google.com/file/d/1P0ewzWKCAS86-poH4ZSf-xibRGpcUFQR/view?usp=sharing).
+
+## Citation
+
+@inproceedings{tanida2023interactive,
+      title={Interactive and Explainable Region-guided Radiology Report Generation},
+      author={Tanida, Tim and Müller, Philip and Kaissis, Georgios and Rueckert, Daniel},
+      booktitle={CVPR},
+      year={2023}
+}
 
 ---
 
