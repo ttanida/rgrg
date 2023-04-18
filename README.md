@@ -66,6 +66,10 @@ You can download the full model checkpoint from this [google drive link](https:/
 }
 ```
 
+## Notice
+
+This project includes third-party software components that are subject to their respective licenses, as described in the [NOTICE](NOTICE) file, which provides information about the third-party components used, including their names, licenses, and copyright holders. Please review the NOTICE file before using or distributing this software.
+
 ---
 
 If you have any questions, please don't hesitate to open a new issue or contact me via linkedIn: https://www.linkedin.com/in/tim-tanida/

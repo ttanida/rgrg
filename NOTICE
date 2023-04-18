@@ -1,0 +1,15 @@
+NOTICE
+
+This project includes third-party software components, as noted below. This software is subject to their respective licenses, as described below.
+
+----------------------------------
+Component: CheXbert
+License: STANFORD ACADEMIC SOFTWARE LICENSE AGREEMENT FOR Stanford Docket S20-295: Combining Automatic Labelers and Expert Annotations for Accurate Radiology Report Labeling using BERT
+Copyright (c) 2020 THE BOARD OF TRUSTEES OF THE LELAND STANFORD JUNIOR UNIVERSITY
+https://github.com/stanfordmlgroup/CheXbert/blob/master/LICENSE.pdf
+
+----------------------------------
+Component: pycocoevalcap
+License: BSD-3-Clause License
+Copyright (c) 2015, Xinlei Chen, Hao Fang, Tsung-Yi Lin, and Ramakrishna Vedantam
+https://github.com/salaniz/pycocoevalcap/blob/master/license.txt
