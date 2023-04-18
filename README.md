@@ -57,13 +57,15 @@ You can download the full model checkpoint from this [google drive link](https:/
 
 ## Citation
 
+```
 @inproceedings{tanida2023interactive,
-      title={Interactive and Explainable Region-guided Radiology Report Generation},
-      author={Tanida, Tim and Müller, Philip and Kaissis, Georgios and Rueckert, Daniel},
-      booktitle={CVPR},
-      year={2023}
+    title={Interactive and Explainable Region-guided Radiology Report Generation},
+    author={Tanida, Tim and Müller, Philip and Kaissis, Georgios and Rueckert, Daniel},
+    booktitle={CVPR},
+    year={2023}
 }
+```
 
 ---
 
-If you have any questions, please don't hesitate to contact me via linkedIn: https://www.linkedin.com/in/tim-tanida/
+If you have any questions, please don't hesitate to open a new issue or contact me via linkedIn: https://www.linkedin.com/in/tim-tanida/
