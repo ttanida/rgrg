@@ -29,11 +29,11 @@ dependencies:
     - scikit-learn==1.1.2
     - scipy==1.9.1
     - setuptools==61.2.0
-    - spacy==3.4.1
+    - spacy==3.5.3
     - spacy-alignments==0.8.5
     - spacy-legacy==3.0.10
     - spacy-loggers==1.0.3
-    - spacy-transformers==1.1.8
+    - spacy-transformers==1.2.5
     - statsmodels==0.13.2
     - tensorboard==2.9.0
     - tensorboard-data-server==0.6.1

@@ -51,9 +51,13 @@ As a side note - we cannot provide you these files directly (i.e. you have to cr
 
 Please read [README_TRAIN_TEST.md](README_TRAIN_TEST.md) for specific information on training and testing the model.
 
+## Inference
+
+To generate reports for a list of images, run "**python generate_reports_for_images.py**" in src/full_model/. Specify the model checkpoint, the list of image paths and the paths to the txt file with the generated reports in the main function.
+
 ## Model checkpoint
 
-You can download the full model checkpoint from this [google drive link](https://drive.google.com/file/d/1P0ewzWKCAS86-poH4ZSf-xibRGpcUFQR/view?usp=sharing).
+You can download the full model checkpoint from this [google drive link](https://drive.google.com/file/d/1rDxqzOhjqydsOrITJrX0Rj1PAdMeP7Wy/view?usp=sharing).
 
 ## Citation
 
