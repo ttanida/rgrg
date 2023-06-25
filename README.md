@@ -39,11 +39,11 @@ The automatic generation of radiology reports has the potential to assist radiol
 
 1. Create conda environment with "**conda env create -f environment.yml**"
 2. Install Java 1.8.0 (required for pycocoevalcap library, see https://pypi.org/project/pycocoevalcap/). On Ubuntu, you can install Java 1.8.0 with "**sudo apt install openjdk-8-jdk**".
-3. In src/path_datasets_and_weights.py, specify the paths to the various datasets (Chest ImaGenome, MIMIC-CXR, MIMIC-CXR-JPG), CheXbert weights, and folders in which the runs are saved. Follow the instructions of the doc string of path_datasets_and_weights.py.
+3. In [path_datasets_and_weights.py](src/path_datasets_and_weights.py), specify the paths to the various datasets (Chest ImaGenome, MIMIC-CXR, MIMIC-CXR-JPG), CheXbert weights, and folders in which the runs are saved. Follow the instructions of the doc string of path_datasets_and_weights.py.
 
 ## Create train, val and test csv files
 
-After the setup, run "**python create_dataset.py**" in src/dataset/ to create train, val and test csv files, in which each row contains specific information about a single image. See doc string of create_dataset.py for more details.
+After the setup, run "**python [create_dataset.py](src/dataset/create_dataset.py)**" to create train, val and test csv files, in which each row contains specific information about a single image. See doc string of create_dataset.py for more details.
 
 As a side note - we cannot provide you these files directly (i.e. you have to create these csv files yourself), since they contain patient information from Chest ImaGenome/MIMIC-CXR, to which only credentialed users with training in handling human participant data should have access (for privacy reasons).
 
@@ -53,7 +53,7 @@ Please read [README_TRAIN_TEST.md](README_TRAIN_TEST.md) for specific informatio
 
 ## Inference
 
-To generate reports for a list of images, run "**python generate_reports_for_images.py**" in src/full_model/. Specify the model checkpoint, the list of image paths and the paths to the txt file with the generated reports in the main function.
+To generate reports for a list of images, run "**python [generate_reports_for_images.py](src/full_model/generate_reports_for_images.py)**". Specify the model checkpoint, the list of image paths and the path to the txt file with the generated reports in the main function.
 
 ## Model checkpoint
 
