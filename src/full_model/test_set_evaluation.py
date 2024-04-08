@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import spacy
 import torch
+import evaluate
 from torch.utils.data import DataLoader
 import torchmetrics
 from tqdm import tqdm
@@ -268,6 +269,7 @@ def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, token
 
         # used in function get_generated_reports
         sentence_tokenizer = spacy.load("en_core_web_trf")
+        bert_score = evaluate.load("bertscore")
 
         with torch.no_grad():
             for num_batch, batch in tqdm(enumerate(test_loader)):
@@ -342,6 +344,14 @@ def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, token
                     selected_regions,
                     sentence_tokenizer,
                     BERTSCORE_SIMILARITY_THRESHOLD
+                generated_reports, removed_similar_generated_sentences = (
+                    get_generated_reports(
+                        generated_sents_for_selected_regions,
+                        selected_regions,
+                        sentence_tokenizer,
+                        BERTSCORE_SIMILARITY_THRESHOLD,
+                        bert_score,
+                    )
                 )
 
                 gen_and_ref_sentences["generated_sentences"].extend(generated_sents_for_selected_regions)

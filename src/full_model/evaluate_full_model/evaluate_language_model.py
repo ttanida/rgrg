@@ -982,12 +982,19 @@ def update_gen_and_ref_sentences_for_regions(
             index_gen_ref_sentence += 1
 
 
-def get_generated_reports(generated_sentences_for_selected_regions, selected_regions, sentence_tokenizer, bertscore_threshold):
+def get_generated_reports(
+    generated_sentences_for_selected_regions,
+    selected_regions,
+    sentence_tokenizer,
+    bertscore_threshold,
+    bert_score,
+):
     """
     Args:
         generated_sentences_for_selected_regions (List[str]): of length "num_regions_selected_in_batch"
         selected_regions ([batch_size x 29]): boolean array that has exactly "num_regions_selected_in_batch" True values
         sentence_tokenizer: used in remove_duplicate_generated_sentences to separate the generated sentences
+        bert_score: instance of the evaluate bert score evaluation module
 
     Return:
         generated_reports (List[str]): list of length batch_size containing generated reports for every image in batch
@@ -1054,8 +1061,6 @@ def get_generated_reports(generated_sentences_for_selected_regions, selected_reg
         )
 
         return gen_report_single_image, similar_generated_sents_to_be_removed
-
-    bert_score = evaluate.load("bertscore")
 
     generated_reports = []
     removed_similar_generated_sentences = []
