@@ -1178,6 +1178,7 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
 
     # used in function get_generated_reports
     sentence_tokenizer = spacy.load("en_core_web_trf")
+    bert_score = evaluate.load("bertscore")
 
     with torch.no_grad():
         for num_batch, batch in tqdm(enumerate(val_dl), total=NUM_BATCHES_TO_PROCESS_FOR_LANGUAGE_MODEL_EVALUATION):
@@ -1255,7 +1256,8 @@ def evaluate_language_model(model, val_dl, tokenizer, writer, run_params, genera
                 generated_sents_for_selected_regions,
                 selected_regions,
                 sentence_tokenizer,
-                BERTSCORE_SIMILARITY_THRESHOLD
+                BERTSCORE_SIMILARITY_THRESHOLD,
+                bert_score,
             )
 
             gen_and_ref_sentences["generated_sentences"].extend(generated_sents_for_selected_regions)

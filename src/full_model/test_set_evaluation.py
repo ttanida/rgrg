@@ -343,15 +343,8 @@ def evaluate_language_model_on_test_set(model, test_loader, test_2_loader, token
                     generated_sents_for_selected_regions,
                     selected_regions,
                     sentence_tokenizer,
-                    BERTSCORE_SIMILARITY_THRESHOLD
-                generated_reports, removed_similar_generated_sentences = (
-                    get_generated_reports(
-                        generated_sents_for_selected_regions,
-                        selected_regions,
-                        sentence_tokenizer,
-                        BERTSCORE_SIMILARITY_THRESHOLD,
-                        bert_score,
-                    )
+                    BERTSCORE_SIMILARITY_THRESHOLD,
+                    bert_score,
                 )
 
                 gen_and_ref_sentences["generated_sentences"].extend(generated_sents_for_selected_regions)
